@@ -1,0 +1,10 @@
+ SamRate 96.8
+ invAdsorptionConstant(days) 2500.0
+ RefRate 100.0
+ Msmts/sample/day 4
+ RefInterpolate True
+ Nsample 11
+ Time/msmt 10.0
+ JobStartTime 20161126_101845_162912
+ Nexpt 100
+ Days 30

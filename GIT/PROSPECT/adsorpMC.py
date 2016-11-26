@@ -12,6 +12,7 @@ from scipy.stats.mstats import chisquare
 from scipy.optimize import curve_fit
 import matplotlib
 import matplotlib.pyplot as plt
+import datetime,os
 
 class adsorpMC():
     def __init__(self,decayCon=100000.):
@@ -37,17 +38,38 @@ class adsorpMC():
         self.theFits = {}
         self.Duration = None
 
+        self.figdir = 'Figures/adsorpMC/'
+        makeSubDir = True
+        if makeSubDir:
+            now = datetime.datetime.now()
+            fmt = '%Y%m%d_%H%M%S_%f'
+            self.start_time = cnow = now.strftime(fmt)
+            self.figdir = 'Figures/adsorpMC/'+cnow+'/'
+            if os.path.isdir(self.figdir):
+                pass
+            else:
+                try:
+                    os.makedirs(self.figdir)
+                except IOError,e:
+                    print 'adsorpMC__init__',e
+                else:
+                    print 'adsorpMC__init__ created',self.figdir
+
+
         return
     def refFcn(self,t):
         f = self.refRate0
         evts = numpy.random.poisson(f * self.dtsec)
         return float(evts)
+    def getSamAdsCon(self,nfcn):
+        return self.samDecay*float(nfcn)
     def samFcn(self,t,nfcn=0):
         '''
         time-dependence of sample
         default is exponential decrease for nfcn<=0
         '''
-        f = self.samRate(nfcn)*math.exp(-t*self.samDecay * float(nfcn) )
+        L = self.getSamAdsCon(nfcn)
+        f = self.samRate(nfcn)*math.exp(-t*L) #self.samDecay * float(nfcn) )
 
         if 0: print nfcn,t,f    
         evts = numpy.random.poisson( f  * self.dtsec )
@@ -188,7 +210,7 @@ class adsorpMC():
         baseF = par/par[1]
         chi2,ndf,pvalue = aMC.chi2Sam(sam,baseF)
         return chi2,pvalue
-    def exptMany(self,Nsamples=1,duration=120.,days=5,plot=False):
+    def exptMany(self,Nsamples=1,duration=120.,days=5,plot=False,name='exampleMany'):
         '''
         perform a toy experiment duration minutes long with Nsamples samples each day for days
         '''
@@ -209,7 +231,7 @@ class adsorpMC():
                 chi2,ndf,pvalue = self.chi2Sam(same,baseF,nfcn=key,debug=False)
                 #print 'adsorpMC.exptMany key,chi2,ndf,pvalue',key,chi2,ndf,pvalue
                 Results[key] = [chi2,pvalue]
-        if plot: self.plotMany(Msmts,Results=Results)
+        if plot: self.plotMany(Msmts,Results=Results,name=name)
         return Results
     def toy(self,Nexpt=100,duration=120.,faker=False):
         '''
@@ -236,10 +258,12 @@ class adsorpMC():
         plt.xlabel('Time (minutes)')
         plt.ylabel('Counts')
         plt.grid(True)
-        
-        plt.savefig('/Users/djaffe/Desktop/example.pdf')
+
+        pdf = self.figdir + 'example.pdf'
+        plt.savefig(pdf)
+        print 'adsorpMC.plot Wrote',pdf
         return
-    def plotMany(self,Msmts,Results=None):
+    def plotMany(self,Msmts,Results=None,name='exampleMany'):
         '''
         show data from many samples in figure
         '''
@@ -288,25 +312,54 @@ class adsorpMC():
         words = 'Input adsorption constants (SampleNumber/(' + str(1./self.adConInvDays) + ' days)'
         plt.text(0.01*(xma-xmi)+xmi,1.05*(yma-ymi)+ymi,words)
         plt.grid(True)
-        
-        plt.savefig('/Users/djaffe/Desktop/exampleMany.pdf')
+
+        pdf = self.figdir + name + '.pdf'
+        plt.savefig(pdf)
+        print 'adsorpMC.plotMany Wrote',pdf
         return
     def toyMany(self,Nexpt=1, Nsamples=11, Times=4, days=1):
         '''
         main routine for run numerous toy experiments with many samples/experiment
         '''
         print '\n',Nexpt,'expts, ',Nsamples,'samples with time/msmt',self.dt,'and',Times,'msmts/sample/day for',days,'days'
+        isam = 1
+        q = self.getSamAdsCon(isam)*24.*60. # in 1/days
+        if q!=0. : q = 1./q
+        self.Description = {'Nexpt'           :Nexpt,
+                            'Nsample'         :Nsamples,
+                            'Time/msmt'       :self.dt,
+                            'Msmts/sample/day': Times,
+                            'Days'            : days,
+                            'RefRate'         : self.refRate0,
+                            'SamRate'         : self.samRate0,
+                            'RefInterpolate'  : self.Interpolate,
+                            'JobStartTime'    : self.start_time,
+                            'invAdsorptionConstant(days)' : q
+                            }
         self.Duration = duration = 2*(Nsamples)*Times*self.dt
         self.plotFits = True
         allResults = {}
+        name = 'exampleMany'
+        freq = Nexpt
+        if Nexpt>10 : freq = Nexpt/4
         for iexpt in range(Nexpt):
-            plot = iexpt==0
-            allResults[iexpt] = self.exptMany(Nsamples=Nsamples,duration=self.Duration,days=days,plot=plot)
-
+            plot = iexpt%freq==0
+            if not plot:
+                print '\rExpt#',iexpt,
+            else:
+                name = 'example_expt_'+str(iexpt)
+            sys.stdout.flush()
+            allResults[iexpt] = self.exptMany(Nsamples=Nsamples,duration=self.Duration,days=days,plot=plot,name=name)
+        print ''
 
         samChi2 = {}
         sampval = {}
+        invAdsorptionConstant = {}
         for isam in range(1,1+Nsamples):
+            q = self.getSamAdsCon(isam)*24.*60. # in 1/days
+            if q!=0. : q = 1./q
+            invAdsorptionConstant[isam] = q # in 1/days
+
             achi,ap = numpy.array([]),numpy.array([])
             for iexpt in range(Nexpt):
                 results = allResults[iexpt]
@@ -315,24 +368,86 @@ class adsorpMC():
                 ap   = numpy.append(ap,pvalue)
             samChi2[isam] = achi
             sampval[isam] = ap
+        #print 'invAdsorptionConstant',invAdsorptionConstant
+
+            
         font = {'size'   : 8}
         matplotlib.rc('font', **font)
 
+        sumWords = '\n {0} expts {1} samples/expt {2:.2f} min/msmt'.format(self.Description['Nexpt'], self.Description['Nsample'],self.Description['Time/msmt'])
+        sumWords+= ' {0} msmts/sample/day for {1} days'.format(self.Description['Msmts/sample/day'],self.Description['Days'])
+        sumWords+= '\nRates(Hz): Ref={0:.2f} Samples={1:.2f}'.format(self.Description['RefRate'],self.Description['SamRate'])
+        if self.Description['RefInterpolate']:
+            sumWords += ' Interpolation method'
+        else:
+            sumWords += ' Linear fit method'
+        sumWords+= '\n tau='+str(invAdsorptionConstant[1])+'(days) Job start time ' + self.Description['JobStartTime']
+        
+
         nrows,ncols = 4,3
+        stats = {}
         for words,samDict in zip(['chi2','pvalue'],[samChi2,sampval]):
+            stats[words] = {}
             fig,ax = plt.subplots(nrows=nrows,ncols=ncols)
+            fig.suptitle(words + sumWords,horizontalalignment='left',x=0.2)
             nbin = 100
             for isam in range(1,1+Nsamples):
                 jsam = Nsamples+1-isam
                 icol = 2-((jsam)%ncols)
                 irow = jsam/ncols
-                print 'adsorpMC.toyMany isam,jsam,icol,irow',isam,jsam,icol,irow
+                #print 'adsorpMC.toyMany isam,jsam,icol,irow',isam,jsam,icol,irow
 
-                ax[irow,icol].hist(samDict[isam],nbin,histtype='step')
-                ax[irow,icol].set_title(words+' sample'+str(isam),y=0.8)
-            pdf = '/Users/djaffe/Desktop/toyMany_'+words+'.pdf'
+                if words=='pvalue':
+                    ax[irow,icol].hist(samDict[isam],nbin,histtype='step',range=(0.,1.))
+                else:
+                    ax[irow,icol].hist(samDict[isam],nbin,histtype='step')
+                    ax[irow,icol].set_xlim(xmin=0.)
+                mean,sd = numpy.mean(samDict[isam]),numpy.std(samDict[isam])
+                stats[words][isam] = [mean,sd]
+                title = 'sam{0} $\mu={1:.3f}\ \sigma={2:.3f}$'.format(isam,mean,sd)
+                yt = 0.8
+                if words=='pvalue':
+                    yt -= 0.2
+                    title += '\n$k=1/{0:.2f}(d)$'.format(invAdsorptionConstant[isam])
+                #print 'isam,title',isam,title
+                ax[irow,icol].set_title(title,y=yt)
+
+            pdf = self.figdir+'toyMany_'+words+'.pdf'
             plt.savefig(pdf)
             print 'adsorpMC.toyMany Wrote',pdf
+
+        # plot mean chi2 and mean pvalue vs inverse adsorption constant
+        plt.clf()
+        for irow,words in enumerate(['chi2','pvalue']):
+            y = numpy.array([])
+            x = numpy.array([])
+            for isam in range(1,1+Nsamples):
+                x  = numpy.append(x, invAdsorptionConstant[isam])
+                y = numpy.append(y, stats[words][isam][0])
+            plt.subplot(2,1,irow+1)
+            if words=='chi2':
+                plt.title(sumWords,horizontalalignment='left',x=0.2)
+                plt.plot(x,y,'bo-')
+                plt.ylabel('mean '+words)
+            else:
+                floor = 1.e-4
+                plt.semilogy(x,numpy.maximum(numpy.ones(len(y))*floor,y),'bo-')
+                plt.ylabel('max(mean '+words+', '+str(floor)+')')
+
+
+            plt.xlabel('Inverse adsorption constant (d)')
+            plt.grid(True)
+        pdf = self.figdir + 'summary.pdf'
+        plt.savefig(pdf)
+        print 'adsorpMC.toyMany Wrote',pdf
+        
+        # put job information into text file
+        fn = self.figdir + 'job_description.txt'
+        f = open(fn,'w')
+        for key in self.Description:
+            f.write(' ' + key + ' ' + str(self.Description[key])  + '\n')
+        f.close()
+        print 'adsorpMC.toyMany Wrote',fn
                 
         
             
@@ -341,16 +456,34 @@ class adsorpMC():
 
             
 if __name__ == '__main__' :
+    '''
+    input args
+    1 = base sample adsorption lifetime in minutes
+    2 = # of toy experiments
+    3 = # days for each experiment
+    '''
     if len(sys.argv)>1:
         aMC = adsorpMC( float(sys.argv[1]) )
     else:
         aMC = adsorpMC()
 
+    if 0: # simple test
+        Q = float(sys.argv[1])
+        Q = 5. * 24. * 60. 
+        t0,t1 = 0.,Q
+        for nfcn in [1,2,4,8,10]:
+            print 'nfcn',nfcn,'aMC.getSamAdsCon(nfcn)',aMC.getSamAdsCon(nfcn),'1./aMC.getSamAdsCon(nfcn)',1./aMC.getSamAdsCon(nfcn)
+            print 't0,t1',t0,t1,'aMC.samFcn(t1,nfcn)/aMC.samFcn(t0,nfcn)',aMC.samFcn(t1,nfcn)/aMC.samFcn(t0,nfcn)
+        sys.exit('...................end test..............')
+                
+        
+
     Nexpt = 1
+    days = 1
     if len(sys.argv)>2: Nexpt = int(sys.argv[2])
+    if len(sys.argv)>3: days  = int(sys.argv[3])
     Nsamples = 11
     Times = 4
-    days = 1
     aMC.toyMany(Nexpt=Nexpt,Nsamples=Nsamples,Times=Times,days=days)
 
     

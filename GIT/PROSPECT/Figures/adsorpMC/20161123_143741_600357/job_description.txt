@@ -1,0 +1,9 @@
+ SamRate 96.8
+ RefRate 100.0
+ Msmts/sample/day 4
+ RefInterpolate True
+ Nsample 11
+ Time/msmt 10.0
+ JobStartTime 20161123_143741_600357
+ Nexpt 400
+ Days 5
