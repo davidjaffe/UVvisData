@@ -15,13 +15,16 @@ class readLogFile():
         return
     def readFile(self,fn=None):
         '''
-        read log file
+        if logfile exists, then read log file
         get timestamp, run time, sample name, source(s), etc.
+        If timestamp not in log file, try to take timestamp from filename.
+        If actual run time not in log file, try to use requested run time
         '''
         if fn is None:
             sys.exit('readLogFile.readFile ERROR No input file specified')
         if not os.path.isfile(fn):
             sys.exit('readLogFile.readFile ERROR '+fn+' does not exist')
+            
         f = open(fn,'r')
         timestamp,sources,sample,runtime = None,None,None,None
         request,actual = None,None
@@ -46,8 +49,19 @@ class readLogFile():
                 except ValueError:
                     pass
         f.close()
+        
         if request is not None: runtime = request
         if actual  is not None: runtime = actual
+
+        if timestamp is None: # get timestamp from filename
+            bn = os.path.basename(fn)
+            ts = (bn.split('_')[1]).split('.')[0]
+            ts = ts.replace('ts','')
+            try: 
+                timestamp = int(ts)
+            except ValueError:
+                pass
+            
         return timestamp,sources,sample,runtime
 if __name__ == '__main__' :
     rLF = readLogFile()

@@ -7,11 +7,11 @@ import math
 import sys
 import random
 import numpy
-import scipy
-from scipy.stats.mstats import chisquare
-from scipy.optimize import curve_fit
-import matplotlib
-import matplotlib.pyplot as plt
+#import scipy
+#from scipy.stats.mstats import chisquare
+#from scipy.optimize import curve_fit
+#import matplotlib
+#import matplotlib.pyplot as plt
 import datetime,os
 
 import ROOT
@@ -162,7 +162,7 @@ class procWaveDump():
                 name = 'PSD_vs_Charge'
                 self.hists[name].Fill(d['QtotalCh0'],d['psdCh0'])
                 if d['QtotalCh0']>self.lowChargeCut:
-                    self.hists[psdc].Fill(d['psdCh0'])
+                    self.hists['psdc'].Fill(d['psdCh0'])
 
                 name = 'Charge_no_cut'
                 self.hists[name].Fill(d['QtotalCh0'])
@@ -409,16 +409,19 @@ class procWaveDump():
         return d
     def preFill(self):
         '''
-        fill global dict with useful variables from entire tree
+        fill global array with useful variables from entire tree
         '''
 
         print 'procWaveDump.preFill Initializing for',self.entries,'events',   
-        self.miniTree = {}
+
         self.miniOrder = ['abs_time', 'psdCh0', 'QtotalCh0', 'goodCh0']
+        a = []
         for event in range(self.entries):
             self.tree.GetEntry(event)
-            self.miniTree[event] = [self.tree.abs_time, self.tree.psdCh0, self.tree.QtotalCh0, self.tree.goodCh0]
+            a.append( [self.tree.abs_time, self.tree.psdCh0, self.tree.QtotalCh0, self.tree.goodCh0] )
+        self.miniTree = numpy.array(a)
         print '....Done!'
+        self.close()
         return 
     def open(self,fn=None):
         '''
@@ -435,7 +438,6 @@ class procWaveDump():
         nb = self.tree.GetEntry(self.entries-1)
         self.lastTime = self.tree.abs_time
         print 'procWaveDump.open Opened',fullfn,'with',self.entries,'entries. Last time',self.lastTime
-
                 
         if debug: # for debug
             for jentry in xrange( 0,self.entries+1,self.entries/3 ):
@@ -448,6 +450,11 @@ class procWaveDump():
                 print 'nb',nb,'dt',dt
 
         
+        return
+    def close(self):
+        ''' close the current root file '''
+        print 'procWaveDump.close Close',self.rf.GetName()
+        self.rf.Close()
         return
 if __name__ == '__main__' :
     maxE = 9999999999
