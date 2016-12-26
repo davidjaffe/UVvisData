@@ -35,7 +35,8 @@ class readLogFile():
                 except ValueError:
                     pass
             if ' source ' in l:
-                sources = l.split(':')[-1].split()
+                newl = self.cleanLine(l)
+                sources = newl.split(':')[-1].split()
             if 'Sample being measured' in l:
                 sample = l.split()[-1]
             if 'Request run time' in l:
@@ -63,6 +64,15 @@ class readLogFile():
                 pass
             
         return timestamp,sources,sample,runtime
+    def cleanLine(self,line):
+        '''
+        return line with spurious characters removed
+        '''
+        bogus = [',','\\']
+        newline = ''
+        for c in line:
+            if c not in bogus: newline += c
+        return newline
 if __name__ == '__main__' :
     rLF = readLogFile()
     fn = '/Users/djaffe/work/WaveDumpData/logfiles/run00078_ts1482161661.log'
