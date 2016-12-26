@@ -34,7 +34,7 @@ class gfit():
         i2 = min(nbins, hname.GetBinLowEdge(xma)+1 )
         return hname.Integral(i1,i2)
             
-    def twoG(self,hname,debug=False): # two gaussian fit
+    def twoG(self,hname,debug=False,x1min=-100.,x1max=100.,x2max=300.,sgm=None,Unconstrained=False): # two gaussian fit
         name,ave,rms,tot,under,bin1,over,ent,xmi,xma = self.getProp(hname)
 
         # check if fit should be performed
@@ -51,8 +51,11 @@ class gfit():
 
         # define ranges, initial means, sigmas of 2 gaussians
         # this is setup for fitting SPE in NSRL13A run
-        x1min,x1max, x1mean, x1sig = -100., 100., 0., 30.
-        x2min,x2max, x2mean, x2sig = x1max, 300., 200., 50.
+        x1mean, x1sig =  0.5*(x1min+x1max), 30.
+        if sgm is not None: x1sig = sgm
+        x2min = x1max
+        x2mean, x2sig = 0.5*(x2min+x2max), 50.
+        if sgm is not None: x2sig = sgm
         g1 = ROOT.TF1("g1","gaus",x1min,x1max)
         g1.SetParameter(1,x1mean)
         g1.SetParameter(2,x1sig)
@@ -61,30 +64,46 @@ class gfit():
         g2.SetParameter(2,x2sig)
 
         # fit first gaussian. retry once if failed. save parameters
+        if debug: print 'gfit.twoG fit g1'
         hname.Fit("g1",fitopt)
         g1stat = ROOT.gMinuit.fCstatu
         if g1stat!='CONVERGED ': # note trailing blank
+            if debug : print 'gfit.twoG fit g1, 2d try'
             g1.SetParameter(1,x1mean)
             g1.SetParameter(2,x1sig)
             hname.Fit("g1",fitopt)
             g1stat = ROOT.gMinuit.fCstatu
         c,mean,emean,sgm,prob = self.getg1Par(g1,offset=0)
         par['g1'] = [c,mean,emean,sgm,prob,g1stat]
-        if debug: print 'g1',par['g1']
+        if debug: print 'gfit.twoG g1',par['g1']
 
         # fit second gaussian. retry once if failed. save parameters
+        if debug: print 'gfit.twoG fit g2'
         hname.Fit("g2",fitopt)
         g2stat = ROOT.gMinuit.fCstatu
         if g2stat!='CONVERGED ': # note trailing blank
+            if debug: print 'gfit.twoG fit g2, 2d try'
             g2.SetParameter(1,x2mean)
             g2.SetParameter(2,x2sig)
             hname.Fit("g2",fitopt)
             g2stat = ROOT.gMinuit.fCstatu
         c,mean,emean,sgm,prob = self.getg1Par(g2,offset=0)
         par['g2'] = [c,mean,emean,sgm,prob,g2stat]
-        if debug: print 'g2',par['g2']
+        if debug: print 'gfit.twoG g2',par['g2']
+
+        # fit with both gaussians
+        gsum = ROOT.TF1("gsum","gaus(0)+gaus(3)",x1min,x2max)
+        gsum.SetParameter(0,par['g1'][0])
+        gsum.SetParameter(1,par['g1'][1])
+        gsum.SetParameter(2,par['g1'][3])
+        gsum.SetParameter(0+3,par['g2'][0])
+        gsum.SetParameter(1+3,par['g2'][1])
+        gsum.SetParameter(2+3,par['g2'][3])
+
         
-        gsum = ROOT.TF1("gsum","g1+g2",x1min,x2max)
+        if debug:
+            dbgpar = gsum.GetParameters()
+            print 'gfit.twoG fit gsum. initial pars',dbgpar
         hname.Fit("gsum",fitopt)
         gsumRstat = ROOT.gMinuit.fCstatu
         if gsumRstat!='CONVERGED ': # note trailing blank
@@ -103,17 +122,18 @@ class gfit():
             else:
                 gsum.SetParameter(1+3,x2mean)
                 gsum.SetParameter(2+3,x2sig)
-                                
+            if debug: print 'gfit.twoG gsum, 2d try'
             hname.Fit("gsum",fitopt)
             gsumRstat = ROOT.gMinuit.fCstatu
         c1,mean1,emean1,sgm1,prob = self.getg1Par(gsum,offset=0)
         c2,mean2,emean2,sgm2,prob = self.getg1Par(gsum,offset=3)
         par['gsumR'] = [c1,mean1,emean1,sgm1, c2, mean2,emean2,sgm2, prob, gsumRstat]
-        if debug: print 'gsum',fitopt,par['gsumR']
+        if debug: print 'gfit.twoG gsum fitopt,par',fitopt,par['gsumR']
 
-        Unconstrained = False
+        #Unconstrained = False
         if Unconstrained : 
             fitopt = fitopt.replace('R','') # no constraints
+            if debug: print 'gfit.twoG do unconstrained gsum fit'
             hname.Fit("gsum",fitopt)
             gsumstat = ROOT.gMinuit.fCstatu
             if gsumstat!='CONVERGED ': # note trailing blank
@@ -125,8 +145,8 @@ class gfit():
         else:
             par['gsum'] = par['gsumR']
             if debug:
-                print 'No unconstrained double-gaussian fit done'
-                print 'gsum',fitopt,par['gsum']
+                print 'gfit.twoG No unconstrained double-gaussian fit done'
+                print 'gfit.twoG gsum',fitopt,par['gsum']
 
         # make two gaussians fcns TF1 corresponding to the 2 gaussians of the best fit
         ga,gb = self.makeBothG(hname,'gsum')
@@ -187,6 +207,7 @@ class gfit():
         return GoodFit,mean,emean, sgm, prob
         
     def getg1Par(self,g1,offset=0):
+        # print 'gfit.getg1Par g1,offset',g1,offset
         c = g1.GetParameter(0+offset)
         mean = g1.GetParameter(1+offset)
         sgm  = g1.GetParameter(2+offset)

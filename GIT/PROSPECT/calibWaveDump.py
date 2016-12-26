@@ -8,8 +8,9 @@ import sys
 import random
 import numpy
 import scipy
-from scipy.stats.mstats import chisquare
-from scipy.optimize import curve_fit
+#from scipy.stats.mstats import chisquare
+#from scipy.optimize import curve_fit
+from scipy.integrate import quad
 import matplotlib
 import matplotlib.pyplot as plt
 import datetime,os
@@ -18,6 +19,7 @@ import ROOT
 import graphUtils
 import gfit
 import readLogFile
+import cutsAndConstants
 
 class calibWaveDump():
     def __init__(self):
@@ -26,6 +28,11 @@ class calibWaveDump():
         self.gU = graphUtils.graphUtils()
         self.gfit = gfit.gfit()
         self.rLF = readLogFile.readLogFile()
+        self.cAC = cutsAndConstants.cutsAndConstants()
+
+        self.psdCut = self.cAC.psdCut
+
+        
 
         self.rootFileDir = '/Users/djaffe/work/WaveDumpData/rootfiles/'
         self.logFileDir  = self.rootFileDir.replace('rootfiles','logfiles')
@@ -87,14 +94,14 @@ class calibWaveDump():
         return S,err
     def loop(self,fn='Output/run00073.root'):
         '''
-        loop over relevant hists in input root file and
+        loop over relevant delayed hists in input root file and
         fit them to extract mean, error on mean, sigma of gaussian, 
         and calculate area of peak (Scorr) and uncertainty (Ecorr)
         return dict with key =lifetime cut, value = [mean,emean,sgm, Scorr,Ecorr]
         '''
         results = {}
         if not os.path.isfile(fn): return None
-        hf = ROOT.TFile.Open(fn)
+        hf = ROOT.TFile.Open(fn,'r')
         ROOT.gStyle.SetOptFit(1111)
         ROOT.gStyle.SetStatX(.5)
         hlist = []
@@ -119,6 +126,53 @@ class calibWaveDump():
         dn = (fn.split('/')[1]).split('.')[0]
         self.gU.drawMultiHists(hlist,fname=dn,figdir=self.figdir,dopt='pe',statOpt=0)
         return results
+    def fitPSD(self,fn='Output/run00073.root'):
+        '''
+        fit PSD dist with two gaussians and estimate efficiency of psd cut with two methods.
+        First method: Fractional area above PSD cut based on fit to n-recoil peak
+        Second method: Fraction histogram area above PSD cut by subtracting fitted e-recoil peak
+
+        Notes:
+        gfit.twoG returns fit parameters par,ga,ga
+        where par = c1,mean1,emean1,sgm1, c2, mean2,emean2,sgm2, prob, gsumstat
+                  = constant, mean, unc. on mean, sigma for each gaussian,
+                    prob of chi2 of fit, status (='CONVERGED ' or not)
+            ga,ga = TF1 objects with best fit parameters
+        '''
+        debug = False
+        
+        hname = 'psdc'
+        psdCut = self.psdCut
+        if not os.path.isfile(fn): return None
+        hf = ROOT.TFile.Open(fn,'r')
+        h = hf.Get(hname)
+        par,ga,gb = self.gfit.twoG(h,x1min=0.,x1max=psdCut,x2max=1.,sgm=0.02,Unconstrained=True)
+
+        # estimate fractional area of n-recoil peak above cut from gaussian fit
+        G1 = lambda x: math.exp(-0.5*((x-par[1])*(x-par[1])/par[3]/par[3]))        
+        G2 = lambda x: math.exp(-0.5*((x-par[1+4])*(x-par[1+4])/par[3+4]/par[3+4]))
+        num = quad(G2,psdCut,1.)
+        den = quad(G2,0.,1.)
+        effy,erry = -1.,-1.
+        if den[0]>0:
+            effy = num[0]/den[0]
+            if num[1]>0: erry = num[1]*num[1]/num[0]/num[0]
+            erry = effy*math.sqrt(erry + den[1]*den[1]/den[0]/den[0])
+
+        # estimate fractional area of n-recoil peak by subtracting gaussian fit of e-recoil peak
+        hd = h.Clone('cloned_'+hname)
+        hd.Add(ga,-1.)
+        num = self.getIntegral(hd,psdCut,1.)
+        den = self.getIntegral(hd,0.,1.)
+        effy2,erry2 = -1.,-1.
+        if den[0]>0:
+            effy2 = num[0]/den[0]
+            if num[1]>0: erry2 = num[1]*num[1]/num[0]/num[0]
+            erry2 = effy2*math.sqrt(erry2 + den[1]*den[1]/den[0]/den[0])
+
+        if debug: print 'calibWaveDump.fitPSD effy,erry',effy,erry,'effy2,erry2',effy2,erry2
+              
+        return effy,erry, effy2,erry2
     def main(self):
         '''
         main routine
@@ -131,7 +185,8 @@ class calibWaveDump():
 
         Threshold = 10. # minimum number of coincidences for a GOOD run
         
-        X,Y,dY = [],{},{}
+        X,Y,dY,PoPeak,dPoPeak,PoS = [],{},{},{},{},{}
+        PSD = PSD1,dPSD1,PSD2,ePSD2     = [],[],[],[]
         T = []
         for fn in listOfHistFiles:
             rn = os.path.basename(fn).split('.')[0] # run00xxx
@@ -142,11 +197,14 @@ class calibWaveDump():
                     break
             if lf is not None:
                 timestamp,sources,sample,runtime = self.rLF.readFile(lf)
-                results = cWD.loop(fn=fn)
+                results = self.loop(fn=fn)
                 GOOD = False
                 for l in results:
                     if results[l][3]>Threshold : GOOD = True
                 if GOOD:
+                    psdEffy = self.fitPSD(fn=fn)
+                    for i,psd in enumerate(PSD):
+                        PSD[i].append( psdEffy[i] )
                     results[rn] = [timestamp,sources,sample,runtime]
                     norm = self.normResults(results)
                     #print rn,'results',results
@@ -161,9 +219,12 @@ class calibWaveDump():
                             words += ' {0:.1f}({1:.1f})'.format(norm[x][3],norm[x][4])
                             stuff += ' {0:.1f}({1:.1f})'.format(results[x][3],results[x][4])
                             if x not in Y:
-                                Y[x],dY[x] = [],[]
+                                Y[x],dY[x],PoPeak[x],dPoPeak[x],PoS[x] = [],[],[],[],[]
                             Y[x].append(norm[x][3])
                             dY[x].append(norm[x][4])
+                            PoPeak[x].append(results[x][0]) #mean
+                            dPoPeak[x].append(results[x][1])#emean
+                            PoS[x].append(results[x][2])    #sigma
                     print words,'\n',stuff
         #print 'X',X
         #print 'Y',Y
@@ -173,8 +234,11 @@ class calibWaveDump():
         T = numpy.array(T)
         tmg = self.gU.makeTMultiGraph('Rate_vs_run')
         tmgT= self.gU.makeTMultiGraph('Rate_vs_time')
+        tmgP= self.gU.makeTMultiGraph('Po215_peak_vs_run')
+        tmgS= self.gU.makeTMultiGraph('Po215_sigma_vs_run')
+        tmgPSD = self.gU.makeTMultiGraph('PSD_effy_vs_run')
 
-        for l in Y:
+        for l in sorted(Y.keys()):
             y,dy = numpy.array(Y[l]),numpy.array(dY[l])
             title = 'Cut at '+str(l)+' lifetimes'
             name = title.replace(' ','_')
@@ -189,10 +253,38 @@ class calibWaveDump():
             self.gU.color(g,l,l,setMarkerColor=True)
             tmgT.Add(g)
             self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True)
+
+            y,dy = numpy.array(PoPeak[l]),numpy.array(dPoPeak[l])
+            title='Po215 peak cut at '+str(l)+' lifetimes'
+            name = title.replace(' ','_')
+            g = self.gU.makeTGraph(X+delta,y,title,name,ex=dX,ey=dy)
+            self.gU.color(g,l,l,setMarkerColor=True)
+            tmgP.Add(g)
+            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
             
+            y    = numpy.array(PoS[l])
+            title='Po215 sigma cut at '+str(l)+' lifetimes'
+            name = title.replace(' ','_')
+            g = self.gU.makeTGraph(X+delta,y,title,name)
+            self.gU.color(g,l,l,setMarkerColor=True)
+            tmgS.Add(g)
+            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
+
+        for i in range(2):
+            y,dy = numpy.array( PSD[2*i] ), numpy.array( PSD[2*i+1] )
+            title = 'PSD effy'+str(i)+' vs run'
+            name  = title.replace(' ','_')
+            g = self.gU.makeTGraph(X,y,title,name,ex=dX,ey=dy)
+            self.gU.color(g,i,i,setMarkerColor=True)
+            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
+            tmgPSD.Add(g)
 
         self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Coincidence rate(Hz)')
         self.gU.drawMultiGraph(tmgT,figdir=self.figdir,abscissaIsTime=True,xAxisLabel='Time',yAxisLabel='Coincidence rate(Hz)')
+        self.gU.drawMultiGraph(tmgP,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted mean of 215Po peak (nC)')
+        self.gU.drawMultiGraph(tmgS,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted sigma of 215 Po peak (nC)')
+        self.gU.drawMultiGraph(tmgPSD,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='PSD effy estimate')
+
         
             
         return
@@ -215,6 +307,8 @@ class calibWaveDump():
         
 if __name__ == '__main__' :
     cWD = calibWaveDump()
+    #cWD.fitPSD()
+    #sys.exit('no more')
     cWD.main()
     if 0:
         for i in range(31,90):

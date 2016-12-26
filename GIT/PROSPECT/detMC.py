@@ -55,18 +55,27 @@ class detMC():
                 else:
                     print 'detMC__init__ created',self.figdir
         return
-    def expt(self,events=10):
+    def expt(self,events=10,units='keV',cf=1.):
         '''
-        perform a toy experiment 
+        perform a toy experiment
+        cf = 0.521e-3 pC/keV
         '''
         print 'detMC.expt Generate',events,'per isotope'
         decays = {}
         hists = {}
         Ndecays = events
         Nbin = 600
+
         emi,ema = 3000.,9000.
+        if units=='pC':
+            emi,ema = cf*emi, cf*ema
+            print 'detMC.expt Results in',units,'assuming',cf,units+'/MeV'
+        
         d = (ema-emi)/float(Nbin)
-        bins = [float(x) for x in range(int(emi),int(ema+d),int(d))]
+        bins = []
+        for i in range(Nbin+1):
+            bins.append(emi+float(i)*d)
+#        bins = [float(x) for x in range(int(emi),int(ema+d),int(d))]
         Nbin = bins
         Eall = numpy.array([])
         nrows,ncols=4,2
@@ -75,15 +84,19 @@ class detMC():
         fig,axs = plt.subplots(nrows=nrows,ncols=ncols)
         irow,icol = 0,0
         for isotope in self.DautNames:
-            decays[isotope] = self.fill(Branch=isotope,Ndecays=Ndecays)
+            decays[isotope] = cf*self.fill(Branch=isotope,Ndecays=Ndecays)
             print 'isotope,len(decays[isotope])',isotope,len(decays[isotope])
+            if isotope=='219Rn' and units=='pC':
+                vmi,vma = 30.,40. # pC
+                effy = self.cutEffy(decays[isotope],vmi,vma)
+                print 'effy',effy,'cut range('+units+')',vmi,vma
             if len(decays[isotope])>0:
                 label = isotope#+' '+str(len(decays[isotope])) + ' entries'
                 axs[irow,icol].set_xlim([emi,ema])
                 axs[irow,icol].hist(decays[isotope],Nbin,label=label,facecolor='red',histtype='step',color='red',alpha=1.,fill='True')
                 #axs[irow,icol].set_title(label,fontsize=fs,loc='left',weight='bold')
                 axs[irow,icol].text(emi+0.05*(ema-emi),1000.,label,fontsize=fs,weight='bold')
-                axs[irow,icol].set_xlabel('Alpha energy (keV)',fontsize=fs)
+                axs[irow,icol].set_xlabel('Alpha energy ('+units+')',fontsize=fs)
                 irow += 1
                 if irow==nrows:
                     icol += 1
@@ -95,7 +108,7 @@ class detMC():
         axs[irow,icol].hist(Eall,Nbin,label='Sum',facecolor='red',histtype='step',color='red',alpha=1.,fill='True')
 
         axs[irow,icol].text(emi+0.1*(ema-emi),1000.,'Sum',fontsize=fs,weight='bold')
-        axs[irow,icol].set_xlabel('Alpha energy (keV)',fontsize=fs)
+        axs[irow,icol].set_xlabel('Alpha energy ('+units+')',fontsize=fs)
         ymi,yma = axs[irow,icol].get_ylim()
         for irow in range(nrows):
             for icol in range(ncols):
@@ -108,11 +121,22 @@ class detMC():
         fig.subplots_adjust(hspace=0.4)
         fig.suptitle(str(self.pePerMeVa) +' pe/MeV of alpha energy')
         #plt.tight_layout()
-        pdf = self.figdir + str(int(self.pePerMeVa)) + 'pePerMeValpha.pdf'
+        pdf = self.figdir + str(int(self.pePerMeVa)) + 'pePerMeValpha_units_'+units+'.pdf'
         plt.savefig(pdf)
         print 'detMC.expt Wrote',pdf
         #        plt.show()
         return
+    def cutEffy(self,values,vmi,vma):
+        '''
+        determine fraction of values in range [vmi,vma]
+        '''
+        tot = float(len(values))
+        sum = 0.
+        for v in values:
+            if vmi<=v and v<=vma: sum+=1.
+        effy = -1.
+        if tot>0: effy = sum/tot
+        return effy
     def readAll(self):
         ''' for testing reading of files '''
         for isotope in self.DautNames:
@@ -170,13 +194,18 @@ class detMC():
 if __name__ == '__main__' :
     pe_MeV = 10.
     Nev    = 100000
+    units  = 'keV'
+    cf     = 1.0
     if len(sys.argv)>1: pe_MeV = float(sys.argv[1])
     if len(sys.argv)>2: Nev    = int(sys.argv[2])
+    if len(sys.argv)>3:
+        units = 'pC'
+        cf    = 38.5/7386.1 # pC/keV from run98 analysis 215Po mean 38.5 pC for 7386.keV
     dMC = detMC(pe_MeV=pe_MeV)
 
     
     #dMC.readAll()
     #sys.exit()
     
-    dMC.expt(events=Nev)
+    dMC.expt(events=Nev,units=units,cf=cf)
     sys.exit()

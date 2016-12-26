@@ -16,29 +16,42 @@ import datetime,os
 
 import ROOT
 import graphUtils
-
+import cutsAndConstants
 
 class procWaveDump():
     def __init__(self):
-
-
+        # input, output files
         self.rootFileDir = '/Users/djaffe/work/WaveDumpData/rootfiles/'
         self.logFileDir  = self.rootFileDir.replace('rootfiles','logfiles')
         self.outFileDir  = 'Output/'
+        
+        # graphing using root
         self.gU = graphUtils.graphUtils()
+        # manipulation of root tree contents
         self.eventDict = {}
         self.tree = None
         self.entries = None
-
         self.miniTree = None
         self.miniOrder = None
 
-        self.Po215halflife = 0.001781 # from NNDC
-        self.Po215lifetime = self.Po215halflife/math.log(2)
-        self.tOffset = 10.*self.Po215lifetime
-
-        self.runTime = None
+        # initialize cuts, constraints
+        self.cAC = cutsAndConstants.cutsAndConstants()
         
+        self.Po215halflife = self.cAC.Po215halflife 
+        self.Po215lifetime = self.cAC.Po215lifetime 
+        self.tOffset = self.cAC.tOffset 
+
+        self.Qmax = self.cAC.Qmax 
+        self.psdCut = self.cAC.psdCut 
+        self.lifeRange = self.cAC.lifeRange 
+        self.lowChargeCut = self.cAC.lowChargeCut 
+        self.promptChargeCut = self.cAC.promptChargeCut 
+        self.delayChargeCut  = self.cAC.delayChargeCut  
+
+        # defined for each file
+        self.runTime = None
+
+        # dict of all histograms
         self.hists = {}
         
         name = 'procWaveDump'
@@ -59,7 +72,7 @@ class procWaveDump():
                 else:
                     print name+'__init__ created',self.figdir
         return
-    def main(self,fn='run00066_ts1481922242.root',maxE=99999999999):
+    def main(self,inputfn='run00066_ts1481922242.root',maxE=99999999999):
         '''
         main routine
         Open input root file, get run time from corresponding log file
@@ -69,7 +82,7 @@ class procWaveDump():
         Normalize a copy of all hists to running time
         Write out hists
         '''
-
+        fn = os.path.basename(inputfn)
         self.open(fn=fn)
         x = self.getRunTime(fn)
 
@@ -136,7 +149,7 @@ class procWaveDump():
             self.runTime = actual
         
         return self.runTime
-    def eventLoop(self,maxE=1000):
+    def eventLoop(self,maxE=1000,debug=True):
         '''
         loop over events, makes some plots
         '''
@@ -150,7 +163,8 @@ class procWaveDump():
         
         # main event loop
         for event in range(Nmax):
-            if event%freq==0 :
+            if debug : print 'procWaveDump.eventLoop start event',event,
+            if event%freq==0 and not debug:
                 print '\r',event,
                 sys.stdout.flush()
 
@@ -159,6 +173,7 @@ class procWaveDump():
             d =  self.getEvent(event)
             self.hists['goodCh0'].Fill(d['goodCh0'])
             if d['goodCh0']:
+                if debug : print 'passed goodCh0',
                 name = 'PSD_vs_Charge'
                 self.hists[name].Fill(d['QtotalCh0'],d['psdCh0'])
                 if d['QtotalCh0']>self.lowChargeCut:
@@ -167,13 +182,15 @@ class procWaveDump():
                 name = 'Charge_no_cut'
                 self.hists[name].Fill(d['QtotalCh0'])
                 if d['psdCh0']>self.psdCut :
+                    if debug : print 'passed psd',
                     name = 'Charge_PSD_cut'
                     self.hists[name].Fill(d['QtotalCh0'])
 
                     tP = d['abs_time'] # prompt time
                     QP = d['QtotalCh0']# prompt charge
-                    tmax = tP + maxTimeWindow 
+                    tmax = tP + maxTimeWindow
                     if tmax<self.lastTime:
+                        if debug : print 'QP,tP,tmax',QP,tP,tmax,
                         name = 'p'
                         self.hists[name].Fill(QP)
 
@@ -188,6 +205,7 @@ class procWaveDump():
                             e2 = max(e2,devent)
                             d2 = self.getEvent(devent)
                             tD = d2['abs_time']
+                            if debug : print 'devt,tD',devent,tD,
                             if tD>tmax:
                                 break
                             if d2['goodCh0'] and d2['psdCh0']>self.psdCut:
@@ -196,6 +214,7 @@ class procWaveDump():
                                     tend = tP + float(l)*self.Po215lifetime
                                     if tD < tend:
                                         Delayed[l].append([tD,QD])
+                        if debug : print 'final devt,tD',devent,tD,
                         for l in self.lifeRange:
                             clife = str(l)
                             name = 'dm'+clife
@@ -259,20 +278,16 @@ class procWaveDump():
                                             if self.inside(QP,self.promptChargeCut):
                                                 self.hists[ocname].Fill(q)
                                                 
+            if debug : print '...done'
                     
         return
     def book(self):
         '''
         book histograms
+
+        parameters for cuts and histogram limits have been moved to initialization
         
         '''
-        self.Qmax = 0.05
-        self.psdCut = 0.35
-        self.lifeRange = [1,2,3,5]
-        self.lowChargeCut = 0.012
-        self.promptChargeCut = [0.03,0.04]
-        mean,sigma = 0.03839, 0.00265 # these values from fit to run74 data
-        self.delayChargeCut  = [mean-3.*sigma,mean+3.*sigma]
 
         ROOT.TH1.SetDefaultSumw2(True) # proper calculation of bin errors
 
@@ -463,7 +478,7 @@ if __name__ == '__main__' :
     pWD = procWaveDump()
     if len(sys.argv)>1:
         fn = sys.argv[1]
-        pWD.main(fn=fn,maxE=maxE)
+        pWD.main(inputfn=fn,maxE=maxE)
     else:
         pWD.main(maxE=maxE)
 
