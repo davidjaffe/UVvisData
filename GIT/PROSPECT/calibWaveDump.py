@@ -11,6 +11,7 @@ import scipy
 #from scipy.stats.mstats import chisquare
 #from scipy.optimize import curve_fit
 from scipy.integrate import quad
+import scipy.stats
 import matplotlib
 import matplotlib.pyplot as plt
 import datetime,os
@@ -125,6 +126,21 @@ class calibWaveDump():
         mean,sd,med,n = self.getStats(h,xmi=self.lowChargeCut)
         hf.Close()
         return mean,sd,med,n
+    def getGstats(self,fn='Output/run00037.root'):
+        '''
+        return estimate of effy & unc. of goodCh0 requirement
+        '''
+        if not os.path.isfile(fn): return
+        hname = 'goodCh0'
+        hf = ROOT.TFile.Open(fn,'r')
+        h = hf.Get(hname)
+        nogood = h.GetBinContent(1)
+        good   = h.GetBinContent(2)
+        effy,err = -1.,-1.
+        if good+nogood>0:
+            effy = float(good)/float(good+nogood)
+            err  = 1.-effy
+        return effy,err
     def loop(self,fn='Output/run00073.root'):
         '''
         loop over relevant delayed hists in input root file and
@@ -148,7 +164,8 @@ class calibWaveDump():
                 hb = hf.Get(bname)
                 dname = 'd-o'+clife
                 hd,mean,emean,sgm,S,E = self.subAndFit(hs,hb,dname)
-                hlist.append(hd)
+                hd,hs,hb = self.commonOrdinate(hd,hs,hb)
+                hlist.append([hd,hs,hb])
                 f = 1./(1.-math.exp(-life))
                 Scorr = S*f
                 Ecorr = E*f
@@ -160,11 +177,27 @@ class calibWaveDump():
         self.gU.drawMultiHists(hlist,fname=dn,figdir=self.figdir,dopt='pe',statOpt=0,biggerLabels=False)
         hf.Close()
         return results
+    def commonOrdinate(self,h1,h2,h3):
+        up,lo = h1.GetMaximum(),h1.GetMinimum()
+        for h in [h1,h2,h3]:
+            up = max(up,h.GetMaximum())
+            lo = min(lo,h.GetMinimum())
+        up = 1.1*up
+        if lo<0.: lo = min(1.1*lo,-up/10.)
+        for h in [h1,h2,h3]:
+            h.SetMaximum(up)
+            h.SetMinimum(lo)
+        h1.SetLineColor(ROOT.kBlue)
+        h2.SetLineColor(ROOT.kBlack)
+        h3.SetLineColor(ROOT.kRed)
+        return h1,h2,h3
     def fitPSD(self,fn='Output/run00073.root'):
         '''
         fit PSD dist with two gaussians and estimate efficiency of psd cut with two methods.
         First method: Fractional area above PSD cut based on fit to n-recoil peak
         Second method: Fraction histogram area above PSD cut by subtracting fitted e-recoil peak
+
+        Final result is average of two methods with uncertainty taken as sum in quad. of two methods plus the difference between the two methods
 
         Notes:
         gfit.twoG returns fit parameters par,ga,ga
@@ -204,9 +237,22 @@ class calibWaveDump():
             if num[1]>0: erry2 = num[1]*num[1]/num[0]/num[0]
             erry2 = effy2*math.sqrt(erry2 + den[1]*den[1]/den[0]/den[0])
 
-        if debug: print 'calibWaveDump.fitPSD effy,erry',effy,erry,'effy2,erry2',effy2,erry2
+        # overall estimate of effy is average, uncertainty is total in quadrature of two methods plus the difference between the two
+        ef3,er3,nf = 0.,0.,0.
+        for x,dx in zip( [effy,effy2], [erry,erry2]):
+            if x>-1.:
+                nf += 1.
+                ef3 += x
+            if dx>-1.: er3 += dx*dx
+        if nf>1.:
+            er3 += (effy-effy2)*(effy-effy2)
+            er3 = math.sqrt(er3)
+        if nf>0.: ef3 = ef3/float(nf)
+            
+
+        if debug: print 'calibWaveDump.fitPSD effy,erry',effy,erry,'effy2,erry2',effy2,erry2,'ef3,er3',ef3,er3
         hf.Close()      
-        return effy,erry, effy2,erry2
+        return effy,erry, effy2,erry2, ef3,er3
     def main(self):
         '''
         main routine
@@ -229,11 +275,12 @@ class calibWaveDump():
             
         
         X,Y,dY,PoPeak,dPoPeak,PoS = [],{},{},{},{},{}
-        PSD = PSD1,dPSD1,PSD2,ePSD2     = [],[],[],[]
+        PSD = [],[],[],[],[],[]
         Prompt = [],[],[],[]
         dPrompt= [],[],[],[]
         PromptName = ['Prompt_Mean','Prompt_StdDev','Prompt_Median','Prompt_Rate_Hz']
         T = []
+        GoodCut = [],[]
         
         for fn in listOfHistFiles:
             rn = os.path.basename(fn).split('.')[0] # run00xxx
@@ -256,6 +303,9 @@ class calibWaveDump():
                         if results[l][3]<Threshold : GOOD = False
                     if not GOOD: print 'calibWaveDump.main',rn,'too few coincidences'
                 if GOOD:
+                    g = self.getGstats(fn=fn)
+                    for i,p in enumerate(GoodCut):
+                        p.append(g[i])
                     pStats  = self.getPstats(fn=fn) #mean,stddev,median,N
                     norm = (1.,1.,1.,runtime)
                     for i,p in enumerate(Prompt):
@@ -275,8 +325,8 @@ class calibWaveDump():
                     norm = self.normResults(results)
                     #print rn,'results',results
                     #print rn,'norm',norm
-                    words = rn + ' '
-                    stuff = '{0:.1f}'.format(runtime)
+                    words = rn + ' rates(Hz) '
+                    stuff = 'livetime={0:.1f} Evts(unc)'.format(runtime)
                     X.append(float(rn.replace('run','')))
                     T.append(timestamp/1000) # convert from ms
                     for x in sorted(norm.keys()):
@@ -298,8 +348,10 @@ class calibWaveDump():
         X = numpy.array(X)
         dX = numpy.array([0. for x in X])
         T = numpy.array(T)
-        tmg = self.gU.makeTMultiGraph('Rate_vs_run')
-        tmgT= self.gU.makeTMultiGraph('Rate_vs_time')
+        tmg = self.gU.makeTMultiGraph('Po215_Rate_Hz_vs_run')
+        tmgT= self.gU.makeTMultiGraph('Po215_Rate_Hz_vs_time')
+        tmgEC = self.gU.makeTMultiGraph('EffCorr_Po215_Rate_Hz_vs_run')
+        tmgTEC= self.gU.makeTMultiGraph('EffCorr_Po215_Rate_Hz_vs_time')
         tmgP= self.gU.makeTMultiGraph('Po215_peak_vs_run')
         tmgS= self.gU.makeTMultiGraph('Po215_sigma_vs_run')
         tmgPSD = self.gU.makeTMultiGraph('PSD_effy_vs_run')
@@ -336,7 +388,7 @@ class calibWaveDump():
             tmgS.Add(g)
             self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
 
-        for i in range(2):
+        for i in range(3):
             y,dy = numpy.array( PSD[2*i] ), numpy.array( PSD[2*i+1] )
             title = 'PSD effy'+str(i)+' vs run'
             name  = title.replace(' ','_')
@@ -345,23 +397,71 @@ class calibWaveDump():
             self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
             tmgPSD.Add(g)
 
-        print 'meanPrompt',
-        for v,dv in zip(Prompt[0],dPrompt[0]): print '{0:.5f}({1:.5f})'.format(v,dv),
-        print ''
-        print 'PromptRateHz',
-        for v,dv in zip(Prompt[3],dPrompt[3]): print '{0:.1f}({1:.1f})'.format(v,dv),
-        print ''
         for i,p in enumerate(Prompt):
             y,dy = numpy.array(p),numpy.array(dPrompt[i])
             name = PromptName[i]+'_vs_run'
             title = name.replace('_',' ')
             g = self.gU.makeTGraph(X,y,title,name,ex=dX,ey=dy)
             self.gU.color(g,i,i,setMarkerColor=True)
-
             self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
+
+        y,dy = numpy.array(GoodCut[0]),numpy.array(GoodCut[1])
+        name = 'GoodCh0Effy_vs_run'
+        title= name.replace('_',' ')
+        g = self.gU.makeTGraph(X,y,title,name,ex=dX,ey=dy)
+        self.gU.color(g,1,1,setMarkerColor=True)
+        self.gU.drawGraph(g,figDir=self.figdir)
+
+        # apply effy corrections to Po215 rate and prompt spectrum (entire alpha spectrum)
+        Ycorr,dYcorr = [],[] # will become corrected Po215 rate
+        Pcorr,dPcorr = [],[] # will become prompt corrected rate
+        effPeak = quad(scipy.stats.norm.pdf,-self.cAC.nsigmaCutPo215Peak,self.cAC.nsigmaCutPo215Peak)[0]
+        effPrompt = self.cAC.promptChargeCutEffy
+        effLo     = self.cAC.lowChargeCutEffy
+        nAlpha    = self.cAC.totalAlphas
+        effPSD = numpy.array(PSD[4])
+        errPSD = numpy.array(PSD[5])
+        effGood= numpy.array(GoodCut[0])
+        errGood= numpy.array(GoodCut[1])
+        #print 'effPSD.shape,errPSD.shape,effGood.shape,errGood.shape',effPSD.shape,errPSD.shape,effGood.shape,errGood.shape
+        
+        for l in sorted(Y.keys()):
+            y = numpy.array(Y[l])
+            #print 'l',l,'y,effPSD,effGood,effPeak,effPrompt',y,effPSD,effGood,effPeak,effPrompt
+            ycorr = y/effPSD/effGood/effPeak/effPrompt
+            dycorr= ycorr*numpy.sqrt( errPSD*errPSD/effPSD/effPSD + errGood*errGood/effGood/effGood)
+            name = 'EffCorr_Po215Rate_Hz_vs_run_with_'+str(l)+'lifetime_cut'
+            title = name.replace('_',' ')
+            g = self.gU.makeTGraph(X,ycorr,title,name,ex=dX,ey=dycorr)
+            self.gU.color(g,int(l),int(l),setMarkerColor=True)
+            self.gU.drawGraph(g,figDir=self.figdir)
+            tmgEC.Add(g)
+
+            name = 'EffCorr_Po215Rate_Hz_vs_time_with_'+str(l)+'lifetime_cut'
+            title = name.replace('_',' ')
+            g = self.gU.makeTGraph(T,ycorr,title,name,ex=dX,ey=dycorr)
+            self.gU.color(g,int(l),int(l),setMarkerColor=True)
+            self.gU.drawGraph(g,figDir=self.figdir)
+            tmgTEC.Add(g)
+            
+            
+        p = numpy.array(Prompt[3])
+        dp= numpy.array(dPrompt[3])
+        pcorr = p/effPSD/effLo/effGood/nAlpha
+        #print 'pcorr[0],p[0],effPSD[0],effLo,effGood[0],nAlpha',pcorr[0],p[0],effPSD[0],effLo,effGood[0],nAlpha
+        dpcorr=  pcorr*numpy.sqrt( errPSD*errPSD/effPSD/effPSD + errGood*errGood/effGood/effGood)
+        name = 'EffCorr_PromptRate_Hz_vs_run'
+        title = name.replace('_',' ')
+        g = self.gU.makeTGraph(X,pcorr,title,name,ex=dX,ey=dpcorr)
+        self.gU.color(g,1,1,setMarkerColor=True)
+        self.gU.drawGraph(g,figDir=self.figdir)
+        
+            
 
         self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Coincidence rate(Hz)')
         self.gU.drawMultiGraph(tmgT,figdir=self.figdir,abscissaIsTime=True,xAxisLabel='Time',yAxisLabel='Coincidence rate(Hz)')
+        self.gU.drawMultiGraph(tmgEC,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Effy corrected Coincidence rate(Hz)')
+        self.gU.drawMultiGraph(tmgTEC,figdir=self.figdir,abscissaIsTime=True,xAxisLabel='Time',yAxisLabel='Effy corrected Coincidence rate(Hz)')
         self.gU.drawMultiGraph(tmgP,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted mean of 215Po peak (nC)')
         self.gU.drawMultiGraph(tmgS,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted sigma of 215 Po peak (nC)')
         self.gU.drawMultiGraph(tmgPSD,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='PSD effy estimate')

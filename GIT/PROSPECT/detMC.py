@@ -138,6 +138,8 @@ class detMC():
             
         totAlpha = 0.
         alphaBF = {}
+        PoBF = 0.
+        coinc =  '219Rn215Po211Pb'
         for isotope in self.DautNames: alphaBF[isotope] = 0.
         for chain in ParsedChains:
             print '%s' % '=>'.join(map(str, chain)),
@@ -149,14 +151,21 @@ class detMC():
                     prodBr *= self.getDautBr(parent,daut)
                     if self.isAlpha(parent,daut): sumAlpha += 1.
                 
-            print '{0:.6f} {1:.1f}'.format(prodBr,sumAlpha)
+            print '{0:.6f} {1:.1f}'.format(prodBr,sumAlpha),
+            if coinc in '%s' % ''.join(map(str, chain)):
+                PoBF += prodBr
+                print 'has',coinc,'coincidence'
+            else:
+                print ''
             totAlpha += prodBr*sumAlpha
             for isotope in alphaBF:
                 if isotope in chain: alphaBF[isotope] += prodBr
             
-        print 'total alphas',totAlpha
+        print 'total alphas',totAlpha,'into',coinc,' coincidences {0:.6f}'.format(PoBF)
+        print 'isotope: product branching fraction',
         for isotope in alphaBF:
-            print '{0} {1:.6f}'.format(isotope,alphaBF[isotope])
+            print '{0}: {1:.6f}'.format(isotope,alphaBF[isotope]),
+        print ''
         self.alphaBF = alphaBF
         return
     def isAlpha(self,parent,daut):
