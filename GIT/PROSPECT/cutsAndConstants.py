@@ -20,8 +20,15 @@ class cutsAndConstants():
         self.lifeRange = [1,2,3,5]
         self.lowChargeCut = 0.012
         self.promptChargeCut = [0.03,0.04]
+        nsig = self.nsigmaCutPo215Peak = 3.0
         mean,sigma = 0.03839, 0.00265 # these values from fit to run74 data
-        self.delayChargeCut  = [mean-3.*sigma,mean+3.*sigma]
+        self.delayChargeCut  = [mean-nsig*sigma,mean+nsig*sigma]
+
+        # derived quantities
+        self.totalAlphas = 5.
+        self.lowChargeCutEffy =  0.999998600339 # cut range(pC) 12.0 50.0, from detMC
+        self.promptChargeCutEffy =  0.947929001184 # 219Rn cut range(pC) 30.0 40.0 from detMC
+        
         print 'cutsAndConstants.__init__ Initialized'
         return
 if __name__ == '__main__':
