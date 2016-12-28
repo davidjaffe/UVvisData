@@ -11,7 +11,7 @@ import numpy
 #from scipy.stats.mstats import chisquare
 #from scipy.optimize import curve_fit
 #import matplotlib
-#import matplotlib.pyplot as plt
+#import matplotlib.pyplot as 
 import datetime,os
 
 import ROOT
@@ -33,6 +33,8 @@ class procWaveDump():
         self.entries = None
         self.miniTree = None
         self.miniOrder = None
+        self.miniOrderIndices = None
+        self.usemOI = False
 
         # initialize cuts, constraints
         self.cAC = cutsAndConstants.cutsAndConstants()
@@ -149,7 +151,7 @@ class procWaveDump():
             self.runTime = actual
         
         return self.runTime
-    def eventLoop(self,maxE=1000,debug=True):
+    def eventLoop(self,maxE=1000,debug=False):
         '''
         loop over events, makes some plots
         '''
@@ -157,6 +159,13 @@ class procWaveDump():
         Nmax = self.entries
         if maxE is not None: Nmax = min(Nmax,maxE)
         print 'procWaveDump.eventLoop Process',Nmax,'events'
+
+        
+        if self.usemOI: # use indices into array
+            Iabs_time, IpsdCh0, IQtotalCh0, IgoodCh0 = self.miniOrderIndices
+        else:   # use names into dict
+            Iabs_time, IpsdCh0, IQtotalCh0, IgoodCh0 = self.miniOrder
+
 
         
         maxTimeWindow = float(max(self.lifeRange))*self.Po215lifetime
@@ -171,23 +180,23 @@ class procWaveDump():
             # get tree for current event. Require 'good' channel data and PSD on prompt.
             # don't look for prompt,delayed candidates too close to end of run
             d =  self.getEvent(event)
-            self.hists['goodCh0'].Fill(d['goodCh0'])
-            if d['goodCh0']:
+            self.hists['goodCh0'].Fill(d[IgoodCh0])
+            if d[IgoodCh0]:
                 if debug : print 'passed goodCh0',
                 name = 'PSD_vs_Charge'
-                self.hists[name].Fill(d['QtotalCh0'],d['psdCh0'])
-                if d['QtotalCh0']>self.lowChargeCut:
-                    self.hists['psdc'].Fill(d['psdCh0'])
+                self.hists[name].Fill(d[IQtotalCh0],d[IpsdCh0])
+                if d[IQtotalCh0]>self.lowChargeCut:
+                    self.hists['psdc'].Fill(d[IpsdCh0])
 
                 name = 'Charge_no_cut'
-                self.hists[name].Fill(d['QtotalCh0'])
-                if d['psdCh0']>self.psdCut :
+                self.hists[name].Fill(d[IQtotalCh0])
+                if d[IpsdCh0]>self.psdCut :
                     if debug : print 'passed psd',
                     name = 'Charge_PSD_cut'
-                    self.hists[name].Fill(d['QtotalCh0'])
+                    self.hists[name].Fill(d[IQtotalCh0])
 
-                    tP = d['abs_time'] # prompt time
-                    QP = d['QtotalCh0']# prompt charge
+                    tP = d[Iabs_time] # prompt time
+                    QP = d[IQtotalCh0]# prompt charge
                     tmax = tP + maxTimeWindow
                     if tmax<self.lastTime:
                         if debug : print 'QP,tP,tmax',QP,tP,tmax,
@@ -204,12 +213,12 @@ class procWaveDump():
                         for devent in range(event+1,self.entries):
                             e2 = max(e2,devent)
                             d2 = self.getEvent(devent)
-                            tD = d2['abs_time']
+                            tD = d2[Iabs_time]
                             if debug : print 'devt,tD',devent,tD,
                             if tD>tmax:
                                 break
-                            if d2['goodCh0'] and d2['psdCh0']>self.psdCut:
-                                QD = d2['QtotalCh0']
+                            if d2[IgoodCh0] and d2[IpsdCh0]>self.psdCut:
+                                QD = d2[IQtotalCh0]
                                 for l in self.lifeRange:
                                     tend = tP + float(l)*self.Po215lifetime
                                     if tD < tend:
@@ -240,7 +249,7 @@ class procWaveDump():
                             #print 'tries,e0,e1,e2',tries,e0,e1,e2
                             if e0<e1 or e2<e0:
                                 d2 = self.getEvent(e0)
-                                tFake = tD = d2['abs_time']
+                                tFake = tD = d2[Iabs_time]
                                 after = tP+self.tOffset<tD and tD<self.lastTime-maxTimeWindow
                                 before= tD<tP-maxTimeWindow
                                 #print 'tries,tD,tP+self.tOffset,self.lastTime-maxTimeWindow,tP-maxTimeWindow,before,after',tries,tD,tP+self.tOffset,self.lastTime-maxTimeWindow,tP-maxTimeWindow,before,after
@@ -255,11 +264,11 @@ class procWaveDump():
                                     if after:  elast = self.entries
                                     for devent in range(e0+1,elast):
                                         d2 = self.getEvent(devent)
-                                        tD = d2['abs_time']
+                                        tD = d2[Iabs_time]
                                         if tD>tmax:
                                             break
-                                        if d2['goodCh0'] and d2['psdCh0']>self.psdCut:
-                                            QD = d2['QtotalCh0']
+                                        if d2[IgoodCh0] and d2[IpsdCh0]>self.psdCut:
+                                            QD = d2[IQtotalCh0]
                                             for l in self.lifeRange:
                                                 tend = tFake + float(l)*self.Po215lifetime
                                                 if tD < tend :
@@ -383,7 +392,7 @@ class procWaveDump():
 
     def getEvent(self,event):
         '''
-        load tree variables into event dict given event number
+        load tree variables into event dict OR NUMPY ARRAY given event number
         
         '''
         debug = False
@@ -394,9 +403,12 @@ class procWaveDump():
             return None
 
         if self.miniTree is not None:
-            d = {}
-            for i,v in enumerate(self.miniOrder):
-                d[v] = self.miniTree[event][i]
+            if self.usemOI:
+                d = self.miniTree[event]
+            else:
+                d = {}
+                for i,v in enumerate(self.miniOrder):
+                    d[v] = self.miniTree[event][i]
             
 
         else:
@@ -430,6 +442,14 @@ class procWaveDump():
         print 'procWaveDump.preFill Initializing for',self.entries,'events',   
 
         self.miniOrder = ['abs_time', 'psdCh0', 'QtotalCh0', 'goodCh0']
+        
+        Iabs_time = self.miniOrder.index('abs_time')
+        IpsdCh0   = self.miniOrder.index('psdCh0')
+        IQtotalCh0= self.miniOrder.index('QtotalCh0')
+        IgoodCh0  = self.miniOrder.index('goodCh0')
+        self.miniOrderIndices = [Iabs_time, IpsdCh0, IQtotalCh0, IgoodCh0]
+        self.usemOI = True
+        
         a = []
         for event in range(self.entries):
             self.tree.GetEntry(event)

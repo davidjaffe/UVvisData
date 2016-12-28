@@ -31,6 +31,7 @@ class calibWaveDump():
         self.cAC = cutsAndConstants.cutsAndConstants()
 
         self.psdCut = self.cAC.psdCut
+        self.lowChargeCut = self.cAC.lowChargeCut
 
         
 
@@ -92,6 +93,38 @@ class calibWaveDump():
         err = math.sqrt(err)
         #print 'S,err',S,err
         return S,err
+    def getStats(self,h,xmi=None,xma=None):
+        '''
+        return mean,std. dev., median and number of entries for hist h in range [xmi,xma]
+        If xmi or xma is None, then use first or last bin, resp.
+        '''
+        i1 = 1
+        if xmi is not None: i1 = h.GetXaxis().FindBin(xmi)
+        i2 = h.GetNbinsX()
+        if xma is not None: i2 = h.GetXaxis().FindBin(xma)
+        x = numpy.array([])
+        N = 0
+        for i in range(i1,i2+1):
+            xc = h.GetBinCenter(i)
+            c = h.GetBinContent(i)
+            x = numpy.append(x, numpy.full(c,xc))
+        mean = numpy.mean(x)
+        median = numpy.median(x)
+        stddev = numpy.std(x)
+        nument = len(x)
+        return mean,stddev,median,nument
+    def getPstats(self,fn='Output/run00073.root'):
+        '''
+        return mean,std dev, median & number of entries in prompt charge histogram
+        in input file
+        '''
+        if not os.path.isfile(fn): return
+        hname = 'Charge_PSD_cut'
+        hf = ROOT.TFile.Open(fn,'r')
+        h = hf.Get(hname)
+        mean,sd,med,n = self.getStats(h,xmi=self.lowChargeCut)
+        hf.Close()
+        return mean,sd,med,n
     def loop(self,fn='Output/run00073.root'):
         '''
         loop over relevant delayed hists in input root file and
@@ -124,7 +157,8 @@ class calibWaveDump():
 
 
         dn = (fn.split('/')[1]).split('.')[0]
-        self.gU.drawMultiHists(hlist,fname=dn,figdir=self.figdir,dopt='pe',statOpt=0)
+        self.gU.drawMultiHists(hlist,fname=dn,figdir=self.figdir,dopt='pe',statOpt=0,biggerLabels=False)
+        hf.Close()
         return results
     def fitPSD(self,fn='Output/run00073.root'):
         '''
@@ -171,7 +205,7 @@ class calibWaveDump():
             erry2 = effy2*math.sqrt(erry2 + den[1]*den[1]/den[0]/den[0])
 
         if debug: print 'calibWaveDump.fitPSD effy,erry',effy,erry,'effy2,erry2',effy2,erry2
-              
+        hf.Close()      
         return effy,erry, effy2,erry2
     def main(self):
         '''
@@ -184,10 +218,23 @@ class calibWaveDump():
         listOfLogFiles  = self.get_filepaths(self.logFileDir)
 
         Threshold = 10. # minimum number of coincidences for a GOOD run
+        Ac227only = True # only process runs with Ac227 (no Cs137, for example)
+        if Ac227only:
+            goodSources = ['Ac-227']
+            badSources  = ['Cs-137']
+        else:
+            goodSources = ['Ac-227','Cs-137']
+            badSources  = []
+        print 'calibWaveDump.main Threshold',Threshold,'goodSources',goodSources,'badSources',badSources
+            
         
         X,Y,dY,PoPeak,dPoPeak,PoS = [],{},{},{},{},{}
         PSD = PSD1,dPSD1,PSD2,ePSD2     = [],[],[],[]
+        Prompt = [],[],[],[]
+        dPrompt= [],[],[],[]
+        PromptName = ['Prompt_Mean','Prompt_StdDev','Prompt_Median','Prompt_Rate_Hz']
         T = []
+        
         for fn in listOfHistFiles:
             rn = os.path.basename(fn).split('.')[0] # run00xxx
             lf = None
@@ -197,14 +244,33 @@ class calibWaveDump():
                     break
             if lf is not None:
                 timestamp,sources,sample,runtime = self.rLF.readFile(lf)
-                results = self.loop(fn=fn)
                 GOOD = False
-                for l in results:
-                    if results[l][3]>Threshold : GOOD = True
+                for src in goodSources:
+                    if src in sources: GOOD = True
+                for src in badSources:
+                    if src in sources: GOOD = False
+                if not GOOD: print 'calibWaveDump.main',rn,'no good sources'
                 if GOOD:
+                    results = self.loop(fn=fn)
+                    for l in results:
+                        if results[l][3]<Threshold : GOOD = False
+                    if not GOOD: print 'calibWaveDump.main',rn,'too few coincidences'
+                if GOOD:
+                    pStats  = self.getPstats(fn=fn) #mean,stddev,median,N
+                    norm = (1.,1.,1.,runtime)
+                    for i,p in enumerate(Prompt):
+                        p.append( float(pStats[i])/norm[i] )
+                        if i==0:
+                            dPrompt[i].append( pStats[1]/math.sqrt(float(pStats[3]) ) )
+                        if i==1 or i==2 : dPrompt[i].append( 0. )
+                        if i==3:
+                            dPrompt[i].append( math.sqrt(float(pStats[3]))/norm[i] )
+                        
                     psdEffy = self.fitPSD(fn=fn)
                     for i,psd in enumerate(PSD):
-                        PSD[i].append( psdEffy[i] )
+                        psd.append( psdEffy[i] )
+                        
+                        
                     results[rn] = [timestamp,sources,sample,runtime]
                     norm = self.normResults(results)
                     #print rn,'results',results
@@ -225,7 +291,7 @@ class calibWaveDump():
                             PoPeak[x].append(results[x][0]) #mean
                             dPoPeak[x].append(results[x][1])#emean
                             PoS[x].append(results[x][2])    #sigma
-                    print words,'\n',stuff
+                    print words,' ',stuff
         #print 'X',X
         #print 'Y',Y
         #print 'dY',dY
@@ -278,6 +344,21 @@ class calibWaveDump():
             self.gU.color(g,i,i,setMarkerColor=True)
             self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
             tmgPSD.Add(g)
+
+        print 'meanPrompt',
+        for v,dv in zip(Prompt[0],dPrompt[0]): print '{0:.5f}({1:.5f})'.format(v,dv),
+        print ''
+        print 'PromptRateHz',
+        for v,dv in zip(Prompt[3],dPrompt[3]): print '{0:.1f}({1:.1f})'.format(v,dv),
+        print ''
+        for i,p in enumerate(Prompt):
+            y,dy = numpy.array(p),numpy.array(dPrompt[i])
+            name = PromptName[i]+'_vs_run'
+            title = name.replace('_',' ')
+            g = self.gU.makeTGraph(X,y,title,name,ex=dX,ey=dy)
+            self.gU.color(g,i,i,setMarkerColor=True)
+
+            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
 
         self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Coincidence rate(Hz)')
         self.gU.drawMultiGraph(tmgT,figdir=self.figdir,abscissaIsTime=True,xAxisLabel='Time',yAxisLabel='Coincidence rate(Hz)')
