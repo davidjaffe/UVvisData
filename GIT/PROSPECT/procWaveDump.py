@@ -13,7 +13,7 @@ import numpy
 #import matplotlib
 #import matplotlib.pyplot as 
 import datetime,os
-
+import time
 import ROOT
 import graphUtils
 import cutsAndConstants
@@ -48,7 +48,8 @@ class procWaveDump():
         self.lifeRange = self.cAC.lifeRange 
         self.lowChargeCut = self.cAC.lowChargeCut 
         self.promptChargeCut = self.cAC.promptChargeCut 
-        self.delayChargeCut  = self.cAC.delayChargeCut  
+        self.delayChargeCut  = self.cAC.delayChargeCut
+        self.maxTimeWindow = self.cAC.maxTimeWindow 
 
         # defined for each file
         self.runTime = None
@@ -74,7 +75,7 @@ class procWaveDump():
                 else:
                     print name+'__init__ created',self.figdir
         return
-    def main(self,inputfn='run00066_ts1481922242.root',maxE=99999999999):
+    def main(self,inputfn='run00066_ts1481922242.root',maxE=99999999999,Fast=False):
         '''
         main routine
         Open input root file, get run time from corresponding log file
@@ -84,14 +85,22 @@ class procWaveDump():
         Normalize a copy of all hists to running time
         Write out hists
         '''
+        startT,startC = time.time(),time.clock()
         fn = os.path.basename(inputfn)
         self.open(fn=fn)
         x = self.getRunTime(fn)
 
         self.preFill()
-
         self.book()
-        self.eventLoop(maxE=maxE)
+        initT,initC = time.time(),time.clock()
+        print 'procWaveDump.main initialization dt(time)',initT-startT,'dt(clock)',initC-startC
+
+        if Fast:
+            print 'procWaveDump.main Fast option'
+            self.fastLoop(maxE=maxE)
+            #sys.exit('that is all for now')
+        else:
+            self.eventLoop(maxE=maxE)
         
         self.normHistsByRunTime(fn)
 
@@ -102,7 +111,8 @@ class procWaveDump():
             #print h,self.hists[h].GetName()
             outrf.WriteTObject( self.hists[h] )
         print 'procWaveDump.main Wrote',len(self.hists),'hists to',outfn
-        
+        endT,endC = time.time(),time.clock()
+        print 'procWaveDump.main dt(time)',endT-startT,'dt(clock)',endC-startC,'excluding initialization dt(time)',endT-initT,'dt(clock)',endC-initC
         return
     def normHistsByRunTime(self,rfn=None):
         '''
@@ -151,6 +161,103 @@ class procWaveDump():
             self.runTime = actual
         
         return self.runTime
+    def fastLoop(self,maxE=999,debug=False):
+        '''
+        attempt to loop over events more rapidly, exploiting numpy array tricks
+        '''
+        freq = 1000
+        Nmax = self.entries
+        if maxE is not None: Nmax = min(Nmax,maxE)
+        print 'procWaveDump.fastLoop Process',Nmax,'events'
+
+        # indices into numpy array 
+        Iabs_time, IpsdCh0, IQtotalCh0, IgoodCh0 = self.miniOrderIndices
+        
+        A = self.miniTree # local name for numpy array with reduced data
+        
+        # Apply goodCh0 cut and redefine A
+        B = A[:,IgoodCh0]==1.
+        ONE=numpy.full(len(B),1.) # use this for FillN weighting
+        self.hists['goodCh0'].FillN(len(B),numpy.asarray(B,'double'),ONE)
+        A = A[B]
+        Q = numpy.array(A[:,IQtotalCh0],'double')
+        PSD=numpy.array(A[:,IpsdCh0],'double')
+        self.hists['PSD_vs_Charge'].FillN(len(Q),Q,PSD,ONE)
+        self.hists['Charge_no_cut'].FillN(len(Q),Q,ONE)
+        B = Q>self.lowChargeCut
+        self.hists['psdc'].FillN(len(PSD[B]),PSD[B],ONE)
+
+        # Apply PSD cut and redefine A
+        B = A[:,IpsdCh0]>self.psdCut
+        A = A[B]
+        Q = numpy.array(A[:,IQtotalCh0],'double')
+        self.hists['Charge_PSD_cut'].FillN(len(Q),Q,ONE)
+
+        Nmax = min(Nmax,len(A))
+        
+
+        maxTimeWindow = self.maxTimeWindow 
+        for event,tP in enumerate(A[:Nmax,Iabs_time]):
+            if debug : print 'procWaveDump.fastLoop start event',event
+            if event%freq==0 and not debug:
+                print '\r',event,
+                sys.stdout.flush()
+                
+            B = (A[:,Iabs_time]-tP>=0.) & (A[:,Iabs_time]-tP<=maxTimeWindow)  # time window
+            if any(B):  
+                AA = A[B]
+                prompt = AA[0]
+                delayed= AA[1:]
+                tOffset = tP
+                while abs(tOffset-tP)<self.tOffset:
+                    tOffset = random.uniform(0.,self.lastTime-maxTimeWindow)
+                self.hists['tP_vs_tO'].Fill(tOffset,tP)  # check randomness 
+                D = (A[:,Iabs_time]-tOffset>0.) & (A[:,Iabs_time]-tOffset<=maxTimeWindow) # time window does not include tOffset
+                fake = A[D]
+                if debug : print 'prompt',prompt,'delayed',delayed,'tOffset',tOffset,'fake',fake
+                QP = prompt[IQtotalCh0]
+                goodQP = self.inside(QP,self.promptChargeCut)
+                
+                dt = numpy.array(delayed[:,Iabs_time]-tP,'double')
+                QD = numpy.array(delayed[:,IQtotalCh0],'double')
+                for x,y in zip(dt,QD):
+                    self.hists['dvdt'].Fill(x,y)
+                    if goodQP: self.hists['dvdtc'].Fill(x,y)
+
+                ot = numpy.array(fake[:,Iabs_time]-tOffset,'double')
+                QO = numpy.array(fake[:,IQtotalCh0],'double')
+                for x,y in zip(ot,QO):
+                    self.hists['ovdt'].Fill(x,y)
+                    if goodQP: self.hists['ovdtc'].Fill(x,y)
+                    
+
+                for l in self.lifeRange:
+                    clife = str(l)
+
+                    # real delayed candidates
+                    tend = tP + float(l)*self.Po215lifetime
+                    DL = delayed[delayed[:,Iabs_time]<tend]   # time cut
+                    self.hists['dm'+clife].Fill( float(len(DL)) ) # multiplicity
+                    for tD,QD in zip(DL[:,Iabs_time],DL[:,IQtotalCh0]):
+                        self.hists['d'+clife].Fill( QD )
+                        self.hists['pvd'+clife].Fill( QD,QP )
+                        if self.inside(QD,self.delayChargeCut):
+                            self.hists['pc'+clife].Fill( QP )
+                        if goodQP : self.hists['dc'+clife].Fill( QD )
+
+                    # fake delayed candidates
+                    tend = tOffset + float(l)*self.Po215lifetime
+                    DL = fake[fake[:,Iabs_time]<tend]
+                    self.hists['om'+clife].Fill( float(len(DL)) ) # multiplicit
+                    for tD,QD in zip(DL[:,Iabs_time],DL[:,IQtotalCh0]):
+                        self.hists['o'+clife].Fill( QD )
+                        self.hists['pvo'+clife].Fill( QD,QP )
+                        if goodQP : self.hists['oc'+clife].Fill( QD )
+                                                
+                                                
+                                            
+        return
+                
     def eventLoop(self,maxE=1000,debug=False):
         '''
         loop over events, makes some plots
@@ -329,7 +436,6 @@ class procWaveDump():
         title = 'Charge no cut'
         self.TH1D(title,nx,xmi,xma)
         title = 'Charge PSD cut'
-        name = title.replace(' ','_')
         self.TH1D(title,nx,xmi,xma)
 
         nx = int(self.runTime)+1
@@ -337,6 +443,17 @@ class procWaveDump():
         ny,ymi,yma = nx,xmi,xma
         title = 'tP vs tO'
         self.TH2D(title,nx,xmi,xma,ny,ymi,yma)
+
+        nx,xmi,xma = 100, 0., self.maxTimeWindow
+        ny,ymi,yma = 100, 0., self.Qmax
+        for A,B in zip(['delay','fake'],['d','o']):
+            title = 'Q'+A+' vs dt'
+            name = B+'vdt'
+            self.hists[name] = ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
+            title = 'Q'+A+' vs dt with Qprompt cut'
+            name = B+'vdtc'
+            self.hists[name] = ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
+        
 
         nx,xmi,xma = 100, 0., self.Qmax
         title = 'Prompt PSD cut'
@@ -492,13 +609,21 @@ class procWaveDump():
         self.rf.Close()
         return
 if __name__ == '__main__' :
+    '''
+    arguments
+    1 = filename (prefix can be omitted)
+    2 = maximum number of events to process
+    3 = if =='slow' then do not use fast option
+    '''
     maxE = 9999999999
+    Fast = True
     if len(sys.argv)>2: maxE = int(sys.argv[2])
+    if len(sys.argv)>3: Fast = sys.argv[3].lower()!='slow'
     
     pWD = procWaveDump()
+
     if len(sys.argv)>1:
         fn = sys.argv[1]
-        pWD.main(inputfn=fn,maxE=maxE)
+        pWD.main(inputfn=fn,maxE=maxE,Fast=Fast)
     else:
-        pWD.main(maxE=maxE)
-
+        pWD.main(maxE=maxE,Fast=Fast)

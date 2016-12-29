@@ -174,7 +174,7 @@ class calibWaveDump():
 
 
         dn = (fn.split('/')[1]).split('.')[0]
-        self.gU.drawMultiHists(hlist,fname=dn,figdir=self.figdir,dopt='pe',statOpt=0,biggerLabels=False)
+        self.gU.drawMultiHists(hlist,fname=dn,figdir=self.figdir,dopt='pe',statOpt=0,biggerLabels=False,dopt='histe0')
         hf.Close()
         return results
     def commonOrdinate(self,h1,h2,h3):

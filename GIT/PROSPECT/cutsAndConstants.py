@@ -24,6 +24,8 @@ class cutsAndConstants():
         mean,sigma = 0.03839, 0.00265 # these values from fit to run74 data
         self.delayChargeCut  = [mean-nsig*sigma,mean+nsig*sigma]
 
+        self.maxTimeWindow = float(max(self.lifeRange))*self.Po215lifetime
+        
         # derived quantities
         self.totalAlphas = 5.
         self.lowChargeCutEffy =  0.999998600339 # cut range(pC) 12.0 50.0, from detMC
