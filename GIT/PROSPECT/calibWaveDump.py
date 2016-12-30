@@ -21,6 +21,7 @@ import graphUtils
 import gfit
 import readLogFile
 import cutsAndConstants
+import Logger
 
 class calibWaveDump():
     def __init__(self):
@@ -35,11 +36,23 @@ class calibWaveDump():
         self.lowChargeCut = self.cAC.lowChargeCut
 
         
-
+        name = 'calibWaveDump'
         self.rootFileDir = '/Users/djaffe/work/WaveDumpData/rootfiles/'
         self.logFileDir  = self.rootFileDir.replace('rootfiles','logfiles')
         self.outFileDir  = 'Output/'
-        self.figdir      = 'Figures/calibWaveDump/'
+        self.figdir      = 'Figures/'+name+'/'
+
+        self.logdir = 'Logfiles/'+name+'/'
+        now = datetime.datetime.now()
+        fmt = '%Y%m%d_%H%M%S_%f'
+        self.start_time = cnow = now.strftime(fmt)
+
+        lfn = self.logdir + cnow + '.log'
+        sys.stdout = Logger.Logger(fn=lfn)
+        print 'procWaveDump__init__ Output directed to terminal and',lfn
+        print 'procWaveDump__init__ Job start time',self.start_time
+
+        
         return
     def get_filepaths(self,directory):
         '''
@@ -141,7 +154,7 @@ class calibWaveDump():
             effy = float(good)/float(good+nogood)
             err  = 1.-effy
         return effy,err
-    def loop(self,fn='Output/run00073.root'):
+    def loop(self,fn='Output/run00073.root',withPromptCut=True):
         '''
         loop over relevant delayed hists in input root file and
         fit them to extract mean, error on mean, sigma of gaussian, 
@@ -157,12 +170,18 @@ class calibWaveDump():
         for l in range(1,6):
             clife = str(l)
             life = float(l)
-            sname = 'dc'+clife
-            bname = 'oc'+clife
+            if withPromptCut:
+                sname = 'dc'+clife
+                bname = 'oc'+clife
+            else:
+                sname = 'd'+clife
+                bname = 'o'+clife
             if hf.FindKey(sname):
                 hs = hf.Get(sname)
                 hb = hf.Get(bname)
                 dname = 'd-o'+clife
+                if withPromptCut: dname = 'd-oc'+clife
+                
                 hd,mean,emean,sgm,S,E = self.subAndFit(hs,hb,dname)
                 hd,hs,hb = self.commonOrdinate(hd,hs,hb)
                 hlist.append([hd,hs,hb])
@@ -174,7 +193,8 @@ class calibWaveDump():
 
 
         dn = (fn.split('/')[1]).split('.')[0]
-        self.gU.drawMultiHists(hlist,fname=dn,figdir=self.figdir,dopt='pe',statOpt=0,biggerLabels=False,dopt='histe0')
+        if not withPromptCut : dn += 'withNoPromptCut'
+        self.gU.drawMultiHists(hlist,fname=dn,figdir=self.figdir,statOpt=0,biggerLabels=False,dopt='hist e0 func')
         hf.Close()
         return results
     def commonOrdinate(self,h1,h2,h3):
@@ -263,6 +283,8 @@ class calibWaveDump():
         listOfHistFiles = self.get_filepaths(self.outFileDir)
         listOfLogFiles  = self.get_filepaths(self.logFileDir)
 
+        withPromptCut = True
+
         Threshold = 10. # minimum number of coincidences for a GOOD run
         Ac227only = True # only process runs with Ac227 (no Cs137, for example)
         if Ac227only:
@@ -271,7 +293,7 @@ class calibWaveDump():
         else:
             goodSources = ['Ac-227','Cs-137']
             badSources  = []
-        print 'calibWaveDump.main Threshold',Threshold,'goodSources',goodSources,'badSources',badSources
+        print 'calibWaveDump.main Threshold',Threshold,'goodSources',goodSources,'badSources',badSources,'withPromptCut',withPromptCut
             
         
         X,Y,dY,PoPeak,dPoPeak,PoS = [],{},{},{},{},{}
@@ -298,7 +320,7 @@ class calibWaveDump():
                     if src in sources: GOOD = False
                 if not GOOD: print 'calibWaveDump.main',rn,'no good sources'
                 if GOOD:
-                    results = self.loop(fn=fn)
+                    results = self.loop(fn=fn,withPromptCut=withPromptCut)
                     for l in results:
                         if results[l][3]<Threshold : GOOD = False
                     if not GOOD: print 'calibWaveDump.main',rn,'too few coincidences'
@@ -416,7 +438,8 @@ class calibWaveDump():
         Ycorr,dYcorr = [],[] # will become corrected Po215 rate
         Pcorr,dPcorr = [],[] # will become prompt corrected rate
         effPeak = quad(scipy.stats.norm.pdf,-self.cAC.nsigmaCutPo215Peak,self.cAC.nsigmaCutPo215Peak)[0]
-        effPrompt = self.cAC.promptChargeCutEffy
+        effPrompt = 1.
+        if withPromptCut : effPrompt = self.cAC.promptChargeCutEffy
         effLo     = self.cAC.lowChargeCutEffy
         nAlpha    = self.cAC.totalAlphas
         effPSD = numpy.array(PSD[4])

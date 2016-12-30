@@ -17,10 +17,17 @@ import time
 import ROOT
 import graphUtils
 import cutsAndConstants
+import Logger
 
 class procWaveDump():
-    def __init__(self):
-        # input, output files
+    def __init__(self,fn=None):
+        if fn is None: sys.exit('procWaveDump__init__ ERROR No input filename')
+
+        # create prefix for log file for this job
+        bn = os.path.basename(fn)
+        lfprefix = bn.replace('.root','')
+            
+        # input, output directories
         self.rootFileDir = '/Users/djaffe/work/WaveDumpData/rootfiles/'
         self.logFileDir  = self.rootFileDir.replace('rootfiles','logfiles')
         self.outFileDir  = 'Output/'
@@ -56,14 +63,22 @@ class procWaveDump():
 
         # dict of all histograms
         self.hists = {}
-        
+
+        #output directories, job start time, start logging to file and terminal
         name = 'procWaveDump'
         self.figdir = 'Figures/'+name+'/'
+        self.logdir = 'Logfiles/'+name+'/'
+        now = datetime.datetime.now()
+        fmt = '%Y%m%d_%H%M%S_%f'
+        self.start_time = cnow = now.strftime(fmt)
+
+        lfn = self.logdir + lfprefix + '_' + cnow + '.log'
+        sys.stdout = Logger.Logger(fn=lfn)
+        print 'procWaveDump__init__ Output directed to terminal and',lfn
+        print 'procWaveDump__init__ Job start time',self.start_time
+        
         makeSubDir = False
         if makeSubDir:
-            now = datetime.datetime.now()
-            fmt = '%Y%m%d_%H%M%S_%f'
-            self.start_time = cnow = now.strftime(fmt)
             self.figdir = self.figdir + cnow+'/'
             if os.path.isdir(self.figdir):
                 pass
@@ -611,19 +626,19 @@ class procWaveDump():
 if __name__ == '__main__' :
     '''
     arguments
-    1 = filename (prefix can be omitted)
+    1 = filename (prefix can be omitted) [REQUIRED]
     2 = maximum number of events to process
     3 = if =='slow' then do not use fast option
     '''
+    if len(sys.argv)<=1:
+        sys.exit('procWaveDump Filename [max events] fast/slow')
+        
+    fn = sys.argv[1]
     maxE = 9999999999
     Fast = True
     if len(sys.argv)>2: maxE = int(sys.argv[2])
     if len(sys.argv)>3: Fast = sys.argv[3].lower()!='slow'
     
-    pWD = procWaveDump()
+    pWD = procWaveDump(fn=fn)
+    pWD.main(inputfn=fn,maxE=maxE,Fast=Fast)
 
-    if len(sys.argv)>1:
-        fn = sys.argv[1]
-        pWD.main(inputfn=fn,maxE=maxE,Fast=Fast)
-    else:
-        pWD.main(maxE=maxE,Fast=Fast)
