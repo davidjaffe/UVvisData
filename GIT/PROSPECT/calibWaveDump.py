@@ -24,7 +24,7 @@ import cutsAndConstants
 import Logger
 
 class calibWaveDump():
-    def __init__(self):
+    def __init__(self,Log=True):
 
 
         self.gU = graphUtils.graphUtils()
@@ -47,10 +47,11 @@ class calibWaveDump():
         fmt = '%Y%m%d_%H%M%S_%f'
         self.start_time = cnow = now.strftime(fmt)
 
-        lfn = self.logdir + cnow + '.log'
-        sys.stdout = Logger.Logger(fn=lfn)
-        print 'procWaveDump__init__ Output directed to terminal and',lfn
-        print 'procWaveDump__init__ Job start time',self.start_time
+        if Log:
+            lfn = self.logdir + cnow + '.log'
+            sys.stdout = Logger.Logger(fn=lfn)
+            print 'procWaveDump__init__ Output directed to terminal and',lfn
+            print 'procWaveDump__init__ Job start time',self.start_time
 
         
         return
@@ -154,6 +155,52 @@ class calibWaveDump():
             effy = float(good)/float(good+nogood)
             err  = 1.-effy
         return effy,err
+    def getLife(self,fn='Output/run00073',withPromptCut=True):
+        '''
+        try to fit for the Po215 lifetime
+        '''
+        if not os.path.isfile(fn): return None
+        hf = ROOT.TFile.Open(fn,'r')
+        bn = os.path.basename(fn).replace('.root','')
+        dname,oname = 'dvdt','ovdt'
+        if withPromptCut: dname,oname = 'dvdtc','ovdtc'
+        hd,ho = hf.Get(dname),hf.Get(oname)
+        hs = hd.Clone("hs")
+        hs.SetTitle("Qdelay_vs_dt_bkgd_sub")
+        hs.Add(ho,-1.)
+        hist2d = [hd,ho,hs]
+
+        nx = hs.GetXaxis().GetNbins()
+        hs_px = hs.ProjectionX("hs_px",1,nx,"e")
+        hs_px.SetTitle("Po215 events vs dt")
+        w = hs.GetXaxis().GetBinWidth(2)
+        hist1d = [hs_px]
+
+
+        E = ROOT.TF1("E","[0]*exp(-x/[1])/[1]*"+str(w))
+        E.SetParName(0,"Signal")
+        E.SetParName(1,"Lifetime")
+        E.SetParameter(0,1000.)
+        E.SetParameter(1,2.e-3)
+
+        ROOT.gStyle.SetOptFit(1111)
+        ROOT.gStyle.SetOptStat(111110)
+
+        fr = hs_px.Fit(E,"QLS")  # fit projection
+        N,dN = E.GetParameter(0),E.GetParError(0)
+        tau,dtau = E.GetParameter(1),E.GetParError(1)
+        print 'calibWaveDump.getLife',bn,hs_px.GetTitle(),'N',N,'(',dN,') lifetime',tau*1.e3,'(',dtau*1.e3,') ms'
+
+        self.gU.drawMultiHists(hist1d,fname=bn+'_getLife1d',figdir=self.figdir,abscissaIsTime=False,dopt="hist e0 func",biggerLabels=False,statOpt=1,fitOpt=1111)
+        self.gU.drawMultiHists(hist2d,fname=bn+'_getLife2d',figdir=self.figdir,abscissaIsTime=False,dopt="COLZ",statOpt=0,biggerLabels=False)
+
+
+        
+        
+        hf.Close()
+        return
+        
+            
     def loop(self,fn='Output/run00073.root',withPromptCut=True):
         '''
         loop over relevant delayed hists in input root file and
@@ -510,9 +557,11 @@ class calibWaveDump():
         return norm
         
 if __name__ == '__main__' :
-    cWD = calibWaveDump()
-    #cWD.fitPSD()
-    #sys.exit('no more')
+    cWD = calibWaveDump(Log=False) ### TEMPORARY
+    cWD.getLife(fn='Output/run00043.root')
+    cWD.getLife(fn='Output/run00052.root')
+    cWD.getLife(fn='Output/run00107.root')
+    sys.exit('no more')
     cWD.main()
     if 0:
         for i in range(31,90):
