@@ -41,6 +41,7 @@ class calibWaveDump():
         self.logFileDir  = self.rootFileDir.replace('rootfiles','logfiles')
         self.outFileDir  = 'Output/'
         self.figdir      = 'Figures/'+name+'/'
+        self.perrunfigdir= self.figdir + 'perRun/'
 
         self.logdir = 'Logfiles/'+name+'/'
         now = datetime.datetime.now()
@@ -155,9 +156,11 @@ class calibWaveDump():
             effy = float(good)/float(good+nogood)
             err  = 1.-effy
         return effy,err
-    def getLife(self,fn='Output/run00073',withPromptCut=True):
+    def getLife(self,fn='Output/run00073',withPromptCut=False,fixLifetime=False):
         '''
-        try to fit for the Po215 lifetime
+        return normalization (# of events) and fitted lifetime (and uncertainties)
+        from delayed energy vs tDelay-dPrompt distribution using off-time window
+        background subtraction
         '''
         if not os.path.isfile(fn): return None
         hf = ROOT.TFile.Open(fn,'r')
@@ -176,29 +179,33 @@ class calibWaveDump():
         w = hs.GetXaxis().GetBinWidth(2)
         hist1d = [hs_px]
 
+        # starting value of N for fit to N/tau * exp(-t/tau)
+        xmi = hs.GetXaxis().GetBinLowEdge(1)
+        xma = hs.GetXaxis().GetBinLowEdge(nx+1) #
+        sum,dsum = self.getIntegral(hs_px,xmi,xma)
+        #print 'nx,xmi,xma,sum,dsum',nx,xmi,xma,sum,dsum
 
         E = ROOT.TF1("E","[0]*exp(-x/[1])/[1]*"+str(w))
-        E.SetParName(0,"Signal")
+        E.SetParName(0,"N")
         E.SetParName(1,"Lifetime")
-        E.SetParameter(0,1000.)
-        E.SetParameter(1,2.e-3)
+        E.SetParameter(0,sum)
+        E.SetParameter(1,self.cAC.Po215lifetime)
+        if fixLifetime : E.FixParameter(1,self.cAC.Po215lifetime)
 
         ROOT.gStyle.SetOptFit(1111)
         ROOT.gStyle.SetOptStat(111110)
-
-        fr = hs_px.Fit(E,"QLS")  # fit projection
+        # Q=quiet, L=likelihood, I=integral of function in bin, instead of value at bin center, S=should return TFitResultPtr , 0 = do not plot result of fit
+        fr = hs_px.Fit(E,"QS")  # fit projection
         N,dN = E.GetParameter(0),E.GetParError(0)
         tau,dtau = E.GetParameter(1),E.GetParError(1)
         print 'calibWaveDump.getLife',bn,hs_px.GetTitle(),'N',N,'(',dN,') lifetime',tau*1.e3,'(',dtau*1.e3,') ms'
 
-        self.gU.drawMultiHists(hist1d,fname=bn+'_getLife1d',figdir=self.figdir,abscissaIsTime=False,dopt="hist e0 func",biggerLabels=False,statOpt=1,fitOpt=1111)
-        self.gU.drawMultiHists(hist2d,fname=bn+'_getLife2d',figdir=self.figdir,abscissaIsTime=False,dopt="COLZ",statOpt=0,biggerLabels=False)
+        self.gU.drawMultiHists(hist1d,fname=bn+'_getLife1d',figdir=self.perrunfigdir,abscissaIsTime=False,dopt="hist e0 func",biggerLabels=False,statOpt=1001111,fitOpt=1111)
+        twoD = False
+        if twoD: self.gU.drawMultiHists(hist2d,fname=bn+'_getLife2d',figdir=self.perrunfigdir,abscissaIsTime=False,dopt="COLZ",statOpt=0,biggerLabels=False)
 
-
-        
-        
         hf.Close()
-        return
+        return N,dN,tau,dtau
         
             
     def loop(self,fn='Output/run00073.root',withPromptCut=True):
@@ -212,6 +219,7 @@ class calibWaveDump():
         if not os.path.isfile(fn): return None
         hf = ROOT.TFile.Open(fn,'r')
         ROOT.gStyle.SetOptFit(1111)
+        statX = ROOT.gStyle.GetStatX() # default
         ROOT.gStyle.SetStatX(.5)
         hlist = []
         for l in range(1,6):
@@ -241,7 +249,8 @@ class calibWaveDump():
 
         dn = (fn.split('/')[1]).split('.')[0]
         if not withPromptCut : dn += 'withNoPromptCut'
-        self.gU.drawMultiHists(hlist,fname=dn,figdir=self.figdir,statOpt=0,biggerLabels=False,dopt='hist e0 func')
+        self.gU.drawMultiHists(hlist,fname=dn,figdir=self.perrunfigdir,statOpt=0,biggerLabels=False,dopt='hist e0 func')
+        ROOT.gStyle.SetStatX(statX) # restore to default
         hf.Close()
         return results
     def commonOrdinate(self,h1,h2,h3):
@@ -320,7 +329,7 @@ class calibWaveDump():
         if debug: print 'calibWaveDump.fitPSD effy,erry',effy,erry,'effy2,erry2',effy2,erry2,'ef3,er3',ef3,er3
         hf.Close()      
         return effy,erry, effy2,erry2, ef3,er3
-    def main(self):
+    def main(self,withPromptCut=True):
         '''
         main routine
         generate list of input files, find corresponding logfiles to get run info,
@@ -329,8 +338,6 @@ class calibWaveDump():
         '''
         listOfHistFiles = self.get_filepaths(self.outFileDir)
         listOfLogFiles  = self.get_filepaths(self.logFileDir)
-
-        withPromptCut = True
 
         Threshold = 10. # minimum number of coincidences for a GOOD run
         Ac227only = True # only process runs with Ac227 (no Cs137, for example)
@@ -348,11 +355,18 @@ class calibWaveDump():
         Prompt = [],[],[],[]
         dPrompt= [],[],[],[]
         PromptName = ['Prompt_Mean','Prompt_StdDev','Prompt_Median','Prompt_Rate_Hz']
-        T = []
+        LIFE  = [],[],[],[] # N,dN,tau,dtau
+        LIFEName = ['Po215Hz','dPo215Hz','Fitted_Tau','dFitted_Tau']
+        T = []  # time of start of run
+        ER,dER = [],[] # expected rate and uncertainty of sample at start of run
         GoodCut = [],[]
+
+        listOfRunsAS = []     # AS=AsStrings
+        listOfGoodRunsAS = []
         
         for fn in listOfHistFiles:
             rn = os.path.basename(fn).split('.')[0] # run00xxx
+            listOfRunsAS.append(rn)
             lf = None
             for lfn in listOfLogFiles:
                 if rn in lfn:
@@ -372,9 +386,15 @@ class calibWaveDump():
                         if results[l][3]<Threshold : GOOD = False
                     if not GOOD: print 'calibWaveDump.main',rn,'too few coincidences'
                 if GOOD:
+                    listOfGoodRunsAS.append(rn)
+                    
+                    # estimate effy of GoodCh0 cut
                     g = self.getGstats(fn=fn)
                     for i,p in enumerate(GoodCut):
                         p.append(g[i])
+
+                    # get statistics on prompt distribution, then normalize # of prompt
+                    # events by run time
                     pStats  = self.getPstats(fn=fn) #mean,stddev,median,N
                     norm = (1.,1.,1.,runtime)
                     for i,p in enumerate(Prompt):
@@ -384,16 +404,27 @@ class calibWaveDump():
                         if i==1 or i==2 : dPrompt[i].append( 0. )
                         if i==3:
                             dPrompt[i].append( math.sqrt(float(pStats[3]))/norm[i] )
-                        
+                            
+                    # fit PSD distribution to estimate PSD cut effy    
                     psdEffy = self.fitPSD(fn=fn)
                     for i,psd in enumerate(PSD):
                         psd.append( psdEffy[i] )
                         
-                        
+                    # fit putative Po215 lifetime distribution to extract
+                    # fitted lifetime, number and rate of Po215 events
+                    lf = self.getLife(fn=fn,withPromptCut=withPromptCut)
+                    norm = (runtime,runtime,1.,1.)
+                    for i,life in enumerate(LIFE):
+                        life.append( lf[i]/norm[i] )
+
+                    # get per run results (start timestamp, sources used, sample name, runtim    
                     results[rn] = [timestamp,sources,sample,runtime]
                     norm = self.normResults(results)
-                    #print rn,'results',results
-                    #print rn,'norm',norm
+
+                    # expected Ac227 rate at start of run given timestamp(converted from ms) and sample name
+                    expectedRate,der = self.cAC.expectAc227Rate(inputDay=timestamp/1000,sampleName=sample)
+                    ER.append(expectedRate)
+                    dER.append(der)
                     words = rn + ' rates(Hz) '
                     stuff = 'livetime={0:.1f} Evts(unc)'.format(runtime)
                     X.append(float(rn.replace('run','')))
@@ -424,6 +455,33 @@ class calibWaveDump():
         tmgP= self.gU.makeTMultiGraph('Po215_peak_vs_run')
         tmgS= self.gU.makeTMultiGraph('Po215_sigma_vs_run')
         tmgPSD = self.gU.makeTMultiGraph('PSD_effy_vs_run')
+        tmgN= self.gU.makeTMultiGraph('HzPo215_from_lifetimeFit_vs_run')
+        tmgL= self.gU.makeTMultiGraph('Fitted_lifetime_vs_run')
+        tmgAll = self.gU.makeTMultiGraph('Ac227_rate_Hz_vs_run')
+        tmgAllT = self.gU.makeTMultiGraph('Ac227_rate_Hz_vs_time')
+        graphs = [tmg,tmgT,tmgEC,tmgTEC,tmgP,tmgS,tmgPSD,tmgN,tmgL,tmgAll,tmgAllT]
+        hists = []
+
+        title = 'Expected sample rate vs run'
+        name  = title.replace(' ','_')
+        y,dy = numpy.array(ER),numpy.array(dER)
+        g = self.gU.makeTGraph(X,y,title,name,ey=dy,ex=dX)
+        self.gU.color(g,7,7,setMarkerColor=True)
+        tmg.Add(g)
+        tmgEC.Add(g)
+        tmgN.Add(g)
+        tmgAll.Add(g)
+        graphs.append(g)
+
+        title = 'Expected sample rate vs time'
+        name  = title.replace(' ','_')
+        g = self.gU.makeTGraph(T,y,title,name,ey=dy,ex=dX)
+        self.gU.color(g,7,7,setMarkerColor=True)
+        tmgT.Add(g)
+        tmgTEC.Add(g)
+        tmgAllT.Add(g)
+        graphs.append(g)
+        
 
         for l in sorted(Y.keys()):
             y,dy = numpy.array(Y[l]),numpy.array(dY[l])
@@ -434,12 +492,14 @@ class calibWaveDump():
             self.gU.color(g,l,l,setMarkerColor=True)
             tmg.Add(g)
             self.gU.drawGraph(g,figDir=self.figdir)
+            graphs.append(g)
 
             name = name+'_vs_timestamp'
             g = self.gU.makeTGraph(T,y,title,name,ex=dX,ey=dy)
             self.gU.color(g,l,l,setMarkerColor=True)
             tmgT.Add(g)
             self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True)
+            graphs.append(g)
 
             y,dy = numpy.array(PoPeak[l]),numpy.array(dPoPeak[l])
             title='Po215 peak cut at '+str(l)+' lifetimes'
@@ -448,6 +508,7 @@ class calibWaveDump():
             self.gU.color(g,l,l,setMarkerColor=True)
             tmgP.Add(g)
             self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
+            graphs.append(g)
             
             y    = numpy.array(PoS[l])
             title='Po215 sigma cut at '+str(l)+' lifetimes'
@@ -456,6 +517,7 @@ class calibWaveDump():
             self.gU.color(g,l,l,setMarkerColor=True)
             tmgS.Add(g)
             self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
+            graphs.append(g)
 
         for i in range(3):
             y,dy = numpy.array( PSD[2*i] ), numpy.array( PSD[2*i+1] )
@@ -465,6 +527,31 @@ class calibWaveDump():
             self.gU.color(g,i,i,setMarkerColor=True)
             self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
             tmgPSD.Add(g)
+            graphs.append(g)
+
+        for i in range(2):
+            y,dy = numpy.array( LIFE[2*i] ), numpy.array( LIFE[2*i+1] )
+            title= LIFEName[2*i] + ' vs run'
+            name = title.replace(' ','_')
+            g = self.gU.makeTGraph(X,y,title,name,ex=dX,ey=dy)
+            self.gU.color(g,i,i,setMarkerColor=True)
+            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
+            graphs.append(g)
+            if i==0: tmgN.Add(g)
+            if i==1:
+                tmgL.Add(g)
+                title = 'Fitted lifetime (s)'
+                name = 'Fitted_lifetime_s'
+                xma,xmi,dq = max(y),min(y),(max(y)-min(y))/10.
+                hists.append( self.gU.makeTH1D(y,title,name,xmi=xmi-dq,xma=xma+dq) )
+
+                title = 'Fitted lifetime residual'
+                name = title.replace(' ','_')
+                q = (y-self.cAC.Po215lifetime)/dy
+                xma,xmi,dq = max(q),min(q),(max(q)-min(q))/10.
+                hists.append( self.gU.makeTH1D(q,title,name,xmi=xmi-dq,xma=xma+dq) )
+                    
+            
 
         for i,p in enumerate(Prompt):
             y,dy = numpy.array(p),numpy.array(dPrompt[i])
@@ -473,6 +560,7 @@ class calibWaveDump():
             g = self.gU.makeTGraph(X,y,title,name,ex=dX,ey=dy)
             self.gU.color(g,i,i,setMarkerColor=True)
             self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=False)
+            graphs.append(g)
 
         y,dy = numpy.array(GoodCut[0]),numpy.array(GoodCut[1])
         name = 'GoodCh0Effy_vs_run'
@@ -480,6 +568,7 @@ class calibWaveDump():
         g = self.gU.makeTGraph(X,y,title,name,ex=dX,ey=dy)
         self.gU.color(g,1,1,setMarkerColor=True)
         self.gU.drawGraph(g,figDir=self.figdir)
+        graphs.append(g)
 
         # apply effy corrections to Po215 rate and prompt spectrum (entire alpha spectrum)
         Ycorr,dYcorr = [],[] # will become corrected Po215 rate
@@ -506,6 +595,8 @@ class calibWaveDump():
             self.gU.color(g,int(l),int(l),setMarkerColor=True)
             self.gU.drawGraph(g,figDir=self.figdir)
             tmgEC.Add(g)
+            tmgAll.Add(g)
+            graphs.append(g)
 
             name = 'EffCorr_Po215Rate_Hz_vs_time_with_'+str(l)+'lifetime_cut'
             title = name.replace('_',' ')
@@ -513,8 +604,11 @@ class calibWaveDump():
             self.gU.color(g,int(l),int(l),setMarkerColor=True)
             self.gU.drawGraph(g,figDir=self.figdir)
             tmgTEC.Add(g)
+            tmgAllT.Add(g)
+            graphs.append(g)
             
-            
+
+        # effy-corrected and Nalpha-corrected prompt rate
         p = numpy.array(Prompt[3])
         dp= numpy.array(dPrompt[3])
         pcorr = p/effPSD/effLo/effGood/nAlpha
@@ -523,8 +617,22 @@ class calibWaveDump():
         name = 'EffCorr_PromptRate_Hz_vs_run'
         title = name.replace('_',' ')
         g = self.gU.makeTGraph(X,pcorr,title,name,ex=dX,ey=dpcorr)
-        self.gU.color(g,1,1,setMarkerColor=True)
+        self.gU.color(g,14,14,setMarkerColor=True)
         self.gU.drawGraph(g,figDir=self.figdir)
+        tmgAll.Add(g)
+        graphs.append(g)
+
+        # effy-corrected Po215 rate from lifetime fit
+        y,dy = numpy.array(LIFE[0]),numpy.array(LIFE[1])
+        ycorr = y/effPSD/effLo/effGood
+        dycorr= ycorr*numpy.sqrt( errPSD*errPSD/effPSD/effPSD + errGood*errGood/effGood/effGood )
+        name = 'EffCorr_Po215_rate_from_lifetime_fit_vs_run'
+        title = name.replace('_',' ')
+        g = self.gU.color(g,15,15,setMarkerColor=True)
+        self.gU.drawGraph(g,figDir=self.figdir)
+        tmgAll.Add(g)
+        graphs.append(g)
+                                                
         
             
 
@@ -535,8 +643,21 @@ class calibWaveDump():
         self.gU.drawMultiGraph(tmgP,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted mean of 215Po peak (nC)')
         self.gU.drawMultiGraph(tmgS,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted sigma of 215 Po peak (nC)')
         self.gU.drawMultiGraph(tmgPSD,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='PSD effy estimate')
+        self.gU.drawMultiGraph(tmgN,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Po215 rate (Hz) from lifetime fit')
+        self.gU.drawMultiGraph(tmgL,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted lifetime (s)')
 
+        self.gU.drawMultiGraph(tmgAll,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Ac227 rate (Hz)')
+        self.gU.drawMultiGraph(tmgAllT,figdir=self.figdir,abscissaIsTime=True,xAxisLabel='Run number',yAxisLabel='Ac227 rate (Hz)')
         
+        rl = sorted(listOfGoodRunsAS)
+        print 'calibWaveDump.main Opened',len(listOfRunsAS),'root files with',len(listOfGoodRunsAS),'good runs. First,last good runs',rl[0],rl[-1]
+        
+        fn = self.outFileDir + 'summary_' + rl[0] + '_' + rl[-1] + '.root'
+        rfn = ROOT.TFile.Open(fn,'RECREATE')
+        for g in graphs: rfn.WriteTObject(g)
+        for h in hists: rfn.WriteTObject(h)
+        rfn.Close()
+        print 'calibWaveDump.main Wrote',len(graphs),'graphs,',len(hists),'hists to',fn
             
         return
     def normResults(self,results):
@@ -557,12 +678,21 @@ class calibWaveDump():
         return norm
         
 if __name__ == '__main__' :
-    cWD = calibWaveDump(Log=False) ### TEMPORARY
-    cWD.getLife(fn='Output/run00043.root')
-    cWD.getLife(fn='Output/run00052.root')
-    cWD.getLife(fn='Output/run00107.root')
-    sys.exit('no more')
-    cWD.main()
+    '''
+    arguments
+    1 = if True or true or 1, then apply prompt cut
+    2 = if false or no, then no logging
+    '''
+    Log = True
+    withPromptCut = False
+    if len(sys.argv)>1 : withPromptCut = sys.argv[1].lower()=='true' or sys.argv[1]=='1'
+    if len(sys.argv)>2 : Log = sys.argv[2].lower()=='false' or sys.argv[1].lower()=='no'
+    
+    cWD = calibWaveDump(Log=Log) 
+    cWD.main(withPromptCut=withPromptCut)
+
+
+    
     if 0:
         for i in range(31,90):
             fn='Output/run'+str(i).zfill(5)+'.root'

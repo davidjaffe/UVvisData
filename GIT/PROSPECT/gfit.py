@@ -44,7 +44,7 @@ class gfit():
         if tot<=0 or float(ent)/float(tot)<0.50:
             return par['gsum']
 
-        # fit options: Restricted range, Likelihood, Quiet
+        # fit options: Restricted range, Likelihood, Quiet, do not plot result
         fitopt = "RLQ"
         if debug : fitopt = "RL"
 
@@ -173,7 +173,7 @@ class gfit():
 
         return gA,gB
         
-    def fit(self,hname,nsigplus=1.5,nsigminus=2.0,quiet=False,debug=False):
+    def fit(self,hname,nsigplus=1.5,nsigminus=2.0,quiet=False,debug=False,drawFit=False):
         name,ave,rms,tot,under,bin1,over,ent,xmi,xma = self.getProp(hname)
 
         GoodFit = False
@@ -186,8 +186,9 @@ class gfit():
         if debug :
             print 'name,tot,under,bin1,over,ent',name,tot,under,bin1,over,ent
 
-        fit_options = "RL" # Restricted range,Likelihood,
+        fit_options = "RL0" # Restricted range,Likelihood,do not draw fit
         if quiet: fit_options += "Q" # quiet
+        if drawFit: fit_options.replace("0","")
         nsig = 3.
         mean = ave
         sgm  = rms
