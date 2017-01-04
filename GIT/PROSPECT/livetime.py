@@ -21,6 +21,7 @@ class livetime():
         self.gU  = graphUtils.graphUtils()
         self.procLogList = self.cWD.get_filepaths(self.procLog)
         self.daqLogList  = self.cWD.get_filepaths(self.daqLog)
+        self.figdir = 'Figures/livetime/'
         
         print 'livetime Initialized'
         return
@@ -100,25 +101,28 @@ class livetime():
         nx = int(xma-xmi+.001)
         hists = []
         name = 'lot'
-        title = 'lastTime/runTime vs run'
+        title = 'lastTime/runTime vs run                                                               .'
         h = ROOT.TH1D(name,title,nx,xmi,xma)
         for x,y in zip(run,lot):
             h.Fill(x,y)
         hists.append(h)
         name = 'rtime'
-        title = 'runTime vs run'
+        title = 'runTime(s) vs run'
         h = ROOT.TH1D(name,title,nx,xmi,xma)
         for x,y in zip(run,rtime):
             h.Fill(x,y)
         hists.append(h)
         name = 'ltime'
-        title = 'lastTime vs run'
+        title = 'lastTime(s) vs run'
         h = ROOT.TH1D(name,title,nx,xmi,xma)
         for x,y in zip(run,ltime):
             h.Fill(x,y)
         hists.append(h)
 
-        fn = 'live.root'
+
+        self.gU.drawMultiHists(hists,'livetime',figdir=self.figdir,statOpt=0,abscissaIsTime=False,biggerLabels=True,dopt='hist',Grid=True)
+
+        fn = self.figdir+'live.root'
         rfn = ROOT.TFile.Open(fn,'RECREATE')
         for h in hists: rfn.WriteTObject(h)
         rfn.Close()
