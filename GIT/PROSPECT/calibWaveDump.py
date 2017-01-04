@@ -22,6 +22,8 @@ import gfit
 import readLogFile
 import cutsAndConstants
 import Logger
+import livetime
+import get_filepaths
 
 class calibWaveDump():
     def __init__(self,Log=True):
@@ -31,6 +33,8 @@ class calibWaveDump():
         self.gfit = gfit.gfit()
         self.rLF = readLogFile.readLogFile()
         self.cAC = cutsAndConstants.cutsAndConstants()
+        self.lt = livetime.livetime()
+        self.gfp = get_filepaths.get_filepaths()
 
         self.psdCut = self.cAC.psdCut
         self.lowChargeCut = self.cAC.lowChargeCut
@@ -56,24 +60,8 @@ class calibWaveDump():
 
         
         return
-    def get_filepaths(self,directory):
-        '''
-        20160906 taken from http://stackoverflow.com/questions/3207219/how-to-list-all-files-of-a-directory-in-python
-        This function will generate the file names in a directory 
-        tree by walking the tree either top-down or bottom-up. For each 
-        directory in the tree rooted at directory top (including top itself), 
-        it yields a 3-tuple (dirpath, dirnames, filenames).
-        '''
-        file_paths = []  # List which will store all of the full filepaths.
-
-        # Walk the tree.
-        for root, directories, files in os.walk(directory):
-            for filename in files:
-                # Join the two strings in order to form the full filepath.
-                filepath = os.path.join(root, filename)
-                file_paths.append(filepath)  # Add it to the list.
-
-        return file_paths  # Self-explanatory.
+    def get_filepaths(self,directory,exclude=None):
+        return self.gfp.get_filepaths(directory,exclude=exclude)
     def subAndFit(self,hs,hb,dname,nsig=3.):
         '''
         return fitted difference of signal hs and background hb histograms with gaussian
@@ -329,14 +317,14 @@ class calibWaveDump():
         if debug: print 'calibWaveDump.fitPSD effy,erry',effy,erry,'effy2,erry2',effy2,erry2,'ef3,er3',ef3,er3
         hf.Close()      
         return effy,erry, effy2,erry2, ef3,er3
-    def main(self,withPromptCut=True):
+    def main(self,withPromptCut=True,useLastTime=True):
         '''
         main routine
         generate list of input files, find corresponding logfiles to get run info,
         get stats for a run,
         plot stats vs run # and vs time
         '''
-        listOfHistFiles = self.get_filepaths(self.outFileDir)
+        listOfHistFiles = self.get_filepaths(self.outFileDir,exclude='summary')
         listOfLogFiles  = self.get_filepaths(self.logFileDir)
 
         Threshold = 10. # minimum number of coincidences for a GOOD run
@@ -347,7 +335,7 @@ class calibWaveDump():
         else:
             goodSources = ['Ac-227','Cs-137']
             badSources  = []
-        print 'calibWaveDump.main Threshold',Threshold,'goodSources',goodSources,'badSources',badSources,'withPromptCut',withPromptCut
+        print 'calibWaveDump.main Threshold',Threshold,'goodSources',goodSources,'badSources',badSources,'withPromptCut',withPromptCut,'useLastTime',useLastTime
             
         
         X,Y,dY,PoPeak,dPoPeak,PoS = [],{},{},{},{},{}
@@ -366,6 +354,7 @@ class calibWaveDump():
         
         for fn in listOfHistFiles:
             rn = os.path.basename(fn).split('.')[0] # run00xxx
+            runNum = int(rn.replace('run','')) # integer run number
             listOfRunsAS.append(rn)
             lf = None
             for lfn in listOfLogFiles:
@@ -374,12 +363,20 @@ class calibWaveDump():
                     break
             if lf is not None:
                 timestamp,sources,sample,runtime = self.rLF.readFile(lf)
+                if useLastTime:
+                    lastTime = self.lt.getLastTime(rn)
+                    #print rn,'lastTime',lastTime,'runtime',runtime,
+                    if lastTime is not None: runtime = lastTime
+                    #print 'fixed runtime',runtime
                 GOOD = False
                 for src in goodSources:
                     if src in sources: GOOD = True
                 for src in badSources:
                     if src in sources: GOOD = False
                 if not GOOD: print 'calibWaveDump.main',rn,'no good sources'
+                if runNum in self.cAC.badRuns :
+                    GOOD = False
+                    print 'calibWaveDump.main',rn,'bad run'
                 if GOOD:
                     results = self.loop(fn=fn,withPromptCut=withPromptCut)
                     for l in results:
@@ -416,6 +413,9 @@ class calibWaveDump():
                     norm = (runtime,runtime,1.,1.)
                     for i,life in enumerate(LIFE):
                         life.append( lf[i]/norm[i] )
+
+                        
+                        
 
                     # get per run results (start timestamp, sources used, sample name, runtim    
                     results[rn] = [timestamp,sources,sample,runtime]
@@ -466,7 +466,7 @@ class calibWaveDump():
         name  = title.replace(' ','_')
         y,dy = numpy.array(ER),numpy.array(dER)
         g = self.gU.makeTGraph(X,y,title,name,ey=dy,ex=dX)
-        self.gU.color(g,7,7,setMarkerColor=True)
+        self.gU.color(g,27,27,setMarkerColor=True)
         tmg.Add(g)
         tmgEC.Add(g)
         tmgN.Add(g)
@@ -476,7 +476,7 @@ class calibWaveDump():
         title = 'Expected sample rate vs time'
         name  = title.replace(' ','_')
         g = self.gU.makeTGraph(T,y,title,name,ey=dy,ex=dX)
-        self.gU.color(g,7,7,setMarkerColor=True)
+        self.gU.color(g,27,27,setMarkerColor=True)
         tmgT.Add(g)
         tmgTEC.Add(g)
         tmgAllT.Add(g)
@@ -543,13 +543,13 @@ class calibWaveDump():
                 title = 'Fitted lifetime (s)'
                 name = 'Fitted_lifetime_s'
                 xma,xmi,dq = max(y),min(y),(max(y)-min(y))/10.
-                hists.append( self.gU.makeTH1D(y,title,name,xmi=xmi-dq,xma=xma+dq) )
+                hists.append( self.gU.makeTH1D(y,title,name,xmi=xmi-dq,xma=xma+dq,nx=50) )
 
                 title = 'Fitted lifetime residual'
                 name = title.replace(' ','_')
                 q = (y-self.cAC.Po215lifetime)/dy
                 xma,xmi,dq = max(q),min(q),(max(q)-min(q))/10.
-                hists.append( self.gU.makeTH1D(q,title,name,xmi=xmi-dq,xma=xma+dq) )
+                hists.append( self.gU.makeTH1D(q,title,name,xmi=xmi-dq,xma=xma+dq,nx=50) )
                     
             
 
@@ -617,10 +617,26 @@ class calibWaveDump():
         name = 'EffCorr_PromptRate_Hz_vs_run'
         title = name.replace('_',' ')
         g = self.gU.makeTGraph(X,pcorr,title,name,ex=dX,ey=dpcorr)
-        self.gU.color(g,14,14,setMarkerColor=True)
+        self.gU.color(g,9,9,setMarkerColor=True)
         self.gU.drawGraph(g,figDir=self.figdir)
         tmgAll.Add(g)
         graphs.append(g)
+        
+        name = 'EffCorr_PromptRate_Hz'
+        title = name.replace('_',' ')
+        xma,xmi,dq = max(pcorr),min(pcorr),(max(pcorr)-min(pcorr))/10.
+        h = self.gU.makeTH1D(pcorr,title,name,xmi=xmi-dq,xma=xma+dq,nx=50)
+        hists.append(h)
+
+        er,der = numpy.array(ER),numpy.array(dER)
+        name = 'EffCorr_PromptRate_Residual'
+        title = name.replace('_',' ')
+        q = (pcorr-er)/numpy.sqrt(der*der + dpcorr*dpcorr)
+        xma,xmi,dq = max(q),min(q),(max(q)-min(q))/10.
+        h = self.gU.makeTH1D(q,title,name,xmi=xmi-dq,xma=xma+dq,nx=50)
+        hists.append(h)
+        
+        
 
         # effy-corrected Po215 rate from lifetime fit
         y,dy = numpy.array(LIFE[0]),numpy.array(LIFE[1])
@@ -628,10 +644,42 @@ class calibWaveDump():
         dycorr= ycorr*numpy.sqrt( errPSD*errPSD/effPSD/effPSD + errGood*errGood/effGood/effGood )
         name = 'EffCorr_Po215_rate_from_lifetime_fit_vs_run'
         title = name.replace('_',' ')
-        g = self.gU.color(g,15,15,setMarkerColor=True)
+        g = self.gU.makeTGraph(X,ycorr,title,name,ex=dX,ey=dycorr)
+        self.gU.color(g,8,8,setMarkerColor=True)
         self.gU.drawGraph(g,figDir=self.figdir)
         tmgAll.Add(g)
         graphs.append(g)
+
+        name = 'EffCorr_Po215_rate_from_lifetime_fit'
+        title = name.replace('_',' ')
+        xma,xmi,dq = max(ycorr),min(ycorr),(max(ycorr)-min(ycorr))/10.
+        h = self.gU.makeTH1D(ycorr,title,name,xmi=xmi-dq,xma=xma+dq,nx=50)
+        hists.append(h)
+        
+        name = 'EffCorr_Po215_residual_from_lifetime_fit'
+        title = name.replace('_',' ')
+        q = (ycorr-er)/numpy.sqrt( dycorr*dycorr + der*der)
+        xma,xmi,dq = max(q),min(q),(max(q)-min(q))/10.
+        h = self.gU.makeTH1D(q,title,name,xmi=xmi-dq,xma=xma+dq,nx=50)
+        hists.append(h)
+        
+        # correlations?
+        for k in range(0,10,2):
+            name = 'Ac227_effcor_fromPrompt_vs_Po215_effcor_fromLifetime_'+str(k)
+            title = name.replace('_',' ')
+            if k==0:
+                xmi=ymi=min(min(ycorr),min(pcorr))
+                xma=yma=max(max(ycorr),max(pcorr))
+                dq = (xma-xmi)/20.
+            elif k>0:
+                xa,ya,sx,sy = numpy.mean(ycorr),numpy.mean(pcorr),numpy.std(ycorr),numpy.std(pcorr)
+                xmi,ymi = xa-float(k)*sx,ya-float(k)*sy
+                xma,yma = xa+float(k)*sx,ya+float(k)*sy
+                dq = 0.
+            h = self.gU.makeTH2D(ycorr,pcorr,title,name,xmi=xmi-dq,xma=xma+dq,ymi=ymi-dq,yma=yma+dq)
+            hists.append(h)
+        
+        
                                                 
         
             

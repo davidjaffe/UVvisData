@@ -37,11 +37,13 @@ class cutsAndConstants():
         self.initialAc227Date = '20160906' # at noon EDT, but that can't matter
         self.initialAc227mass = 10.22710 # grams
         self.dispensedAc227mass = 0.503 # grams, from notebook 20161215
+        self.dispensedAc227massUnc = 0.010 # grams, estimated
         self.totalLiLSmass = 192. # grams, according to Richard
 
         self.Ac227MassPerLiLSGram = self.dispensedAc227mass/self.initialAc227mass / self.totalLiLSmass
         
         self.LiLS2mass = 10.030 # grams, according to notebook 20161215
+        self.LiLS2massUnc = 0.010 # grams, estimated
 
         # this will be the database for sample masses
         self.SampleMass = {'LiLS2':self.LiLS2mass}
@@ -52,6 +54,10 @@ class cutsAndConstants():
         self.totalAlphas = 5.
         self.lowChargeCutEffy =  0.999998600339 # cut range(pC) 12.0 50.0, from detMC
         self.promptChargeCutEffy =  0.947929001184 # 219Rn cut range(pC) 30.0 40.0 from detMC
+
+        # bad runs
+        # run 56 has event with dt = 6.7 second and log file "Comments: Accidently hit keys while running"
+        self.badRuns = [56]
         
         print 'cutsAndConstants.__init__ Initialized'
         return
@@ -138,7 +144,10 @@ class cutsAndConstants():
             sys.exit('cutsAndConstants.expectAc227Rate ERROR Input day is before initial date '+self.initialAc227Date)
 
         rate = self.initialAc227Activity * mass*self.Ac227MassPerLiLSGram * math.exp(-deltaTsec/self.Ac227lifetime_sec)
-        drate = self.initialAc227ActivityRelUnc * rate
+
+
+        
+        drate = rate * math.sqrt(math.pow(self.initialAc227ActivityRelUnc,2) + math.pow(self.dispensedAc227massUnc/self.dispensedAc227mass,2) + math.pow(self.LiLS2massUnc/self.LiLS2mass,2) )
             
         return rate,drate
 if __name__ == '__main__':
