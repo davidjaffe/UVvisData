@@ -80,10 +80,11 @@ class cutsAndConstants():
         sN = sampleName.replace('#','') # remove # from string
         if sN in self.SampleMass: return self.SampleMass[sN]
 
-        # try for match ignoring case
+        # try for match ignoring case and removing # from key
         for key in self.SampleMass:
-            if key.lower()==sampleName.lower(): return self.SampleMass[sampleName]
-            if key.lower()==sN.lower()        : return self.SampleMass[sN]
+            if key.lower()==sampleName.lower(): return self.SampleMass[key]
+            if key.lower()==sN.lower()        : return self.SampleMass[key]
+            if key.replace("#","").lower()==sN.lower() : return self.SampleMass[key]
 
         # Danielle initially used simple name for initial spiked sample
         if sampleName=='LiLS' :

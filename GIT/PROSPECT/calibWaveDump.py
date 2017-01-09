@@ -149,6 +149,8 @@ class calibWaveDump():
         return normalization (# of events) and fitted lifetime (and uncertainties)
         from delayed energy vs tDelay-dPrompt distribution using off-time window
         background subtraction
+        20170105 return normalization when lifetime is fixed to nominal lifetime,
+        but fitted lifetime when both normalization and lifetime are free fit
         '''
         if not os.path.isfile(fn): return None
         hf = ROOT.TFile.Open(fn,'r')
@@ -178,6 +180,15 @@ class calibWaveDump():
         E.SetParName(1,"Lifetime")
         E.SetParameter(0,sum)
         E.SetParameter(1,self.cAC.Po215lifetime)
+        
+        # first fit with lifetime fixed to nominal. Q=quiet, 0 = do not plot, S = tfitresultptr should be returned
+        E.FixParameter(1,self.cAC.Po215lifetime)
+        fr0 = hs_px.Fit(E,"QS0")
+        N0,dN0 = E.GetParameter(0),E.GetParError(0)
+
+        # second fit with lifetime free (if requested)
+        E.ReleaseParameter(1)
+        E.SetParameter(1,self.cAC.Po215lifetime)
         if fixLifetime : E.FixParameter(1,self.cAC.Po215lifetime)
 
         ROOT.gStyle.SetOptFit(1111)
@@ -186,14 +197,17 @@ class calibWaveDump():
         fr = hs_px.Fit(E,"QS")  # fit projection
         N,dN = E.GetParameter(0),E.GetParError(0)
         tau,dtau = E.GetParameter(1),E.GetParError(1)
-        print 'calibWaveDump.getLife',bn,hs_px.GetTitle(),'N',N,'(',dN,') lifetime',tau*1.e3,'(',dtau*1.e3,') ms'
+        print 'calibWaveDump.getLife',bn,hs_px.GetTitle(),'N0',N0,'(',dN0,')','N',N,'(',dN,') lifetime',tau*1.e3,'(',dtau*1.e3,') ms'
 
         self.gU.drawMultiHists(hist1d,fname=bn+'_getLife1d',figdir=self.perrunfigdir,abscissaIsTime=False,dopt="hist e0 func",biggerLabels=False,statOpt=1001111,fitOpt=1111)
         twoD = False
         if twoD: self.gU.drawMultiHists(hist2d,fname=bn+'_getLife2d',figdir=self.perrunfigdir,abscissaIsTime=False,dopt="COLZ",statOpt=0,biggerLabels=False)
 
+
+            
+
         hf.Close()
-        return N,dN,tau,dtau
+        return N0,dN0,tau,dtau
         
             
     def loop(self,fn='Output/run00073.root',withPromptCut=True):
@@ -331,7 +345,7 @@ class calibWaveDump():
         Ac227only = True # only process runs with Ac227 (no Cs137, for example)
         if Ac227only:
             goodSources = ['Ac-227']
-            badSources  = ['Cs-137']
+            badSources  = ['Cs-137','Ba-133']
         else:
             goodSources = ['Ac-227','Cs-137']
             badSources  = []
