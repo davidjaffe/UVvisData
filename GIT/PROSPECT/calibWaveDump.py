@@ -635,6 +635,14 @@ class calibWaveDump():
         self.gU.drawGraph(g,figDir=self.figdir)
         tmgAll.Add(g)
         graphs.append(g)
+
+        name = 'EffCorr_PromptRate_Hz_vs_time'
+        title = name.replace('_',' ')
+        g = self.gU.makeTGraph(T,pcorr,title,name,ex=dX,ey=dpcorr)
+        self.gU.color(g,9,9,setMarkerColor=True)
+        self.gU.drawGraph(g,figDir=self.figdir)
+        tmgAllT.Add(g)
+        graphs.append(g)
         
         name = 'EffCorr_PromptRate_Hz'
         title = name.replace('_',' ')
@@ -678,7 +686,7 @@ class calibWaveDump():
         hists.append(h)
         
         # correlations?
-        for k in range(0,10,2):
+        for k in range(0,5,4):
             name = 'Ac227_effcor_fromPrompt_vs_Po215_effcor_fromLifetime_'+str(k)
             title = name.replace('_',' ')
             if k==0:
@@ -693,7 +701,8 @@ class calibWaveDump():
             h = self.gU.makeTH2D(ycorr,pcorr,title,name,xmi=xmi-dq,xma=xma+dq,ymi=ymi-dq,yma=yma+dq)
             hists.append(h)
         
-        
+
+        self.gU.drawMultiHists(hists,'Ac227Hists',figdir=self.figdir,statOpt='2211',biggerLabels=False,Grid=True)
                                                 
         
             
