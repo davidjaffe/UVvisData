@@ -22,6 +22,9 @@ class lsqa():
         self.wfa = wfanal.wfanal()
         self.gU  = graphUtils.graphUtils()
         self.figdir = 'Figures/'
+
+        self.GG = ROOT.TF1("GG","[0]*exp(-0.5*(x-[1])*(x-[1])/[2]/[2])+[3]*exp(-0.5*(x-[4])*(x-[4])/[5]/[5])")
+        self.G = ROOT.TF1("G","[0]*exp(-0.5*(x-[1])*(x-[1])/[2]/[2])")
         return
     def getWFMs(self,fn):
         '''
@@ -35,6 +38,75 @@ class lsqa():
                 ph.append(a)
                 ct.append(b)
         return ph,ct
+    def getQ(self,wfm,fastValues,totalValues,startoff=100,numavg=200):
+        minidx = numpy.argmin(wfm)
+        BL = sum(wfm[int(minidx-startoff-numavg):int(minidx-startoff)])/float(numavg)
+        i1 = int(minidx-startoff)
+        results = []
+        for fastint in fastValues:
+            i2 = int(minidx+fastint)
+            fast = sum(wfm[i1:i2])
+            fastBL = BL*float(startoff+fastint)
+            for totint in totalValues:
+                i3 = int(minidx+totint)
+                total = fast + sum(wfm[i2:i3])
+                totalBL = BL*float(startoff+totint)
+                Qfast = fast-fastBL
+                Qtot  = total-totalBL
+                results.append( (Qfast,Qtot) )
+        return results
+    def main(self,fn=None):
+        idebug = 0
+        fastValues = numpy.linspace(60,140,5) #20,120,6)
+        totalValues= numpy.linspace(200,1000,5)
+        IntValues = [[x,y] for x in fastValues for y in totalValues]
+        f = h5py.File(fn)
+        Events = []
+
+        ievt,freq = 0,500
+        for w in f['Waveforms']:
+            wfm,ct = w[0]
+            if len(wfm)>0:
+                results = self.getQ(wfm,fastValues=fastValues,totalValues=totalValues)
+                Events.append( results )
+                if idebug>0:
+                    for iPair,rPair in zip(IntValues,results):
+                        fastint,totint = iPair
+                        Qfast,Qtot     = rPair
+                        print '{0} {1} {2:.2f} {3:.2f}'.format(fastint,totint,Qfast,Qtot)
+                    if ievt>3: break
+                if ievt%freq==0:
+                    print '\r',ievt,
+                    sys.stdout.flush()
+                ievt+=1
+
+        f.close()
+
+        if idebug>0:
+            print 'lsqa.main Events',Events
+        E = numpy.array(Events)
+        hists = []
+        nx,xmi,xma = 100,0.,100.
+        ny,ymi,yma = 100,0.,1.
+        for i,vv in enumerate(IntValues):
+            ifast,itot = vv
+            name = 'f'+str(int(ifast))+'_t'+str(int(itot))
+            title = 'PSD vs Qtot '+name.replace('_',' ')
+            h = ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
+            for pair in E[:,i]:
+                Qfast,Qtot = pair
+                PSD = (Qtot-Qfast)/Qtot
+                h.Fill(abs(Qtot),PSD)
+            hists.append(h)
+        self.gU.drawMultiHists(hists,'optimize',figdir=self.figdir,forceNX=5,Grid=True)
+        rfn = self.figdir + 'optimize.root'
+        f = ROOT.TFile.Open(rfn,'RECREATE')
+        for h in hists: f.WriteTObject(h)
+        f.Close()
+        print 'lsqa.main Wrote',len(hists),'to',rfn
+        return
+
+        
     def onlPlot(self,fn=None,dname=None):
         '''
         get Qfast,Qtot from online analysis and plot 'em
@@ -89,7 +161,7 @@ class lsqa():
             name = title = 'Qtot_loPSD'+ '_' + words.replace(' ','_')
             h = self.gU.makeTH1D(Qtot[B],title,name,nx=nx,xmi=xmi,xma=xma)            
             hists.append(h)
-            G = ROOT.TF1("G","[0]*exp(-0.5*(x-[1])*(x-[1])/[2]/[2])")
+            G = self.G 
             G.SetParName(0,"N")
             G.SetParName(1,"Mean")
             G.SetParName(2,"Sigma")
@@ -114,7 +186,7 @@ class lsqa():
                 FOM = None
                 if Nevt>FOMfitThres:
                 
-                    GG = ROOT.TF1("GG","[0]*exp(-0.5*(x-[1])*(x-[1])/[2]/[2])+[3]*exp(-0.5*(x-[4])*(x-[4])/[5]/[5])")
+                    GG = self.GG 
                     GG.SetParName(0,"gN")
                     GG.SetParName(1,"gMean")
                     GG.SetParName(2,"gSigma")
@@ -217,18 +289,26 @@ class lsqa():
         
 
         return u
-    def simple(self):
-        fn = '/Users/djaffe/work/LSQAData/Test1/run3554994172.h5'
+    def simple(self,fn = '/Users/djaffe/work/LSQAData/Test1/run3554994172.h5'):
+        usePulseAnal = False
+        startoff, fastint, totint, numavg = 100, 200, 500, 200
         nsd = 3.0
         ph,ct = self.getWFMs(fn)
         print 'len(ph),len(ct)',len(ph),len(ct)
         for ip in range(0,len(ph),281):
             wf = ph[ip]
-            ped,pedsd,iPulse,subPperP,pArea,pTime = self.wfa.pulseAnal(wf,'LSQA',debug=1,nsd=nsd)
-            print 'ped,pedsd,iPulse,subPperP,pArea,pTime',ped,pedsd,iPulse,subPperP,pArea,pTime
+            if usePulseAnal:
+                ped,pedsd,iPulse,subPperP,pArea,pTime = self.wfa.pulseAnal(wf,'LSQA',debug=1,nsd=nsd)
+                print 'ped,pedsd,iPulse,subPperP,pArea,pTime',ped,pedsd,iPulse,subPperP,pArea,pTime
+                words = 'pulseAnal'
+            else:
+                minidx = numpy.argmin(wf)
+                iPulse = [[minidx-startoff, minidx+ totint]]
+                pTime = [float(minidx)]
+                words = 'simple'
             if len(iPulse)>0:
                 for j,p in enumerate(iPulse):
-                    title = 'Evt '+str(ip)+ ' pulse#'+str(j)+' of '+str(len(iPulse)-1)+' t '+str(pTime[j])
+                    title = words+ ' Evt '+str(ip)+ ' pulse#'+str(j)+' of '+str(len(iPulse)-1)+' t '+str(pTime[j])
                     self.drawPulse(wf,window=iPulse[j],title=title)
         return       
     def drawPulse(self,wf,window=None,title='waveform'):
@@ -238,7 +318,7 @@ class lsqa():
         plt.clf()
         plt.grid()
         plt.title(title)
-        colorpoint = {0: 'bo', 1:'ro'}
+        colorpoint = {0: 'b.', 1:'ro'}
         i1,i2 = 0,len(wf)
         loop = 1
         if window is not None: loop = 2
@@ -260,12 +340,18 @@ class lsqa():
         
 if __name__ == '__main__':
     L = lsqa()
-    #    L.simple()
-    nfn = '/Users/djaffe/work/LSQAData/P20/run3566553226.h5'
-    gfn = '/Users/djaffe/work/LSQAData/P20/run3566498398.h5'
-    L.onlPlot(fn=[gfn,nfn],dname=['G','N'])#dname=['AmBe','AmBe_137Cs'])
+    simple = True
+    if simple:
+        fn='/Users/djaffe/work/LSQAData/P20/run3566844679.h5' #'/Users/djaffe/work/LSQAData/P20/run3566553226.h5'
+        L.main(fn=fn)
+        #L.simple(fn=fn)
+    else:
+    
+        nfn = '/Users/djaffe/work/LSQAData/P20/run3566553226.h5'
+        gfn = '/Users/djaffe/work/LSQAData/P20/run3566498398.h5'
+        L.onlPlot(fn=[gfn,nfn],dname=['G','N'])#dname=['AmBe','AmBe_137Cs'])
 
-    nfn = '/Users/djaffe/work/LSQAData/P20/run3566576160.h5'
-    L.onlPlot(fn=[gfn,nfn],dname=['G','N'])#dname=['AmBe','AmBe_137Cs'])
+        nfn = '/Users/djaffe/work/LSQAData/P20/run3566576160.h5'
+        L.onlPlot(fn=[gfn,nfn],dname=['G','N'])#dname=['AmBe','AmBe_137Cs'])
     
     
