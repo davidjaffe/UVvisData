@@ -383,10 +383,11 @@ class calibWaveDump():
                     if lastTime is not None: runtime = lastTime
                     #print 'fixed runtime',runtime
                 GOOD = False
-                for src in goodSources:
-                    if src in sources: GOOD = True
-                for src in badSources:
-                    if src in sources: GOOD = False
+                if sources is not None:
+                    for src in goodSources:
+                        if src in sources: GOOD = True
+                    for src in badSources:
+                        if src in sources: GOOD = False
                 if not GOOD: print 'calibWaveDump.main',rn,'no good sources'
                 if runNum in self.cAC.badRuns :
                     GOOD = False

@@ -37,6 +37,8 @@ class readLogFile():
             if ' source ' in l:
                 newl = self.cleanLine(l)
                 sources = newl.split(':')[-1].split()
+                if sources is None:
+                    print 'readLogFile.readFile in',fn,'No sources in line:',newl
             if 'Sample being measured' in l:
                 sample = l.split()[-1]
             if 'Request run time' in l:
@@ -75,7 +77,17 @@ class readLogFile():
         return newline
 if __name__ == '__main__' :
     rLF = readLogFile()
-    fn = '/Users/djaffe/work/WaveDumpData/logfiles/run00078_ts1482161661.log'
-    if len(sys.argv)>1 : fn = sys.argv[1]
-    ts,s,sam,rt = rLF.readFile(fn=fn)
-    print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt
+    simple = False
+    if simple:
+        fn = '/Users/djaffe/work/WaveDumpData/logfiles/run00078_ts1482161661.log'
+        if len(sys.argv)>1 : fn = sys.argv[1]
+            
+        ts,s,sam,rt = rLF.readFile(fn=fn)
+        print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt
+    else:
+        import get_filepaths
+        gfp = get_filepaths.get_filepaths()
+        file_paths = gfp.get_filepaths('/Users/djaffe/work/WaveDumpData/logfiles/')
+        for fn in file_paths:
+            ts,s,sam,rt = rLF.readFile(fn=fn)
+            print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt
