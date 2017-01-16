@@ -55,12 +55,31 @@ class lsqa():
                 Qtot  = total-totalBL
                 results.append( (Qfast,Qtot) )
         return results
+    def runType(self,f)
+        wfms = f['Waveforms']
+        L = len(wfms)
+        gamma = abs(L-5000)<10
+        neutron = abs(L-20000)<10
+        if not (gamma or neutron):
+            print 'lsqa.runType runtype unknown for',f.file
+            return None
+        if gamma: return 'G'
+        if neutron: return 'N'
+        return None
     def main(self,fn=None):
+        '''
+        processing file
+        determine type of file from length. ~20k = neutron only, ~5k = gamma and neutron source
+        turn waveforms into sets of Qfast,Qtot pairs for different definitions of fast and tot
+        then evaluate FOM as function of Qtot
+        '''
         idebug = 0
         fastValues = numpy.linspace(60,140,5) #20,120,6)
         totalValues= numpy.linspace(200,1000,5)
         IntValues = [[x,y] for x in fastValues for y in totalValues]
         f = h5py.File(fn)
+        words = self.runType(f)  # should be either 'G' (for gamma+neutron source) or 'N' (for neutron source only)
+        bn = os.path.basename(fn).replace('.h5','')
         Events = []
 
         ievt,freq = 0,500
@@ -81,29 +100,52 @@ class lsqa():
                 ievt+=1
 
         f.close()
+        print ''
+
 
         if idebug>0:
             print 'lsqa.main Events',Events
+        Qlo = numpy.linspace(5,65,7)
+        Qhi = numpy.array([x+10. for x in Qlo])
+        EperQ = {}
         E = numpy.array(Events)
-        hists = []
+        hists,allhists,graphs = [],[],[]
+        tmg = self.gU.makeTMultiGraph('FOMerific')
         nx,xmi,xma = 100,0.,100.
         ny,ymi,yma = 100,0.,1.
         for i,vv in enumerate(IntValues):
             ifast,itot = vv
-            name = 'f'+str(int(ifast))+'_t'+str(int(itot))
+            PSDdef = name = 'f'+str(int(ifast))+'_t'+str(int(itot))
             title = 'PSD vs Qtot '+name.replace('_',' ')
             h = ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
+            aQtot,aPSD = [],[]
             for pair in E[:,i]:
                 Qfast,Qtot = pair
                 PSD = (Qtot-Qfast)/Qtot
                 h.Fill(abs(Qtot),PSD)
+                aQtot.append(abs(Qtot))
+                aPSD.append(PSD)
             hists.append(h)
+            aQtot = numpy.array(aQtot)
+            aPSD  = numpy.array(aPSD)
+            FOM,dFOM,FOMhists,FOMgraph = self.beerFOM(aQtot,aPSD,Qlo,Qhi,EperQ,PSDdef+words,bn,Draw=True)
+            allhists.extend( FOMhists )
+            graphs.append( FOMgraph )
+            self.gU.color(FOMgraph,i,i,setMarkerColor=True)
+            tmg.Add( FOMgraph )
         self.gU.drawMultiHists(hists,'optimize',figdir=self.figdir,forceNX=5,Grid=True)
+        tmg.SetMinimum(0.)
+        tmg.SetMaximum(3.0)
+        canvas = self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Charge',yAxisLabel='FOM',NLegendColumns=3)
+        graphs.append( tmg )
+        
         rfn = self.figdir + 'optimize.root'
         f = ROOT.TFile.Open(rfn,'RECREATE')
         for h in hists: f.WriteTObject(h)
+        for h in allhists: f.WriteTObject(h)
+        for g in graphs: f.WriteTObject(g)
         f.Close()
-        print 'lsqa.main Wrote',len(hists),'to',rfn
+        print 'lsqa.main Wrote',len(hists)+len(allhists),'hists and',len(graphs),'graphs to',rfn
         return
 
         
@@ -126,14 +168,13 @@ class lsqa():
         EperQ = {} # keV/charge
 
         allBN = []
-        FOMmin,FOMmax = 0.,3.
         
         if type(fn) is not list: fn = [fn]
         hists = []
         graphs = []
         icol = 0
         for filename,w in zip(fn,dname):
-        
+            print 'lsaq.onPlot Open',filename
             f = h5py.File(filename)
             basename = os.path.basename(filename)
             bn = basename.replace('.h5','')
@@ -173,81 +214,16 @@ class lsqa():
             Qedge = m + HWHM
             print 'lsqa.onlPlot Compton edge at',Qedge,'for',name
             EperQ[words] = Cs137edge/Qedge
-
-            X,dX,Y,dY = [],[],[],[]
             
-            for lo,hi in zip(Qlo,Qhi):
-                A = (lo<=Qtot)*(Qtot<hi)
-                title = name = 'PSD_Q'+str(int(lo)).zfill(2)+'_'+str(int(hi)).zfill(2) + words
-                h = self.gU.makeTH1D(PSD[A],title,name,nx=ny,xmi=ymi,xma=yma)
-                hists.append(h)
-
-                Nevt = h.GetEntries()
-                FOM = None
-                if Nevt>FOMfitThres:
-                
-                    GG = self.GG 
-                    GG.SetParName(0,"gN")
-                    GG.SetParName(1,"gMean")
-                    GG.SetParName(2,"gSigma")
-                    GG.SetParName(3,"nN")
-                    GG.SetParName(4,"nMean")
-                    GG.SetParName(5,"nSigma")
-                    peak = h.GetMaximum()
-                    mean = h.GetMean()
-                    gMean = mean - 0.05
-                    nMean = mean + 0.05
-                    GG.SetParameters(peak, gMean, .02, peak, nMean, .02)
-                    ptr = h.Fit(GG,"SLQ")
-
-    
-                    
-                    #ptr.Print("V") # print everything about fit
-                    gMean,gSigma = GG.GetParameter(1),GG.GetParameter(2)
-                    nMean,nSigma = GG.GetParameter(1+3),GG.GetParameter(2+3)
-                    FWHM = 2.*math.sqrt(2.*math.log(2.))*math.sqrt(gSigma*gSigma + nSigma*nSigma)
-                    FOM = abs(gMean-nMean)/FWHM
-                    
-                    par = []
-                    for ii in range(6): par.append( GG.GetParameter(ii) )
-                    par = numpy.array(par)
-                    #print 'par',par
-                    dFOM  =self.getFOMunc(ptr,par,FOM)
-
-                Elo,Ehi,Units = lo,hi,'charge'
-                if 'G' in EperQ: Elo,Ehi,Units = EperQ['G']*lo,EperQ['G']*hi,'keV'
-                
-                print 'lsqa.onlPlot {0} lo,hi,FOM {1:.1f} {2:.2f} {3}'.format(words,Elo,Ehi,Units),
-                if FOM is None:
-                    print FOM
-                else:
-                    X.append(0.5*(Ehi+Elo))
-                    dX.append(0.5*(Ehi-Elo))
-                    Y.append(FOM)
-                    dY.append(dFOM)
-                    FOMmin = min(FOM-dFOM,FOMmin)
-                    FOMmax = max(FOM+dFOM,FOMmax)
-                    print ' {0:.2f}({1:.2f})'.format(FOM,dFOM)
+            PSDdef = 'default'
+            FOM,dFOM,FOMhists,FOMgraph = self.beerFOM(Qtot,PSD,Qlo,Qhi,EperQ,PSDdef+words,bn,Draw=True)
             
             f.close()
 
-        name = 'FOM_vs_keVee_'+bn
-        title = name.replace('_',' ')
-        g = self.gU.makeTGraph(X,Y,title,name,ex=dX,ey=dY)
-        self.gU.color(g,0,0,setMarkerColor=True)
-        self.gU.drawGraph(g,figDir=self.figdir,option='AP',yLimits=[FOMmin,FOMmax])
-        graphs.append(g)
+        graphs.append( FOMgraph )
+        hists.extend( FOMhists )
 
         nameForFile = '_'.join(allBN)
-
-        hists1d,hists2d = [],[]
-        for h in hists:
-            if h.GetDimension()==1: hists1d.append(h)
-            if h.GetDimension()==2: hists2d.append(h)
-        
-        
-        self.gU.drawMultiHists(hists1d,nameForFile+'_1d',figdir=self.figdir,forceNX=4,Grid=False,biggerLabels=True,fitOpt=111,statOpt=0)
-        self.gU.drawMultiHists(hists2d,nameForFile+'_2d',figdir=self.figdir,forceNX=2,Grid=True)
 
         RFN = self.figdir + nameForFile + '.root'
         rfn = ROOT.TFile.Open(RFN,'RECREATE')
@@ -257,6 +233,101 @@ class lsqa():
         print 'lsqa.onlPlot Wrote',len(hists),'hists and',len(graphs),'graphs to',RFN
             
         return
+    def beerFOM(self,Qtot,PSD,Qlo,Qhi,EperQ,PSDdef,bn,Draw=True,debug=True):
+        '''
+        return arrays of figure-of-merit and uncertainty, a list of fitted histograms and a graph of FOM vs Q (or E)
+        given paired Qtot,PSD arrays, lower and upper charge limits Qlo,Qhi.
+        EperQ, if available, converts charge to energy.
+        PSDdef is string defining the PSD and bn is basename.
+        PSDdef & bn are used for histogram, graph and filenames if Draw is True
+        '''
+        #FOM,dFOM,FOMhists,FOMgraph = self.beerFOM(Qtot,PSD,Qlo,Qhi,EperQ,words,Draw=True)
+
+        FOMfitThres = 25. # minimum number of events required to fit for FOM
+
+        GG = self.GG 
+        GG.SetParName(0,"gN")
+        GG.SetParName(1,"gMean")
+        GG.SetParName(2,"gSigma")
+        GG.SetParName(3,"nN")
+        GG.SetParName(4,"nMean")
+        GG.SetParName(5,"nSigma")
+        hists = []
+        Qmi,Qma = min(0.,min(Qlo)),max(Qhi)
+        nx,xmi,xma = 100,Qmi,Qma
+        ny,ymi,yma = 110,-.1,1.
+
+        FOMmin,FOMmax = 0.,3.
+        
+        X,dX,Y,dY = [],[],[],[]            
+        for lo,hi in zip(Qlo,Qhi):
+            A = (lo<=Qtot)*(Qtot<hi)
+            title = name = 'PSD_Q'+str(int(lo)).zfill(2)+'_'+str(int(hi)).zfill(2) + PSDdef
+            h = self.gU.makeTH1D(PSD[A],title,name,nx=ny,xmi=ymi,xma=yma)
+            hists.append(h)
+
+            Nevt = h.GetEntries()
+            FOM = None
+            if Nevt>FOMfitThres:
+
+                peak = h.GetMaximum()
+                mean = h.GetMean()
+                gMean = mean - 0.05
+                nMean = mean + 0.05
+                GG.SetParameters(peak, gMean, .02, peak, nMean, .02)
+                ptr = h.Fit(GG,"SLQ")
+
+                #ptr.Print("V") # print everything about fit
+                gMean,gSigma = GG.GetParameter(1),GG.GetParameter(2)
+                nMean,nSigma = GG.GetParameter(1+3),GG.GetParameter(2+3)
+                FWHM = 2.*math.sqrt(2.*math.log(2.))*math.sqrt(gSigma*gSigma + nSigma*nSigma)
+                FOM = abs(gMean-nMean)/FWHM
+
+                par = []
+                for ii in range(6): par.append( GG.GetParameter(ii) )
+                par = numpy.array(par)
+                #print 'par',par
+                dFOM  =self.getFOMunc(ptr,par,FOM)
+
+            Elo,Ehi,Units = lo,hi,'charge'
+            if 'G' in EperQ: Elo,Ehi,Units = EperQ['G']*lo,EperQ['G']*hi,'keV'
+
+            if debug: print 'lsqa.beerFOM {0} lo,hi,FOM {1:.1f} {2:.2f} {3}'.format(PSDdef,Elo,Ehi,Units),
+            X.append(0.5*(Ehi+Elo))
+            dX.append(0.5*(Ehi-Elo))
+            if FOM is None:
+                Y.append(0.)
+                dY.append(10.)
+                if debug: print FOM
+            else:
+                Y.append(FOM)
+                dY.append(dFOM)
+                FOMmin = min(FOM-dFOM,FOMmin)
+                FOMmax = max(FOM+dFOM,FOMmax)
+                if debug: print ' {0:.2f}({1:.2f})'.format(FOM,dFOM)
+            
+        name = 'FOM_v_QE_'+PSDdef+bn
+        title = name.replace('_',' ')
+        g = self.gU.makeTGraph(X,Y,title,name,ex=dX,ey=dY)
+        self.gU.color(g,0,0,setMarkerColor=True)
+        if Draw: self.gU.drawGraph(g,figDir=self.figdir,option='AP',yLimits=[FOMmin,FOMmax])
+
+
+        
+        if Draw:
+            nameForFile = bn
+
+            hists1d,hists2d = [],[]
+            for h in hists:
+                if h.GetDimension()==1: hists1d.append(h)
+                if h.GetDimension()==2: hists2d.append(h)
+
+            print 'len(hists),len(hists1d),len(hists2d)',len(hists),len(hists1d),len(hists2d)
+            self.gU.drawMultiHists(hists1d,nameForFile+'_1d',figdir=self.figdir,forceNX=4,Grid=False,biggerLabels=True,fitOpt=111,statOpt=0)
+            self.gU.drawMultiHists(hists2d,nameForFile+'_2d',figdir=self.figdir,forceNX=2,Grid=True)
+
+        
+        return Y,dY,hists,g
     def getFOMunc(self,ptr,pars,FOM):
         '''
         return uncertainty in FOM given pointer to fit result and best fit parameters '''
