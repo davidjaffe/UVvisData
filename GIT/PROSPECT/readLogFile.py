@@ -19,6 +19,7 @@ class readLogFile():
         get timestamp, run time, sample name, source(s), etc.
         If timestamp not in log file, try to take timestamp from filename.
         If actual run time not in log file, try to use requested run time
+        20170117 Add treatment for log files with known typos
         '''
         if fn is None:
             sys.exit('readLogFile.readFile ERROR No input file specified')
@@ -26,6 +27,7 @@ class readLogFile():
             sys.exit('readLogFile.readFile ERROR '+fn+' does not exist')
             
         f = open(fn,'r')
+        bn = os.path.basename(fn)
         timestamp,sources,sample,runtime = None,None,None,None
         request,actual = None,None
         for l in f:
@@ -64,6 +66,10 @@ class readLogFile():
                 timestamp = int(ts)
             except ValueError:
                 pass
+
+        ### special fixes
+        if bn=='run00158_ts1483996034.log' and sample=='LiLS#1': sample = 'LiLS#2'
+        if bn=='run00224_ts1484615681.log' and sample=='LiLS#2s':sample = 'LiLS#2'
             
         return timestamp,sources,sample,runtime
     def cleanLine(self,line):
@@ -85,9 +91,15 @@ if __name__ == '__main__' :
         ts,s,sam,rt = rLF.readFile(fn=fn)
         print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt
     else:
+        fp = '/Users/djaffe/work/WaveDumpData/logfiles/'
+        print 'readLogFile Check all files in',fp
         import get_filepaths
         gfp = get_filepaths.get_filepaths()
-        file_paths = gfp.get_filepaths('/Users/djaffe/work/WaveDumpData/logfiles/')
+        file_paths = gfp.get_filepaths(fp)
         for fn in file_paths:
             ts,s,sam,rt = rLF.readFile(fn=fn)
-            print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt
+            Show = False
+            if ts is None or s is None or sam is None or rt is None: Show = True
+            if s is not None and 'Ac-227' not in s: Show = True
+            if sam is not None and 'LiLS#2'!=sam: Show = True
+            if Show: print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt

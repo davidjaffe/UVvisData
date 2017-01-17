@@ -59,7 +59,7 @@ class cutsAndConstants():
         # run 56 has event with dt = 6.7 second and log file "Comments: Accidently hit keys while running"
         # run 158 has incorrect sample name of LiLS#1, it should be LiLS#2. Tag as bad until software fix implemented.
         # runs 162, 163 have empty log files. Tag as bad until corrected files obtained
-        self.badRuns = [56, 158, 162, 163]
+        self.badRuns = [56, 158]
         
         print 'cutsAndConstants.__init__ Initialized'
         return
