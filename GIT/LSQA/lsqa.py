@@ -7,9 +7,12 @@ adapted from Lindsey's PSDscripts
 import sys
 # the ONETON dir contains wfanal.py 
 sys.path.append('/Users/djaffe/work/GIT/ONETON')
+# the PROSPECT dir contains get_filepaths.py
+sys.path.append('/Users/djaffe/work/GIT/PROSPECT')
 
 
 import wfanal,graphUtils
+import get_filepaths
 import h5py
 import matplotlib.pyplot as plt
 import numpy
@@ -17,15 +20,37 @@ import ROOT
 import os
 import math
 
+import gzip,shutil
+
 class lsqa():
     def __init__(self):
         self.wfa = wfanal.wfanal()
         self.gU  = graphUtils.graphUtils()
+        self.gfp = get_filepaths.get_filepaths()
         self.figdir = 'Figures/'
 
         self.GG = ROOT.TF1("GG","[0]*exp(-0.5*(x-[1])*(x-[1])/[2]/[2])+[3]*exp(-0.5*(x-[4])*(x-[4])/[5]/[5])")
-        self.G = ROOT.TF1("G","[0]*exp(-0.5*(x-[1])*(x-[1])/[2]/[2])")
+        G = self.G = ROOT.TF1("G","[0]*exp(-0.5*(x-[1])*(x-[1])/[2]/[2])")
+        self.CERF = ROOT.TF1("CERF",self.cerf,0.,100.,3)
+        self.CERF.SetParName(0,'N')
+        self.CERF.SetParName(1,'Mean')
+        self.CERF.SetParName(2,'Sigma')
+
+        G.SetParName(0,"N")
+        G.SetParName(1,"Mean")
+        G.SetParName(2,"Sigma")
+        
+        self.Cs137edge = 478. # keV
+        self.PSDcut = 0.1
+        
+
+        self.fastValues = numpy.linspace(100,140,3) #80,140,4) #60,140,5) #20,120,6)
+        self.totalValues = numpy.linspace(400,1000,4) #200,1000,5)
+        
         return
+    def cerf(self,v,p):
+        x = (v[0]-p[1])/math.sqrt(2)/p[2]
+        return p[0]*math.erfc(x)
     def getWFMs(self,fn):
         '''
         get waveforms from hdf5 file
@@ -57,12 +82,17 @@ class lsqa():
         return results
     def runType(self,F):
         '''
-        determine type of file from length. ~20k = neutron only, ~5k = gamma and neutron source
+        given filename or open hdf5 file,
+        return type of file from length. ~20k = neutron only = 'N', ~5k = gamma and neutron source = 'G'
         if type is ambiguous or unknown, then check in LSQA_run_source.txt
+        returns None if cannot determine runType
         '''
         f = None
+        closeIt = False
         if type(F) is h5py._hl.files.File: f = F
-        if type(F) is str: f = h5py.File(F,'r')
+        if type(F) is str:
+            f = h5py.File(F,'r')
+            closeIt = True
         
         wfms = f['Waveforms']
         L = len(wfms)
@@ -76,19 +106,22 @@ class lsqa():
                     if 'gamma' in line: gamma = True
                     if 'neutron' in line: neutron = True
                     break
-            if not (gamma or neutron): 
-                print 'lsqa.runType runtype unknown for',f.file
-                return None
+            if not (gamma or neutron): print 'lsqa.runType runtype unknown for',f.file
+
+        if closeIt: f.close()
         if gamma: return 'G'
         if neutron: return 'N'
         return None
-    def wfanaFile(self,fn=None,fastValues=None,totalValues=None):
+    def wfanaFile(self,fn=None):
         '''
         Return events containing Qfast,Qtot pairs for different fast, total definitions
-        given input file and ranges of values
+        given input file 
         '''
-        if fn is None or fastValues is None or totalValues is None:
-            sys.exit('lsqa.wfanaFile ERROR Invalid input')
+
+        fastValues = self.fastValues 
+        totalValues= self.totalValues 
+        if fn is None :
+            sys.exit('lsqa.wfanaFile ERROR No input file specified')
 
         idebug = 0
         IntValues = [[x,y] for x in fastValues for y in totalValues]
@@ -116,54 +149,176 @@ class lsqa():
         f.close()
         print '\rlsqa.wfanaFile Processed',fn
         return Events
+    def gammaCalib(self,Events):
+        '''
+        return estimates of compton edge give sets of Qfast,Qtot
+        gamma calibration only depends on Qtot
+        '''
+        debug = False
+        fastValues = self.fastValues 
+        totalValues= self.totalValues 
+        IntValues = [[x,y] for x in fastValues for y in totalValues]
+        nx,xmi,xma = 95,5.,100.
+        fopt = "SQ"
+        EperQ = {}
+        E = numpy.array(Events)
+        G = self.CERF
+        hists = []
+        for i,vv in enumerate(IntValues):
+            ifast,itot = vv
+            key = 't'+str(int(itot))
+            if key not in EperQ:
+                name = 'Gamma_Calib_'+key
+                title = name.replace('_',' ')
+                h = ROOT.TH1D(name,title,nx,xmi,xma)
+                hists.append(h)
+                for pair in E[:,i]:
+                    Qfast,Qtot = pair
+                    h.Fill(abs(Qtot))
+                peak,ipeak = h.GetMaximum(),h.GetMaximumBin()
+                xpeak = float(ipeak)*(xma-xmi)/float(nx)+xmi
+                G.SetParameters(peak,xpeak,2.5)
+                if debug : print 'lsqa.gammaCalib peak,xpeak',peak,xpeak
+                ptr = h.Fit(G,fopt,"",xmi,4.*xpeak)
+                m,s = G.GetParameter(1),G.GetParameter(2)
+                if debug : print 'lsqa.gammaCalib m,s',m,s
+                ptr = h.Fit(G,fopt,"",xmi,m+2.5*s)
+                m,s = G.GetParameter(1),G.GetParameter(2)                
+                if debug : print 'lsqa.gammaCalib m,s',m,s
+                HWHM = math.sqrt(2.*math.log(2.))*s
+                Qedge = m + HWHM
+                print 'lsqa.gammaCalib Compton edge at',Qedge,'for',name
+                EperQ[key] = -1.
+                if Qedge>0: EperQ[key] = self.Cs137edge/Qedge
+        self.gU.drawMultiHists(hists,'gammaCalib',figdir=self.figdir,Grid=True,fitOpt=1111)
+        writeROOT = False
+        if writeROOT:
+            fn = self.figdir + 'gammaCalib.root'
+            rfn = ROOT.TFile.Open(fn,'RECREATE')
+            for h in hists: rfn.WriteTObject(h)
+            rfn.Close()
+            print 'lsqa.gammaCalib Wrote',len(hists),'to',fn
+        return EperQ
+    def timestampFromFilename(self,fn):
+        bn = os.path.basename(fn)
+        ts = int((bn.split('.')[0]).replace('run',''))
+        return ts
+    def findGammaRun(self,fn=None):
+        '''
+        find file with run with gamma source closest in time to input file
+        '''
+        if fn is None: sys.exit('lsqa.findGammaRun ERROR No input filename')
+
+        debug = 0
+        
+        h5size = float(408498176) # size of run3566813028.h5
+        gzsize = float(30126638)  # size of run3567072982.h5.gz
+        sizes = {'.h5':h5size, '.gz':gzsize}
+            
+        bn = os.path.basename(fn)
+        ts0 = self.timestampFromFilename(fn)
+        filepath = fn.replace(bn,'')
+        if debug>0: print 'lsqa.findGammaRun fn,bn,ts0,filepath',fn,bn,ts0,filepath
+        listoffiles = self.gfp.get_filepaths(filepath)
+        if debug>1 : print 'lsqa.findGammaRun listoffiles',listoffiles
+        gammaFile,dt = None,None
+        for n in listoffiles:
+            filename,extension = os.path.splitext(n)
+            size = float(os.path.getsize(n))
+            if debug>0 : print 'lsqa.findGammaRun path,extension,size',n,extension,size
+            if extension in sizes:
+                if abs(size/sizes[extension]-1.)<0.1:
+                    ts = self.timestampFromFilename(n)
+                    if debug>0 : print 'lsqa.findGammaRun ts,ts-ts0,dt,size/sizes[extension]',ts,ts-ts0,dt,size/sizes[extension]
+                    if dt is None:
+                        dt = abs(ts-ts0)
+                        gammaFile = n
+                    else:
+                        if abs(ts-ts0)<dt:
+                            dt = abs(ts-ts0)
+                            gammaFile = n
+
+        return gammaFile
+    def gunzip(self,fn):
+        '''
+        gunzip input file, return output file
+        '''
+        h5f = fn.replace('.gz','')
+        print 'lsqa.gunzip input',fn,'output',h5f,
+        sys.stdout.flush()
+        with gzip.open(fn,'rb') as fin, open(h5f,'wb') as fout:
+            shutil.copyfileobj(fin,fout)
+        print 'DONE'
+        return h5f
     def main(self,fn=None):
         '''
-        processing file
-        determine type of file from length. ~20k = neutron only, ~5k = gamma and neutron source
+        process neutron file
+        find gamma source file that is nearest in time to neutron file, based on timestamp, to obtain
+        charge to keVee conversion
+
         turn waveforms into sets of Qfast,Qtot pairs for different definitions of fast and tot
         then evaluate FOM as function of Qtot
         Best global values appear to be fast=100,total=600.
         '''
         idebug = 0
-        fastValues = numpy.linspace(100,140,3) #80,140,4) #60,140,5) #20,120,6)
-        totalValues= numpy.linspace(400,1000,4) #200,1000,5)
+        fastValues = self.fastValues 
+        totalValues= self.totalValues 
         IntValues = [[x,y] for x in fastValues for y in totalValues]
         bn = os.path.basename(fn).replace('.h5','')
+
+        ### gamma calibration
+        gammaFile = ZgammaFile = self.findGammaRun(fn)
+        print 'lsqa.main fn',fn,'gammaFile',ZgammaFile
+        if ZgammaFile[-3:]=='.gz':
+            gammaFile = self.gunzip(ZgammaFile)
+        print 'lsqa.main gammaFile',gammaFile
+        gEvents = self.wfanaFile(fn=gammaFile)
+        EperQ = self.gammaCalib(gEvents)
+        print 'lsqa.main EperQ',EperQ
+
         
         # waveforms to sets of Qfast,Qtot pairs
-        Events = self.wfanaFile(fn=fn,fastValues=fastValues,totalValues=totalValues)
+        Events = self.wfanaFile(fn=fn)
         words = self.runType(fn)  # should be either 'G' (for gamma+neutron source) or 'N' (for neutron source only)
 
         if idebug>0:
             print 'lsqa.main Events',Events
         Qlo = numpy.linspace(5,65,7)
         Qhi = numpy.array([x+10. for x in Qlo])
-        EperQ = {}
+
         sumFOM = {}
         E = numpy.array(Events)
-        hists,allhists,graphs = [],[],[]
+        hists,allhists,qhists,graphs = [],[],[],[]
         tmg = self.gU.makeTMultiGraph('FOMerific')
         nx,xmi,xma = 100,0.,100.
         ny,ymi,yma = 100,0.,1.
         for i,vv in enumerate(IntValues):
             ifast,itot = vv
+            eKey = 't'+str(int(itot))
             PSDdef = name = 'f'+str(int(ifast))+'_t'+str(int(itot))
             title = 'PSD vs Qtot '+name.replace('_',' ')
             h = ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
+            qname = 'Etot_'+name+'_wPSDcut'
+            qtitle = 'Etot ' + name + 'PSD>'+str(self.PSDcut)
+            qh= ROOT.TH1D(qname,qtitle,nx,EperQ[eKey]*xmi,EperQ[eKey]*xma)
+            
             aQtot,aPSD = [],[]
             for pair in E[:,i]:
                 Qfast,Qtot = pair
                 PSD = (Qtot-Qfast)/Qtot
-                h.Fill(abs(Qtot),PSD)
-                aQtot.append(abs(Qtot))
+                Qtot = abs(Qtot)
+                h.Fill(Qtot,PSD)
+                if PSD>self.PSDcut: qh.Fill(EperQ[eKey]*Qtot)
+                aQtot.append(Qtot)
                 aPSD.append(PSD)
             hists.append(h)
+            qhists.append(qh)
             aQtot = numpy.array(aQtot)
             aPSD  = numpy.array(aPSD)
-            FOM,dFOM,FOMhists,FOMgraph = self.beerFOM(aQtot,aPSD,Qlo,Qhi,EperQ,PSDdef+words,bn,Draw=True)
+            FOM,dFOM,FOMhists,FOMgraph = self.beerFOM(aQtot,aPSD,Qlo,Qhi,EperQ[eKey],PSDdef+words,bn,Draw=True,debug=False)
             sFOM,sdFOM = numpy.sum(FOM),numpy.sqrt(numpy.sum([x*x for x in dFOM]))
             sumFOM[PSDdef+words] = (sFOM,sdFOM)
-            print 'lsqa.main {0} sum {1:.2f}({2:.2f})'.format(PSDdef+words,sFOM,sdFOM) 
+            #print 'lsqa.main {0} sum {1:.2f}({2:.2f})'.format(PSDdef+words,sFOM,sdFOM) 
             allhists.extend( FOMhists )
             graphs.append( FOMgraph )
             self.gU.color(FOMgraph,i,i,setMarkerColor=True)
@@ -172,10 +327,11 @@ class lsqa():
         print 'lsqa.main Sorted FOMs'
         for g in sorted( sumFOM.items(), key=lambda x: x[1]):
             print 'lsqa.main {0} {1:.2f}({2:.2f})'.format(g[0],g[1][0],g[1][1])
-        self.gU.drawMultiHists(hists,'optimize',figdir=self.figdir,forceNX=5,Grid=True)
+        self.gU.drawMultiHists(hists,'optimize',figdir=self.figdir,forceNX=4,Grid=True)
+        self.gU.drawMultiHists(qhists,'keVee_with_PSDcut',figdir=self.figdir,forceNX=4,Grid=True)
         tmg.SetMinimum(0.)
         tmg.SetMaximum(3.0)
-        canvas = self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Charge',yAxisLabel='FOM',NLegendColumns=3)
+        canvas = self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='keVee',yAxisLabel='FOM',NLegendColumns=3)
         graphs.append( tmg )
         
         rfn = self.figdir + 'optimize.root'
@@ -192,7 +348,7 @@ class lsqa():
         '''
         get Qfast,Qtot from online analysis and plot 'em
         '''
-        Cs137edge = 478. # keV
+        Cs137edge = self.Cs137edge  # keV
         FOMfitThres = 25. # minimum number of events required to fit for FOM
 
         CF = -1.e9 # arbitrary factor to change measured charge
@@ -329,7 +485,7 @@ class lsqa():
                 dFOM  =self.getFOMunc(ptr,par,FOM)
 
             Elo,Ehi,Units = lo,hi,'charge'
-            if 'G' in EperQ: Elo,Ehi,Units = EperQ['G']*lo,EperQ['G']*hi,'keV'
+            if EperQ is not None: Elo,Ehi,Units = EperQ*lo,EperQ*hi,'keV'
 
             if debug: print 'lsqa.beerFOM {0} lo,hi,FOM {1:.1f} {2:.2f} {3}'.format(PSDdef,Elo,Ehi,Units),
             X.append(0.5*(Ehi+Elo))
@@ -345,7 +501,8 @@ class lsqa():
                 FOMmax = max(FOM+dFOM,FOMmax)
                 if debug: print ' {0:.2f}({1:.2f})'.format(FOM,dFOM)
             
-        name = 'FOM_v_QE_'+PSDdef+bn
+        name = 'FOM_v_Q_'+PSDdef+bn
+        if EperQ is not None: 'FOM_v_keVee_'+PSDdef+bn
         title = name.replace('_',' ')
         g = self.gU.makeTGraph(X,Y,title,name,ex=dX,ey=dY)
         self.gU.color(g,0,0,setMarkerColor=True)
@@ -361,9 +518,9 @@ class lsqa():
                 if h.GetDimension()==1: hists1d.append(h)
                 if h.GetDimension()==2: hists2d.append(h)
 
-            print 'len(hists),len(hists1d),len(hists2d)',len(hists),len(hists1d),len(hists2d)
-            self.gU.drawMultiHists(hists1d,nameForFile+'_1d',figdir=self.figdir,forceNX=4,Grid=False,biggerLabels=True,fitOpt=111,statOpt=0)
-            self.gU.drawMultiHists(hists2d,nameForFile+'_2d',figdir=self.figdir,forceNX=2,Grid=True)
+            if debug : print 'lsqa.beerFOM len(hists),len(hists1d),len(hists2d)',len(hists),len(hists1d),len(hists2d)
+            if len(hists1d)>0: self.gU.drawMultiHists(hists1d,nameForFile+'_1d',figdir=self.figdir,forceNX=4,Grid=False,biggerLabels=True,fitOpt=111,statOpt=0)
+            if len(hists2d)>0: self.gU.drawMultiHists(hists2d,nameForFile+'_2d',figdir=self.figdir,forceNX=2,Grid=True)
 
         
         return Y,dY,hists,g
