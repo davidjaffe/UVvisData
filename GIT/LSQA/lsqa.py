@@ -55,31 +55,45 @@ class lsqa():
                 Qtot  = total-totalBL
                 results.append( (Qfast,Qtot) )
         return results
-    def runType(self,f)
+    def runType(self,F):
+        '''
+        determine type of file from length. ~20k = neutron only, ~5k = gamma and neutron source
+        if type is ambiguous or unknown, then check in LSQA_run_source.txt
+        '''
+        f = None
+        if type(F) is h5py._hl.files.File: f = F
+        if type(F) is str: f = h5py.File(F,'r')
+        
         wfms = f['Waveforms']
         L = len(wfms)
         gamma = abs(L-5000)<10
         neutron = abs(L-20000)<10
         if not (gamma or neutron):
-            print 'lsqa.runType runtype unknown for',f.file
-            return None
+            r = str(f.file).split()[2].replace('.h5','').replace('\"','') # should be 'runxxxxx' where 'xxxxx' is the timestamp
+            q = open('LSQA_run_source.txt','r')
+            for line in q:
+                if r in line:
+                    if 'gamma' in line: gamma = True
+                    if 'neutron' in line: neutron = True
+                    break
+            if not (gamma or neutron): 
+                print 'lsqa.runType runtype unknown for',f.file
+                return None
         if gamma: return 'G'
         if neutron: return 'N'
         return None
-    def main(self,fn=None):
+    def wfanaFile(self,fn=None,fastValues=None,totalValues=None):
         '''
-        processing file
-        determine type of file from length. ~20k = neutron only, ~5k = gamma and neutron source
-        turn waveforms into sets of Qfast,Qtot pairs for different definitions of fast and tot
-        then evaluate FOM as function of Qtot
+        Return events containing Qfast,Qtot pairs for different fast, total definitions
+        given input file and ranges of values
         '''
+        if fn is None or fastValues is None or totalValues is None:
+            sys.exit('lsqa.wfanaFile ERROR Invalid input')
+
         idebug = 0
-        fastValues = numpy.linspace(60,140,5) #20,120,6)
-        totalValues= numpy.linspace(200,1000,5)
         IntValues = [[x,y] for x in fastValues for y in totalValues]
         f = h5py.File(fn)
-        words = self.runType(f)  # should be either 'G' (for gamma+neutron source) or 'N' (for neutron source only)
-        bn = os.path.basename(fn).replace('.h5','')
+        print 'lsqa.wfanaFile Opened',fn
         Events = []
 
         ievt,freq = 0,500
@@ -100,14 +114,32 @@ class lsqa():
                 ievt+=1
 
         f.close()
-        print ''
-
+        print '\rlsqa.wfanaFile Processed',fn
+        return Events
+    def main(self,fn=None):
+        '''
+        processing file
+        determine type of file from length. ~20k = neutron only, ~5k = gamma and neutron source
+        turn waveforms into sets of Qfast,Qtot pairs for different definitions of fast and tot
+        then evaluate FOM as function of Qtot
+        Best global values appear to be fast=100,total=600.
+        '''
+        idebug = 0
+        fastValues = numpy.linspace(100,140,3) #80,140,4) #60,140,5) #20,120,6)
+        totalValues= numpy.linspace(400,1000,4) #200,1000,5)
+        IntValues = [[x,y] for x in fastValues for y in totalValues]
+        bn = os.path.basename(fn).replace('.h5','')
+        
+        # waveforms to sets of Qfast,Qtot pairs
+        Events = self.wfanaFile(fn=fn,fastValues=fastValues,totalValues=totalValues)
+        words = self.runType(fn)  # should be either 'G' (for gamma+neutron source) or 'N' (for neutron source only)
 
         if idebug>0:
             print 'lsqa.main Events',Events
         Qlo = numpy.linspace(5,65,7)
         Qhi = numpy.array([x+10. for x in Qlo])
         EperQ = {}
+        sumFOM = {}
         E = numpy.array(Events)
         hists,allhists,graphs = [],[],[]
         tmg = self.gU.makeTMultiGraph('FOMerific')
@@ -129,10 +161,17 @@ class lsqa():
             aQtot = numpy.array(aQtot)
             aPSD  = numpy.array(aPSD)
             FOM,dFOM,FOMhists,FOMgraph = self.beerFOM(aQtot,aPSD,Qlo,Qhi,EperQ,PSDdef+words,bn,Draw=True)
+            sFOM,sdFOM = numpy.sum(FOM),numpy.sqrt(numpy.sum([x*x for x in dFOM]))
+            sumFOM[PSDdef+words] = (sFOM,sdFOM)
+            print 'lsqa.main {0} sum {1:.2f}({2:.2f})'.format(PSDdef+words,sFOM,sdFOM) 
             allhists.extend( FOMhists )
             graphs.append( FOMgraph )
             self.gU.color(FOMgraph,i,i,setMarkerColor=True)
             tmg.Add( FOMgraph )
+
+        print 'lsqa.main Sorted FOMs'
+        for g in sorted( sumFOM.items(), key=lambda x: x[1]):
+            print 'lsqa.main {0} {1:.2f}({2:.2f})'.format(g[0],g[1][0],g[1][1])
         self.gU.drawMultiHists(hists,'optimize',figdir=self.figdir,forceNX=5,Grid=True)
         tmg.SetMinimum(0.)
         tmg.SetMaximum(3.0)
@@ -315,7 +354,7 @@ class lsqa():
 
         
         if Draw:
-            nameForFile = bn
+            nameForFile = bn+'_'+PSDdef
 
             hists1d,hists2d = [],[]
             for h in hists:
@@ -414,6 +453,7 @@ if __name__ == '__main__':
     simple = True
     if simple:
         fn='/Users/djaffe/work/LSQAData/P20/run3566844679.h5' #'/Users/djaffe/work/LSQAData/P20/run3566553226.h5'
+        fn='/Users/djaffe/work/LSQAData/LiLS01/run3567106894.h5' 
         L.main(fn=fn)
         #L.simple(fn=fn)
     else:
