@@ -21,34 +21,73 @@ import os
 import math
 
 import gzip,shutil
+import datetime,Logger
+from scipy import signal as scipy_signal # used by getPeaks
+from scipy import interpolate as scipy_interpolate # used by getFOMat6Li
+
 
 class lsqa():
-    def __init__(self):
+    def __init__(self,fn=None):
         self.wfa = wfanal.wfanal()
         self.gU  = graphUtils.graphUtils()
         self.gfp = get_filepaths.get_filepaths()
-        self.figdir = 'Figures/'
 
+        # process input filename to create new directories for figures and logfile
+        dirname,rn = '',''
+        if fn is not None:
+            bn = os.path.basename(fn)
+            rn = bn.split('.')[0]
+            sd = fn.split('LSQAData')[1]
+            dirname = 'Samples' +sd.replace(bn,rn) + '/'
+            #print 'bn,rn,sd,dirname',bn,rn,sd,dirname
+        
+        self.figdir = dirname+'Figures/'
+        self.logdir = dirname+'Logfiles/'
+        for dn in [self.figdir, self.logdir]:
+            if os.path.isdir(dn):
+                pass
+            else:
+                try:
+                    os.makedirs(dn)
+                except IOError,e:
+                    print 'lsqa.__init__',e
+                else:
+                    print 'lsqa.__init__ created',dn
+                    
+        # produce logfile name and route stdout to logfile and terminal
+        now = datetime.datetime.now()
+        fmt = '%Y%m%d_%H%M%S_%f'
+        cnow = now.strftime(fmt)
+        lfn = self.logdir + rn + '_' + cnow + '.log'
+        sys.stdout = Logger.Logger(fn=lfn)
+        print 'lsqa__init__ Output directed to terminal and',lfn
+        print 'lsqa__init__ Job start time',cnow
+                                
+        # fitting functions
         self.GG = ROOT.TF1("GG","[0]*exp(-0.5*(x-[1])*(x-[1])/[2]/[2])+[3]*exp(-0.5*(x-[4])*(x-[4])/[5]/[5])")
         G = self.G = ROOT.TF1("G","[0]*exp(-0.5*(x-[1])*(x-[1])/[2]/[2])")
+        G.SetParName(0,"N")
+        G.SetParName(1,"Mean")
+        G.SetParName(2,"Sigma")
         self.CERF = ROOT.TF1("CERF",self.cerf,0.,100.,3)
         self.CERF.SetParName(0,'N')
         self.CERF.SetParName(1,'Mean')
         self.CERF.SetParName(2,'Sigma')
 
-        G.SetParName(0,"N")
-        G.SetParName(1,"Mean")
-        G.SetParName(2,"Sigma")
-        
+        # definition of constants,etc.
         self.Cs137edge = 478. # keV
+        self.LiCaptureEnergy = 540. # keV. From doc-1245-v1 "P50D ambient data stability"
         self.PSDcut = 0.1
-        
-
         self.fastValues = numpy.linspace(100,140,3) #80,140,4) #60,140,5) #20,120,6)
         self.totalValues = numpy.linspace(400,1000,4) #200,1000,5)
+        scan = True
+        if scan:
+            self.fastValues = numpy.linspace(60,140,5+4)
+            self.totalValues= numpy.linspace(200,1000,5+4)
         
         return
     def cerf(self,v,p):
+        ''' error function complement for fitting compton edge '''
         x = (v[0]-p[1])/math.sqrt(2)/p[2]
         return p[0]*math.erfc(x)
     def getWFMs(self,fn):
@@ -64,6 +103,10 @@ class lsqa():
                 ct.append(b)
         return ph,ct
     def getQ(self,wfm,fastValues,totalValues,startoff=100,numavg=200):
+        '''
+        efficiently process input waveforms to return sets of Qfast,Qtot pairs
+        given 'fast' and 'total' integration parameters
+        '''
         minidx = numpy.argmin(wfm)
         BL = sum(wfm[int(minidx-startoff-numavg):int(minidx-startoff)])/float(numavg)
         i1 = int(minidx-startoff)
@@ -152,6 +195,7 @@ class lsqa():
     def gammaCalib(self,Events):
         '''
         return estimates of compton edge give sets of Qfast,Qtot
+        compton edge fitted using complement of error function
         gamma calibration only depends on Qtot
         '''
         debug = False
@@ -164,6 +208,7 @@ class lsqa():
         E = numpy.array(Events)
         G = self.CERF
         hists = []
+        c1 = ROOT.TCanvas() # open, so it can be closed after fitting
         for i,vv in enumerate(IntValues):
             ifast,itot = vv
             key = 't'+str(int(itot))
@@ -191,6 +236,7 @@ class lsqa():
                 EperQ[key] = -1.
                 if Qedge>0: EperQ[key] = self.Cs137edge/Qedge
         self.gU.drawMultiHists(hists,'gammaCalib',figdir=self.figdir,Grid=True,fitOpt=1111)
+        c1.Close()
         writeROOT = False
         if writeROOT:
             fn = self.figdir + 'gammaCalib.root'
@@ -200,6 +246,7 @@ class lsqa():
             print 'lsqa.gammaCalib Wrote',len(hists),'to',fn
         return EperQ
     def timestampFromFilename(self,fn):
+        ''' extract time stamp as integer from filename  '''
         bn = os.path.basename(fn)
         ts = int((bn.split('.')[0]).replace('run',''))
         return ts
@@ -250,7 +297,7 @@ class lsqa():
             shutil.copyfileobj(fin,fout)
         print 'DONE'
         return h5f
-    def main(self,fn=None):
+    def main(self,filename=None):
         '''
         process neutron file
         find gamma source file that is nearest in time to neutron file, based on timestamp, to obtain
@@ -264,6 +311,23 @@ class lsqa():
         fastValues = self.fastValues 
         totalValues= self.totalValues 
         IntValues = [[x,y] for x in fastValues for y in totalValues]
+
+        nx = len(fastValues)
+        dx = float(fastValues[1]-fastValues[0])/2.
+        xmi,xma = fastValues[0]-dx,fastValues[-1]+dx
+        ny = len(totalValues)
+        dy = float(totalValues[1]-totalValues[0])/2.
+        ymi,yma = totalValues[0]-dy,totalValues[-1]+dy
+        name = 'Opt_CumFOM'
+        title= 'Optimize cumulative FOM'
+        hcum = ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
+        name = 'Opt_6LiFOM'
+        title= 'Optimize 6Li FOM'
+        h6li = ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
+
+        # uncompress input file, if needed
+        fn = filename
+        if filename[-3:]=='.gz': fn = self.gunzip(filename)
         bn = os.path.basename(fn).replace('.h5','')
 
         ### gamma calibration
@@ -277,7 +341,7 @@ class lsqa():
         print 'lsqa.main EperQ',EperQ
 
         
-        # waveforms to sets of Qfast,Qtot pairs
+        # turn waveforms into sets of Qfast,Qtot pairs
         Events = self.wfanaFile(fn=fn)
         words = self.runType(fn)  # should be either 'G' (for gamma+neutron source) or 'N' (for neutron source only)
 
@@ -288,10 +352,10 @@ class lsqa():
 
         sumFOM = {}
         E = numpy.array(Events)
-        hists,allhists,qhists,graphs = [],[],[],[]
-        tmg = self.gU.makeTMultiGraph('FOMerific')
+        hists,allhists,qhists,graphs = [],[hcum,h6li],[],[]
+        tmg = self.gU.makeTMultiGraph('FOMerific_'+bn)
         nx,xmi,xma = 100,0.,100.
-        ny,ymi,yma = 100,0.,1.
+        ny,ymi,yma = 100,0.,0.5
         for i,vv in enumerate(IntValues):
             ifast,itot = vv
             eKey = 't'+str(int(itot))
@@ -315,26 +379,31 @@ class lsqa():
             qhists.append(qh)
             aQtot = numpy.array(aQtot)
             aPSD  = numpy.array(aPSD)
-            FOM,dFOM,FOMhists,FOMgraph = self.beerFOM(aQtot,aPSD,Qlo,Qhi,EperQ[eKey],PSDdef+words,bn,Draw=True,debug=False)
+            FOM,dFOM,FOMhists,FOMgraph,QAFOM = self.beerFOM(aQtot,aPSD,Qlo,Qhi,EperQ[eKey],PSDdef+words,bn,Draw=True,debug=False)
             sFOM,sdFOM = numpy.sum(FOM),numpy.sqrt(numpy.sum([x*x for x in dFOM]))
-            sumFOM[PSDdef+words] = (sFOM,sdFOM)
+            sumFOM[PSDdef+words] = (sFOM,sdFOM)+QAFOM
+            hcum.Fill(float(ifast),float(itot),sFOM)
+            h6li.Fill(float(ifast),float(itot),float(QAFOM[0]))
             #print 'lsqa.main {0} sum {1:.2f}({2:.2f})'.format(PSDdef+words,sFOM,sdFOM) 
             allhists.extend( FOMhists )
             graphs.append( FOMgraph )
             self.gU.color(FOMgraph,i,i,setMarkerColor=True)
             tmg.Add( FOMgraph )
 
-        print 'lsqa.main Sorted FOMs'
+
+        print " PSD_defn      Cum_FOM   6LiFOM     Sorted by Cum_FOM  lsqa.main"
         for g in sorted( sumFOM.items(), key=lambda x: x[1]):
-            print 'lsqa.main {0} {1:.2f}({2:.2f})'.format(g[0],g[1][0],g[1][1])
-        self.gU.drawMultiHists(hists,'optimize',figdir=self.figdir,forceNX=4,Grid=True)
-        self.gU.drawMultiHists(qhists,'keVee_with_PSDcut',figdir=self.figdir,forceNX=4,Grid=True)
+            print ' {0:12} {1:.2f}({2:.2f}) {3:.3f}({4:.3f})'.format(g[0],g[1][0],g[1][1],g[1][2],g[1][3])
+
+        self.gU.drawMultiHists(hists,'optimize_'+bn,figdir=self.figdir,forceNX=4,Grid=True)
+        self.gU.drawMultiHists(qhists,'keVee_with_PSDcut_'+bn,figdir=self.figdir,forceNX=4,Grid=True)
+        self.gU.drawMultiHists([h6li,hcum],'scan_'+bn,figdir=self.figdir,Grid=False,statOpt=0,dopt='colztextcont3')
         tmg.SetMinimum(0.)
         tmg.SetMaximum(3.0)
         canvas = self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='keVee',yAxisLabel='FOM',NLegendColumns=3)
         graphs.append( tmg )
         
-        rfn = self.figdir + 'optimize.root'
+        rfn = self.figdir + 'optimize_'+bn+'.root'
         f = ROOT.TFile.Open(rfn,'RECREATE')
         for h in hists: f.WriteTObject(h)
         for h in allhists: f.WriteTObject(h)
@@ -342,11 +411,10 @@ class lsqa():
         f.Close()
         print 'lsqa.main Wrote',len(hists)+len(allhists),'hists and',len(graphs),'graphs to',rfn
         return
-
-        
     def onlPlot(self,fn=None,dname=None):
         '''
         get Qfast,Qtot from online analysis and plot 'em
+        Vestigial, used for testing, debugging
         '''
         Cs137edge = self.Cs137edge  # keV
         FOMfitThres = 25. # minimum number of events required to fit for FOM
@@ -411,7 +479,7 @@ class lsqa():
             EperQ[words] = Cs137edge/Qedge
             
             PSDdef = 'default'
-            FOM,dFOM,FOMhists,FOMgraph = self.beerFOM(Qtot,PSD,Qlo,Qhi,EperQ,PSDdef+words,bn,Draw=True)
+            FOM,dFOM,FOMhists,FOMgraph,QAFOM = self.beerFOM(Qtot,PSD,Qlo,Qhi,EperQ,PSDdef+words,bn,Draw=True)
             
             f.close()
 
@@ -430,13 +498,13 @@ class lsqa():
         return
     def beerFOM(self,Qtot,PSD,Qlo,Qhi,EperQ,PSDdef,bn,Draw=True,debug=True):
         '''
-        return arrays of figure-of-merit and uncertainty, a list of fitted histograms and a graph of FOM vs Q (or E)
+        return arrays of figure-of-merit and uncertainty, a list of fitted histograms, a graph of FOM vs Q (or E)
+               and the figure-of-merit and uncertainty at the nominal 6Li capture energy, if EperQ is given.
         given paired Qtot,PSD arrays, lower and upper charge limits Qlo,Qhi.
         EperQ, if available, converts charge to energy.
         PSDdef is string defining the PSD and bn is basename.
         PSDdef & bn are used for histogram, graph and filenames if Draw is True
         '''
-        #FOM,dFOM,FOMhists,FOMgraph = self.beerFOM(Qtot,PSD,Qlo,Qhi,EperQ,words,Draw=True)
 
         FOMfitThres = 25. # minimum number of events required to fit for FOM
 
@@ -450,10 +518,14 @@ class lsqa():
         hists = []
         Qmi,Qma = min(0.,min(Qlo)),max(Qhi)
         nx,xmi,xma = 100,Qmi,Qma
-        ny,ymi,yma = 110,-.1,1.
+        ny,ymi,yma = 120,-.1,0.5
+        ybinsize = (yma-ymi)/float(ny)
 
         FOMmin,FOMmax = 0.,3.
-        
+
+        gMean,nMean,gSigma,nSigma = None,None,0.02,0.02  # initial guesses
+        nysig = int(0.02/ybinsize + 0.01)  # 1 sigma in bins
+        c1 = ROOT.TCanvas() # open, so it can be closed
         X,dX,Y,dY = [],[],[],[]            
         for lo,hi in zip(Qlo,Qhi):
             A = (lo<=Qtot)*(Qtot<hi)
@@ -465,11 +537,20 @@ class lsqa():
             FOM = None
             if Nevt>FOMfitThres:
 
+                # use peak finder to estimate means. Use sigmas from previous fit if available
                 peak = h.GetMaximum()
-                mean = h.GetMean()
-                gMean = mean - 0.05
-                nMean = mean + 0.05
-                GG.SetParameters(peak, gMean, .02, peak, nMean, .02)
+                Peaks = self.getPeaks(h,ny,nysig)
+                if len(Peaks)==2:
+                    gMean,nMean = Peaks
+                if len(Peaks)==1:
+                    step = .1
+                    if gMean is not None: step = abs(gMean-nMean)
+                    gMean = Peaks[0]
+                    nMean = gMean + step
+                if gMean is None:
+                    gMean,nMean = 0.05,0.15
+                if debug or len(Peaks)<2: print 'lsqa.beerFOM:',name,'Peaks,gMean,nMean',' '.join(['{0:.3f}'.format(p) for p in Peaks]),'{0:.3f} {1:.3f}'.format(gMean,nMean)
+                GG.SetParameters(peak, gMean, gSigma, peak, nMean, nSigma)
                 ptr = h.Fit(GG,"SLQ")
 
                 #ptr.Print("V") # print everything about fit
@@ -501,8 +582,12 @@ class lsqa():
                 FOMmax = max(FOM+dFOM,FOMmax)
                 if debug: print ' {0:.2f}({1:.2f})'.format(FOM,dFOM)
             
+        c1.Close() 
         name = 'FOM_v_Q_'+PSDdef+bn
-        if EperQ is not None: 'FOM_v_keVee_'+PSDdef+bn
+        QA_FOM = None
+        if EperQ is not None:
+            'FOM_v_keVee_'+PSDdef+bn
+            QA_FOM = self.getFOMat6Li(numpy.array(X),numpy.array(Y),numpy.array(dX),numpy.array(dY))
         title = name.replace('_',' ')
         g = self.gU.makeTGraph(X,Y,title,name,ex=dX,ey=dY)
         self.gU.color(g,0,0,setMarkerColor=True)
@@ -523,10 +608,25 @@ class lsqa():
             if len(hists2d)>0: self.gU.drawMultiHists(hists2d,nameForFile+'_2d',figdir=self.figdir,forceNX=2,Grid=True)
 
         
-        return Y,dY,hists,g
+        return Y,dY,hists,g,QA_FOM
+    def getFOMat6Li(self,E,FOM,dE,dFOM):
+        '''
+        estimate FOM and uncertainty at 6Li capture energy in keVee given FOM as function of energy
+        '''
+        debug = False
+        Q = {}
+        if debug : print 'lsqa.getFOMat6Li E,FOM,dE,dFOM',E,FOM,dE,dFOM
+        for i in [-1.,0.,1.]:
+            f = scipy_interpolate.interp1d(E,FOM+i*dFOM)
+            Q[i] = float(f(self.LiCaptureEnergy))
+        FOM6Li = Q[0.]
+        dFOM6Li= 0.5*( abs(Q[1.]-FOM6Li) + abs(Q[-1.]-FOM6Li) )
+        if debug : print 'lsqa.getFOMat6Li',Q,FOM6Li,dFOM6Li,'FOM6Li {0:.3f}({1:.3f})'.format(FOM6Li,dFOM6Li)
+        return (FOM6Li,dFOM6Li)
     def getFOMunc(self,ptr,pars,FOM):
         '''
-        return uncertainty in FOM given pointer to fit result and best fit parameters '''
+        return uncertainty in FOM given pointer to fit result and best fit parameters
+        '''
 
         N = len(pars)
         # get covariance matrix as 2-d numpy array by brute force
@@ -556,7 +656,34 @@ class lsqa():
         
 
         return u
+    def getPeaks(self,h,nx,sig,maxN=2):
+        '''
+        return list of peaks with width sig in input 1d hist h with nx bins
+        maximum number of peaks that can be found is maxN
+        uses scipy.signal.find_peaks_cwt
+        '''
+        debug = False
+        c = []
+        for i in range(nx):
+            c.append( h.GetBinContent(i+1) )
+        c = numpy.array(c)
+        n = max(2,sig)
+        ipeaks,oldpeaks = None,None
+        while ipeaks is None or len(ipeaks)>maxN:
+            oldpeaks = ipeaks
+            ipeaks = scipy_signal.find_peaks_cwt(c,numpy.arange(1,n))
+            if debug : print 'lsqa.getPeaks: ipeaks,n',ipeaks,n
+            n += 1
+        if len(ipeaks)==1 and oldpeaks is not None and len(oldpeaks)==3:
+            ipeaks = [oldpeaks[0],oldpeaks[2]]
+            if debug : print 'lsqa.getPeaks: ipeaks',ipeaks,'fixed'
+        peaks = []
+        for i in ipeaks: peaks.append( h.GetXaxis().GetBinCenter(i) )
+        return peaks
     def simple(self,fn = '/Users/djaffe/work/LSQAData/Test1/run3554994172.h5'):
+        '''
+        used for testing, debugging, visualizing
+        '''
         usePulseAnal = False
         startoff, fastint, totint, numavg = 100, 200, 500, 200
         nsd = 3.0
@@ -606,20 +733,28 @@ class lsqa():
         
         
 if __name__ == '__main__':
-    L = lsqa()
-    simple = True
-    if simple:
-        fn='/Users/djaffe/work/LSQAData/P20/run3566844679.h5' #'/Users/djaffe/work/LSQAData/P20/run3566553226.h5'
-        fn='/Users/djaffe/work/LSQAData/LiLS01/run3567106894.h5' 
-        L.main(fn=fn)
-        #L.simple(fn=fn)
-    else:
-    
-        nfn = '/Users/djaffe/work/LSQAData/P20/run3566553226.h5'
-        gfn = '/Users/djaffe/work/LSQAData/P20/run3566498398.h5'
-        L.onlPlot(fn=[gfn,nfn],dname=['G','N'])#dname=['AmBe','AmBe_137Cs'])
+    if len(sys.argv)<=1:
+        sys.exit('lsqa.py ERROR! Must specify input filename with full path')
+    fn = sys.argv[1]
+    L = lsqa(fn=fn)
+    L.main(filename=fn)
 
-        nfn = '/Users/djaffe/work/LSQAData/P20/run3566576160.h5'
-        L.onlPlot(fn=[gfn,nfn],dname=['G','N'])#dname=['AmBe','AmBe_137Cs'])
-    
+
+    if 0:
+        L = lsqa()
+        simple = True
+        if simple:
+            fn='/Users/djaffe/work/LSQAData/P20/run3566844679.h5' #'/Users/djaffe/work/LSQAData/P20/run3566553226.h5'
+            fn='/Users/djaffe/work/LSQAData/LiLS01/run3567106894.h5' 
+            L.main(fn=fn)
+            #L.simple(fn=fn)
+        else:
+
+            nfn = '/Users/djaffe/work/LSQAData/P20/run3566553226.h5'
+            gfn = '/Users/djaffe/work/LSQAData/P20/run3566498398.h5'
+            L.onlPlot(fn=[gfn,nfn],dname=['G','N'])#dname=['AmBe','AmBe_137Cs'])
+
+            nfn = '/Users/djaffe/work/LSQAData/P20/run3566576160.h5'
+            L.onlPlot(fn=[gfn,nfn],dname=['G','N'])#dname=['AmBe','AmBe_137Cs'])
+
     
