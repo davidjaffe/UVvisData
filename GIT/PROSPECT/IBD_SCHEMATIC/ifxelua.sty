@@ -1,0 +1,17 @@
+\ProvidesPackage{ifxelua}
+
+\RequirePackage{ifxetex,ifluatex}
+
+\newif\ifxelua
+\ifxetex
+  \xeluatrue
+\else
+  \ifluatex
+    \xeluatrue
+  \else
+    \xeluafalse
+  \fi
+\fi
+
+\endinput
+

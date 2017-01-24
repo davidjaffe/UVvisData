@@ -1,0 +1,45 @@
+\ProvidesPackage{maxfl-loc}
+\RequirePackage{ifxelua}
+
+\newif\if@maxfl@rus\@maxfl@rusfalse
+\DeclareOption{rus}{\@maxfl@rustrue}
+\ProcessOptions\relax
+
+\ifxelua
+  \RequirePackage[no-math]{fontspec}
+  \defaultfontfeatures{Ligatures=TeX}
+  \RequirePackage{computermodern}
+
+  \RequirePackage[babelshorthands]{polyglossia}
+
+  \if@maxfl@rus
+    \setmainlanguage{russian}
+    \setotherlanguage{english}
+  \else
+    \setmainlanguage{english}
+  \fi
+
+  \ifxetex
+    \RequirePackage{xltxtra}
+  \fi
+\else
+  \if@maxfl@rus
+    \RequirePackage[T1,T2A]{fontenc}
+  \else
+    \RequirePackage[T1]{fontenc}
+  \fi
+
+  \RequirePackage[utf8]{inputenc}
+  \RequirePackage{textcomp}
+
+  \if@maxfl@rus
+    \RequirePackage[main=russian,english]{babel}
+  \else
+    \RequirePackage[english]{babel}
+  \fi
+\fi
+\RequirePackage{csquotes}
+\RequirePackage{indentfirst}
+\frenchspacing
+
+\endinput

@@ -1,0 +1,40 @@
+\ProvidesPackage{computermodern}
+
+\RequirePackage[no-math]{fontspec}
+
+\setmainfont[Extension      = .otf,
+             BoldFont       = cmunrb,
+             ItalicFont     = cmunti,
+             BoldItalicFont = cmunbi,
+             SlantedFont    = cmunsl,
+             SmallCapsFont  = cmunrm,
+             SmallCapsFeatures={Letters=SmallCaps},
+             Ligatures=TeX]{cmunrm}
+\setsansfont[Extension      = .otf,
+             BoldFont       = cmunsx,
+             ItalicFont     = cmunsi,
+             BoldItalicFont = cmunso,
+             SlantedFont    = cmunsi,
+             SmallCapsFont  = cmunss]{cmunss}
+\setmonofont[Extension      = .otf,
+             BoldFont       = cmunobx,
+             ItalicFont     = cmunoti,
+             BoldItalicFont = cmunobi,
+             SlantedFont    = cmunoti,
+             SmallCapsFont  = cmunorm]{cmunorm}
+
+\newfontfamily{\cyrillicfont}[Extension      = .otf,
+                              BoldFont       = cmunrb,
+                              ItalicFont     = cmunti,
+                              BoldItalicFont = cmunbi,
+                              SlantedFont    = cmunsl,
+                              SmallCapsFont  = cmunrm,
+                              SmallCapsFeatures={Letters=SmallCaps},
+                              Ligatures=TeX]{cmunrm}
+\newfontfamily{\cyrillicfonttt}[Extension      = .otf,
+                                BoldFont       = cmunobx,
+                                ItalicFont     = cmunoti,
+                                BoldItalicFont = cmunobi,
+                                SlantedFont    = cmunoti,
+                                SmallCapsFont  = cmunorm]{cmunorm}
+\endinput

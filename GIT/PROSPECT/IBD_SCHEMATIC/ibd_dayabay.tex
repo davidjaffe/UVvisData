@@ -1,0 +1,149 @@
+\documentclass[border={5pt}]{standalone}
+%\documentclass[border={5pt},convert={outext={.png},density=600}]{standalone}
+
+\usepackage[usenames,dvipsnames,x11names,svgnames]{xcolor}
+\usepackage{maxfl-loc}
+\usepackage{xparse}
+\usepackage{amsmath}
+\usepackage{relsize}
+
+\usepackage{tikz}
+\usetikzlibrary{decorations.text,decorations.markings,math,calc,arrows,snakes,shapes}
+
+\begin{document}
+
+\tikzset{
+         ->-/.style          = {decoration={markings,mark=at position #1 with {\arrow{>}}},postaction={decorate}},
+         proton/.pic         = {code={\shade[ball color=green] circle (.25);}},
+         pastproton/.pic     = {code={\fill[white] circle (.25);
+                                      \shade[ball color=green,opacity=0.4] circle (.25);}},
+         neutrino/.pic       = {code={\fill[white] circle (.10);
+                                      \shade[ball color=blue,opacity=0.6]  circle (.10);}},
+         neutron/.pic        = {code={\shade[ball color=blue]  circle (.25);}},
+         electron/.pic       = {code={\shade[ball color=red]   circle (.15);}},
+         positron/.pic       = {code={\shade[ball color=cyan]  circle (.15);}},
+         particlepath/.style = {thick,dashed},
+         interaction/.style  = {starburst,fill=Gold!80!black,scale=1.5},
+         gammac/.style       = {magenta},
+         gamma/.style        = {->,gammac,decorate,thick,
+                                decoration={snake,amplitude=0.6mm,
+                                segment length=3mm,post length=0.5mm}},
+         eq/.style           = {scale=0.8}
+        }
+\input{pos_gd.tex}
+
+\begin{tikzpicture}[
+    source/.style={anchor=center,font=\Large},
+  ]
+  %
+  % Coordinates
+  %
+  \coordinate (neutrino)     at (-2.0,  2.0);
+  \coordinate (freeproton)   at ( 0.0,  1.0);
+  \coordinate (gd)           at ( 5.0, -2.0);
+  \coordinate (hydrogen)     at (-2.0, -2.0);
+  \coordinate (electron)     at ( 5.0,  2.0);
+  \coordinate (neutrino1)    at ($(freeproton)!2.5mm!(neutrino)$);
+
+  \coordinate (toelectronA)  at ($(freeproton)!.22!30:(electron)$);
+  \coordinate (toelectronB)  at ($(freeproton)!.4!-10:(electron)$);
+  \coordinate (toelectronC)  at ($(freeproton)!.5!+5:(electron)$);
+  \coordinate (toelectronD)  at ($(freeproton)!.9!-10:(electron)$);
+  \coordinate (positron)     at ($(electron)!2mm!(toelectronD)$);
+  \coordinate (annihilation) at ($(positron)!.5!(electron)$);
+
+  \coordinate (togdA)        at ($(freeproton)!.22!-20:(gd)$);
+  \coordinate (togdB)        at ($(freeproton)!.2!-5:(gd)$);
+  \coordinate (togdC)        at ($(freeproton)!.5!+5:(gd)$);
+  \coordinate (togdD)        at ($(freeproton)!.5!-35:(gd)$);
+  \coordinate (togdE)        at ($(freeproton)!.4!-20:(gd)$);
+  \coordinate (togdF)        at ($(freeproton)!.7!0:(gd)$);
+  \coordinate (togdG)        at ($(freeproton)!.7!-20:(gd)$);
+  \coordinate (togdH)        at ($(freeproton)!.9!-10:(gd)$);
+  \coordinate (neutron_gd)   at ($(togdH)!4mm!(togdG)$);
+  \coordinate (capture_gd)   at ($(neutron_gd)!.95!20:(togdH)$);
+
+  \coordinate (tohB)         at ($(togdA)!.3!+45:(hydrogen)$);
+  \coordinate (tohC)         at ($(tohB)!.6!-30:(hydrogen)$);
+  \coordinate (tohD)         at ($(tohC)!.4!-160:(hydrogen)$);
+  \coordinate (tohE)         at ($(tohD)!.8!+40:(hydrogen)$);
+  \coordinate (neutron_h)    at ($(hydrogen)!4mm!(tohE)$);
+  \coordinate (capture_h)    at ($(neutron_h)!.5!(hydrogen)$);
+
+  \coordinate (cut1)         at ($(togdA)+(0,1cm)$);
+  \coordinate (cut2)         at ($(togdA)+(0,-5cm)$);
+
+  %
+  % IBD and positron part
+  %
+  \draw [->-=.5,particlepath] (neutrino) -- (freeproton) node [midway,above] {$\overline{\nu}_e$};
+  \draw [line width=7pt,Gold] (freeproton) -- (toelectronA) -- (toelectronB) 
+                             -- (toelectronC) -- (toelectronD) -- (electron);
+  \draw [->-=.11,particlepath] (freeproton)
+                            -- (toelectronA) node [midway,above,yshift=3pt] {$e^{\scriptscriptstyle+}$}
+                            -- (toelectronB) -- (toelectronC) -- (toelectronD) -- (electron);
+
+  \draw [->-=.5,particlepath] (freeproton) -- (togdA) node [midway,below,yshift=-3pt] {$n$};
+
+  \draw node [interaction] at (annihilation) {};
+  \draw [gamma] (annihilation) -- +(-10:15mm);
+  \draw [gamma] (annihilation) -- +(170:15mm);
+
+  \path (freeproton) pic {pastproton};
+  \node [opacity=0.6] at (freeproton) {$p$};
+  \path (neutrino1)  pic {neutrino}; 
+  \path (electron)   pic {electron};
+  \node [scale=0.8] at (electron) {$e$}; % node [right,above,yshift=5mm] {$e^+e^-$}; % annihilation
+  \path (positron)   pic {positron};
+  \node [scale=0.7] at (positron) {$e^{\scriptscriptstyle+}$};
+
+  \path (electron) node [gammac,eq,anchor=south,xshift=0.0cm,yshift=0.5cm]    {$1\text{ MeV}$}; %\sum E_\gamma=
+  \path (freeproton) -- (positron) node [midway,eq,yshift=0.8cm,fill=Gold,rounded corners=5pt] {$E_{e}\propto E_\nu$};
+
+  %
+  % Gd capture part
+  %
+  \draw [particlepath] (togdA) -- (togdB) -- (togdC) -- (togdD) -- (togdE)
+                               -- (togdF) -- (togdG) -- (togdH) -- (gd);
+  \draw node [interaction] at (capture_gd) {};
+  \draw [gamma] (gd) -- +(-100:30mm);
+  \draw [gamma] (gd) -- +( -60:30mm);
+  \draw [gamma] (gd) -- +( -30:30mm);
+  \draw [gamma] (gd) -- +(  30:30mm);
+  \draw [gamma] (gd) -- +( 120:30mm);
+
+  \path (gd) pic {gd};
+  \node [black,fill=white,text opacity=1,fill opacity=0.6,rounded corners=5pt] at (gd)
+        {$^{157}_{\phantom{1}64}$Gd};
+  \path (neutron_gd) pic {neutron};
+  \node [white] at (neutron_gd) {$n$};
+  \path (gd)       node [gammac,eq,anchor=south,xshift=0.0cm,yshift=1.5cm]    {$7.9\text{ MeV}$}; %\sum E_\gamma=
+
+  \path (capture_gd) node [eq,anchor=north,xshift=-0.2cm,yshift=-0.9cm] {$\left\langle t_\text{cap}\right\rangle\approx28\text{ $\mu$s}$};
+
+  %
+  % H capture part
+  %
+  \draw [particlepath] (togdA) -- (tohB) -- (tohC) -- (tohD) -- (tohE) -- (hydrogen);
+  \draw node [interaction] at (capture_h) {};
+  %\draw [gamma] (capture_h) -- +(-30:15mm);
+  \draw [gamma] (capture_h) -- +(150:20mm);
+
+  \path (hydrogen) pic {proton};
+  \node at (hydrogen) {$p$};
+  \path (neutron_h) pic {neutron};
+  \node [white] at (neutron_h) {$n$};
+  \path (capture_h) node [gammac,eq,anchor=south,xshift=0.0cm,yshift=+0.75cm]  {$2.2\text{ MeV}$}; %\sum E_\gamma=
+  \path (capture_h) node [eq,anchor=north,xshift=0.0cm,yshift=-0.9cm] {$t_\text{cap}\sim100\text{ $\mu$s}$};
+
+  %
+  % Misc
+  %
+  \draw [blue!50,dashed,thick] (cut1) -- (cut2);
+  \draw node (labelngd) [anchor=north west,yshift=5mm] at (cut2) {\textbf{nGd {\footnotesize(main)}}};
+  \draw node (labelnh)  [anchor=north east,yshift=5mm] at (cut2) {{\footnotesize(complementary)} nH};
+\end{tikzpicture}
+
+\end{document}
+
+% vim: textwidth=0
