@@ -10,6 +10,8 @@
 \usepackage{tikz}
 \usetikzlibrary{decorations.text,decorations.markings,math,calc,arrows,snakes,shapes}
 
+
+\renewcommand{\familydefault}{\rmdefault} % use roman (serif) font (?)
 \begin{document}
 
 \tikzset{
@@ -50,6 +52,7 @@
   \coordinate (electron)     at ( 5.0,  2.0);
   \coordinate (neutrino1)    at ($(freeproton)!2.5mm!(neutrino)$);
 
+
   \coordinate (toelectronA)  at ($(freeproton)!.22!30:(electron)$);
   \coordinate (toelectronB)  at ($(freeproton)!.4!-10:(electron)$);
   \coordinate (toelectronC)  at ($(freeproton)!.5!+5:(electron)$);
@@ -71,6 +74,8 @@
   
   \coordinate (agd)       at ($(alpha)!.04!0:(gd)$);  % place alpha?
   \coordinate (tgd)       at ($(triton)!.04!0:(gd)$);  % place triton?
+  
+
 
   \coordinate (tohB)         at ($(togdA)!.3!+45:(hydrogen)$);
   \coordinate (tohC)         at ($(tohB)!.6!-30:(hydrogen)$);
@@ -128,7 +133,7 @@
   
   \draw [heavyparticlepath] (tgd) -- (gd);
   \path (triton) pic {triton};    % draw the triton
-  \node [black,fill=white,text opacity=1, fill opacity = 0.4] at (triton)       {\Large$\mathbf\tau$};
+  \node [black,fill=white,text opacity=1, fill opacity = 0.4] at (triton)       {\Large t};
 
   \path (gd) pic {gd};
   \node [black,fill=white,text opacity=1,fill opacity=0.46,rounded corners=5pt] at (gd)
@@ -161,6 +166,10 @@
   \draw [blue!50,dashed,thick] (cut1) -- (cut2);
   \draw node (labelngd) [anchor=north west,yshift=5.5mm] at (cut2) {{n${}^6$Li {\footnotesize(main)}}};
   \draw node (labelnh)  [anchor=north east,yshift=5mm] at (cut2) {{\footnotesize(complementary)} nH};
+  
+  
+  \draw [yellow,fill, opacity=0.1] (+2.5,-2) circle [radius=5.2] ; % draw a big circle
+  \draw node (labelngd) [anchor=north west, yshift=-50mm,xshift=-10mm, black] {\Large\bf $\mathbf{}^{6}\text{Li}$-loaded liquid scintillator}; % label circle
 \end{tikzpicture}
 
 \end{document}
