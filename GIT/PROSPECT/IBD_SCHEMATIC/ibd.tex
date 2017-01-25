@@ -11,7 +11,8 @@
 \usetikzlibrary{decorations.text,decorations.markings,math,calc,arrows,snakes,shapes}
 
 
-\renewcommand{\familydefault}{\rmdefault} % use roman (serif) font (?)
+\renewcommand{\familydefault}{\rmdefault} % use roman (serif) font 
+%\renewcommand{\familydefault}{\sfdefault} % use sans serif  font 
 \begin{document}
 
 \tikzset{
@@ -75,6 +76,7 @@
   \coordinate (agd)       at ($(alpha)!.04!0:(gd)$);  % place alpha?
   \coordinate (tgd)       at ($(triton)!.04!0:(gd)$);  % place triton?
   
+  \coordinate (neutron) at (togdA);
 
 
   \coordinate (tohB)         at ($(togdA)!.3!+45:(hydrogen)$);
@@ -84,7 +86,7 @@
   \coordinate (neutron_h)    at ($(hydrogen)!4mm!(tohE)$);
   \coordinate (capture_h)    at ($(neutron_h)!.5!(hydrogen)$);
 
-  \coordinate (cut1)         at ($(togdA)+(0,1cm)$);
+  \coordinate (cut1)         at ($(togdA)+(0,-.4cm)$);
   \coordinate (cut2)         at ($(togdA)+(0,-5cm)$);
 
   %
@@ -97,11 +99,13 @@
                             -- (toelectronA) node [midway,above,yshift=3pt] {$e^{\scriptscriptstyle+}$}
                             -- (toelectronB) -- (toelectronC) -- (toelectronD) -- (electron);
 
-  \draw [->-=.5,particlepath] (freeproton) -- (togdA) node [midway,below,yshift=-3pt] {$n$};
+  \draw [->-=.5,particlepath] (freeproton) -- (togdA) node [midway,below,yshift=-3pt] {};
+%  \path (neutron) pic   {neutron} ;%{$n$}; % moved to end
+ % \node [white] at (togdA) {$n$};
 
   \draw node [interaction] at (annihilation) {};
-  \draw [gamma] (annihilation) -- +(-10:15mm);
-  \draw [gamma] (annihilation) -- +(170:15mm);
+  \draw [gamma] (annihilation) -- +(-30:15mm); %-10:15
+  \draw [gamma] (annihilation) -- +(150:15mm);%170:15
 
   \path (freeproton) pic {pastproton};
   \node [opacity=0.6] at (freeproton) {$p$};
@@ -140,8 +144,10 @@
       {${}^{6}_3$Li};%  {$^{157}_{\phantom{1}64}$Gd};
   \path (neutron_gd) pic {neutron};
   \node [white] at (neutron_gd) {$n$};
+ \path (gd)       node [Green!80!black,eq,anchor=south,xshift=1.850cm,yshift=1.05cm]    
+ 			{\large$Q(n,{}^6\text{Li}) = 4.78\  \text{MeV}$}; %\sum E_\gamma=
  \path (gd)       node [Green!80!black,eq,anchor=south,xshift=1.50cm,yshift=.5cm]    
- 			{\large$\text{E}_\text{visible}\approx0.5\text{ MeV}$}; %\sum E_\gamma=
+ 			{\large$\text{E}_{ee}\approx0.5\text{ MeV}$}; %\sum E_\gamma=
 
   \path (capture_gd) node [eq,anchor=north,xshift=-0.2cm,yshift=-0.9cm] {$t_\text{cap}\approx40\text{ $\mu$s}$};
 
@@ -150,25 +156,35 @@
   %
   \draw [particlepath] (togdA) -- (tohB) -- (tohC) -- (tohD) -- (tohE) -- (hydrogen);
   \draw node [interaction] at (capture_h) {};
-  %\draw [gamma] (capture_h) -- +(-30:15mm);
-  \draw [gamma] (capture_h) -- +(150:20mm);
+\draw [gamma] (capture_h) -- +(-30:15mm);   % 2.2 MeV should be contained in LS
 
   \path (hydrogen) pic {proton};
   \node at (hydrogen) {$p$};
   \path (neutron_h) pic {neutron};
   \node [white] at (neutron_h) {$n$};
-  \path (capture_h) node [gammac,eq,anchor=south,xshift=0.0cm,yshift=+0.75cm]  {$2.2\text{ MeV}$}; %\sum E_\gamma=
-  \path (capture_h) node [eq,anchor=north,xshift=0.0cm,yshift=-0.9cm] {$t_\text{cap}\approx200\text{ $\mu$s}$};
+  
+  %\path (capture_h) node [gammac,eq,anchor=south,xshift=0.0cm,yshift=+0.75cm]  {$2.2\text{ MeV}$}; %\sum E_\gamma=
+  %\path (capture_h) node [eq,anchor=north,xshift=0.0cm,yshift=-0.9cm] {$t_\text{cap}\approx200\text{ $\mu$s}$};
+
+  \path (capture_h) node [gammac,eq,anchor=north,xshift=0.0cm,yshift=-0.9cm]  {$2.2\text{ MeV}$}; %\sum E_\gamma=
+ % \path (capture_h) node [eq,anchor=south,xshift=0.0cm,yshift=+0.75cm] {$t_\text{cap}\approx200\text{ $\mu$s}$};
+
+
+%
+% draw neutron from proton last, so it overwrites dashed lines
+  \path (neutron) pic   {neutron} ;%{$n$};
+  \node [white] at (togdA) {$n$};
+
 
   %
   % Misc
   %
   \draw [blue!50,dashed,thick] (cut1) -- (cut2);
-  \draw node (labelngd) [anchor=north west,yshift=5.5mm] at (cut2) {{n${}^6$Li {\footnotesize(main)}}};
-  \draw node (labelnh)  [anchor=north east,yshift=5mm] at (cut2) {{\footnotesize(complementary)} nH};
+  \draw node (labelngd) [anchor=north west,yshift=5.5mm] at (cut2) {{n${}^6$Li {\footnotesize($\sim\!80\%$ of captures)}}};
+  \draw node (labelnh)  [anchor=north east,yshift=5mm] at (cut2) {{\footnotesize($\sim\!20\%$)} nH};
   
   
-  \draw [yellow,fill, opacity=0.1] (+2.5,-2) circle [radius=5.2] ; % draw a big circle
+  \draw [blue!80!white, fill, opacity=0.1] (+2.5,-2) circle [radius=5.2] ; % draw a big circle
   \draw node (labelngd) [anchor=north west, yshift=-50mm,xshift=-10mm, black] {\Large\bf $\mathbf{}^{6}\text{Li}$-loaded liquid scintillator}; % label circle
 \end{tikzpicture}
 
