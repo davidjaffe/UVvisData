@@ -27,11 +27,15 @@ from scipy import interpolate as scipy_interpolate # used by getFOMat6Li
 
 
 class lsqa():
-    def __init__(self,fn=None):
+    def __init__(self,fn=None,SIMPLE=False):
         self.wfa = wfanal.wfanal()
         self.gU  = graphUtils.graphUtils()
         self.gfp = get_filepaths.get_filepaths()
 
+        if SIMPLE:
+            print 'lsqa__init__ SIMPLE processing only'
+            return
+        
         # process input filename to create new directories for figures and logfile
         dirname,rn = '',''
         if fn is not None:
@@ -77,10 +81,17 @@ class lsqa():
         # definition of constants,etc.
         self.Cs137edge = 478. # keV
         self.LiCaptureEnergy = 540. # keV. From doc-1245-v1 "P50D ambient data stability"
+        self.QforAvg = [15.,25.] # values of charge to use when averaging pulses
+        self.startoff=100
+        self.numavg  = 200
+        
         self.PSDcut = 0.1
-        self.fastValues = numpy.linspace(100,140,3) #80,140,4) #60,140,5) #20,120,6)
-        self.totalValues = numpy.linspace(400,1000,4) #200,1000,5)
-        scan = True
+        self.sampledt = 0.2 # 1 sample/0.2ns
+        self.favFast = 100
+        self.favTotal= 800
+        self.fastValues = numpy.linspace(60,140,5) #20,120,6)
+        self.totalValues = numpy.linspace(200,1000,5)
+        scan = False
         if scan:
             self.fastValues = numpy.linspace(60,140,5+4)
             self.totalValues= numpy.linspace(200,1000,5+4)
@@ -102,13 +113,15 @@ class lsqa():
                 ph.append(a)
                 ct.append(b)
         return ph,ct
-    def getQ(self,wfm,fastValues,totalValues,startoff=100,numavg=200):
+    def getQ(self,wfm,fastValues,totalValues):
         '''
         efficiently process input waveforms to return sets of Qfast,Qtot pairs
         given 'fast' and 'total' integration parameters
         '''
+        startoff = self.startoff
+        numavg   = self.numavg
         minidx = numpy.argmin(wfm)
-        BL = sum(wfm[int(minidx-startoff-numavg):int(minidx-startoff)])/float(numavg)
+        BL = self.getBL(wfm,minidxInput=minidx,startoff=startoff,numavg=numavg)
         i1 = int(minidx-startoff)
         results = []
         for fastint in fastValues:
@@ -158,7 +171,9 @@ class lsqa():
     def wfanaFile(self,fn=None):
         '''
         Return events containing Qfast,Qtot pairs for different fast, total definitions
-        given input file 
+        given input file.
+        Also return pairs of (leadingEdge, waveform) for waveforms with a total charge
+        within self.QforAvg identified as n-like or g-like
         '''
 
         fastValues = self.fastValues 
@@ -168,9 +183,12 @@ class lsqa():
 
         idebug = 0
         IntValues = [[x,y] for x in fastValues for y in totalValues]
+        idxFav = IntValues.index( [self.favFast,self.favTotal] )
+        print 'lsqa.wfanaFile idxFav',idxFav,'IntValues[idxFav]=',IntValues[idxFav]
         f = h5py.File(fn)
         print 'lsqa.wfanaFile Opened',fn
         Events = []
+        gWFToAvg, nWFToAvg= [],[]
 
         ievt,freq = 0,500
         for w in f['Waveforms']:
@@ -178,6 +196,17 @@ class lsqa():
             if len(wfm)>0:
                 results = self.getQ(wfm,fastValues=fastValues,totalValues=totalValues)
                 Events.append( results )
+                
+                Qfast,Qtot = results[idxFav]
+                #print 'lsqa.wfanaFile Qfast,Qtot,self.QforAvg',Qfast,Qtot,self.QforAvg
+                if self.QforAvg[0]<=abs(Qtot) and abs(Qtot)<=self.QforAvg[1]:
+                    PSD = (Qtot-Qfast)/Qtot
+                    leadingEdge,lE1,lE2 = self.getLeadingEdge(wfm)
+                    if PSD<self.PSDcut:
+                        gWFToAvg.append( [leadingEdge, wfm] )
+                    else:
+                        nWFToAvg.append( [leadingEdge, wfm] )
+                
                 if idebug>0:
                     for iPair,rPair in zip(IntValues,results):
                         fastint,totint = iPair
@@ -191,10 +220,11 @@ class lsqa():
 
         f.close()
         print '\rlsqa.wfanaFile Processed',fn
-        return Events
+        return Events,gWFToAvg,nWFToAvg
     def gammaCalib(self,Events):
         '''
         return estimates of compton edge give sets of Qfast,Qtot
+        Also return histogram for favorite value of total
         compton edge fitted using complement of error function
         gamma calibration only depends on Qtot
         '''
@@ -208,6 +238,7 @@ class lsqa():
         E = numpy.array(Events)
         G = self.CERF
         hists = []
+        hfav  = None
         c1 = ROOT.TCanvas() # open, so it can be closed after fitting
         for i,vv in enumerate(IntValues):
             ifast,itot = vv
@@ -217,6 +248,8 @@ class lsqa():
                 title = name.replace('_',' ')
                 h = ROOT.TH1D(name,title,nx,xmi,xma)
                 hists.append(h)
+                if hfav is None: hfav = h
+                if itot==self.favTotal : hfav = h
                 for pair in E[:,i]:
                     Qfast,Qtot = pair
                     h.Fill(abs(Qtot))
@@ -244,7 +277,7 @@ class lsqa():
             for h in hists: rfn.WriteTObject(h)
             rfn.Close()
             print 'lsqa.gammaCalib Wrote',len(hists),'to',fn
-        return EperQ
+        return EperQ,hfav
     def timestampFromFilename(self,fn):
         ''' extract time stamp as integer from filename  '''
         bn = os.path.basename(fn)
@@ -288,9 +321,11 @@ class lsqa():
         return gammaFile
     def gunzip(self,fn):
         '''
-        gunzip input file, return output file
+        if necessary, gunzip input file, return output file.
+        if output file already exists, just return output file
         '''
         h5f = fn.replace('.gz','')
+        if os.path.isfile(h5f): return h5f
         print 'lsqa.gunzip input',fn,'output',h5f,
         sys.stdout.flush()
         with gzip.open(fn,'rb') as fin, open(h5f,'wb') as fout:
@@ -312,6 +347,9 @@ class lsqa():
         totalValues= self.totalValues 
         IntValues = [[x,y] for x in fastValues for y in totalValues]
 
+        allhists = []
+        opshists = [] # One Page Summary Histograms
+        
         nx = len(fastValues)
         dx = float(fastValues[1]-fastValues[0])/2.
         xmi,xma = fastValues[0]-dx,fastValues[-1]+dx
@@ -321,9 +359,11 @@ class lsqa():
         name = 'Opt_CumFOM'
         title= 'Optimize cumulative FOM'
         hcum = ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
+        allhists.append(hcum)
         name = 'Opt_6LiFOM'
         title= 'Optimize 6Li FOM'
         h6li = ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
+        allhists.append(h6li)
 
         # uncompress input file, if needed
         fn = filename
@@ -336,13 +376,23 @@ class lsqa():
         if ZgammaFile[-3:]=='.gz':
             gammaFile = self.gunzip(ZgammaFile)
         print 'lsqa.main gammaFile',gammaFile
-        gEvents = self.wfanaFile(fn=gammaFile)
-        EperQ = self.gammaCalib(gEvents)
+        gEvents,gWF,nWF = self.wfanaFile(fn=gammaFile)
+        hgg1,hgg2 = self.avgWF(gWF,title='Cs137_gamma')
+        hng1,hng2 = self.avgWF(nWF,title='Cs137_neutron')
+        avWFhists = [ [hgg1,hng1], [hgg2,hng2] ]
+        allhists.extend( [hgg1,hng1,hgg2,hng2])
+        EperQ,hfav = self.gammaCalib(gEvents)
+        opshists.append(hfav)
         print 'lsqa.main EperQ',EperQ
 
         
         # turn waveforms into sets of Qfast,Qtot pairs
-        Events = self.wfanaFile(fn=fn)
+        Events,gWF,nWF = self.wfanaFile(fn=fn)
+        hg1,hg2 = self.avgWF(gWF,title='gamma')
+        hn1,hn2 = self.avgWF(nWF,title='neutron')
+        avWFhists.extend( [ [hg1,hn1], [hg2,hn2] ] )
+        allhists.extend( [hg1,hn1, hg2,hn2] )
+        opshists.append( [hg2,hn2] )
         words = self.runType(fn)  # should be either 'G' (for gamma+neutron source) or 'N' (for neutron source only)
 
         if idebug>0:
@@ -352,12 +402,13 @@ class lsqa():
 
         sumFOM = {}
         E = numpy.array(Events)
-        hists,allhists,qhists,graphs = [],[hcum,h6li],[],[]
+        hists,qhists,graphs = [],[],[]
         tmg = self.gU.makeTMultiGraph('FOMerific_'+bn)
         nx,xmi,xma = 100,0.,100.
         ny,ymi,yma = 100,0.,0.5
         for i,vv in enumerate(IntValues):
             ifast,itot = vv
+            favorite = ifast==self.favFast and itot==self.favTotal
             eKey = 't'+str(int(itot))
             PSDdef = name = 'f'+str(int(ifast))+'_t'+str(int(itot))
             title = 'PSD vs Qtot '+name.replace('_',' ')
@@ -365,6 +416,7 @@ class lsqa():
             qname = 'Etot_'+name+'_wPSDcut'
             qtitle = 'Etot ' + name + 'PSD>'+str(self.PSDcut)
             qh= ROOT.TH1D(qname,qtitle,nx,EperQ[eKey]*xmi,EperQ[eKey]*xma)
+            if favorite: opshists.extend( [h,qh] )
             
             aQtot,aPSD = [],[]
             for pair in E[:,i]:
@@ -402,7 +454,18 @@ class lsqa():
         tmg.SetMaximum(3.0)
         canvas = self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='keVee',yAxisLabel='FOM',NLegendColumns=3)
         graphs.append( tmg )
-        
+
+
+        self.gU.drawMultiHists(avWFhists,fname='avergeWF_'+bn,statOpt=0,setLogy=True,abscissaIsTime=False,Grid=True,changeColors=True,addLegend=True)
+
+        for i,h in enumerate(opshists):
+            if type(h) is list:
+                for hh in h: print 'lsqa.main opshists multi',i,hh.GetName()
+            else:
+                print 'lsqa.main opshists',i,h.GetName()
+
+        self.gU.drawMultiHists(opshists,fname='summary_'+bn,statOpt=0,abscissaIsTime=False,Grid=True,changeColors=True,addLegend=True,biggerLabels=False)
+
         rfn = self.figdir + 'optimize_'+bn+'.root'
         f = ROOT.TFile.Open(rfn,'RECREATE')
         for h in hists: f.WriteTObject(h)
@@ -411,6 +474,41 @@ class lsqa():
         f.Close()
         print 'lsqa.main Wrote',len(hists)+len(allhists),'hists and',len(graphs),'graphs to',rfn
         return
+    def avgWF(self,lEWF,title='Average waveform'):
+        '''
+        return histograms of average waveform given pairs of leading edge and waveforms
+        1st hist is vs samples, 2d hist is vs time
+        '''
+        startoff,numavg=self.startoff,self.numavg
+        i1,i2 = 0-startoff-numavg,0+self.favTotal
+        xmi = float(i1)-0.5
+        xma = float(i2)+0.5
+        nx = int(xma-xmi)
+        nWF = len(lEWF)
+        htit = title + ' vs samples'
+        name = htit.replace(' ','_')
+        htit += ' ' + str(nWF) + ' waveforms averaged'
+        h1 = ROOT.TH1D(name,htit,nx,xmi,xma)
+        htit = title + ' vs time in ns'
+        name = htit.replace(' ','_')
+        htit += ' ' + str(nWF) + ' waveforms averaged'
+        h2 = ROOT.TH1D(name,htit,nx,xmi*self.sampledt,xma*self.sampledt)
+
+        x = numpy.arange(float(i2-i1))+float(i1)
+        for pair in lEWF:
+            leadingEdge,WF = pair
+            BL = self.getBL(WF,startoff=startoff,numavg=numavg)
+            X = numpy.arange(float(len(WF))) - leadingEdge
+            f = scipy_interpolate.interp1d(X,WF)
+            y = []
+            for v in x:
+                y.append(abs(f(v)-BL))   # invert and subtract baseline
+            y = numpy.array(y)
+            y = y/numpy.sum(y)/float(nWF) # normalize
+            for u,v in zip(x,y):
+                h1.Fill(u,v)
+                h2.Fill(u*self.sampledt,v)
+        return h1,h2
     def onlPlot(self,fn=None,dname=None):
         '''
         get Qfast,Qtot from online analysis and plot 'em
@@ -680,59 +778,107 @@ class lsqa():
         peaks = []
         for i in ipeaks: peaks.append( h.GetXaxis().GetBinCenter(i) )
         return peaks
-    def simple(self,fn = '/Users/djaffe/work/LSQAData/Test1/run3554994172.h5'):
+    def getLeadingEdge(self,wf,frac=0.5):
+        '''
+        returning leading edge in floating bin number for input waveform
+        also return 1st,last bin number used to compute leading edge
+        '''
+        startoff = self.startoff
+        numavg   = self.numavg
+        minidx = numpy.argmin(wf)
+        H = wf[minidx]
+        BL = self.getBL(wf,minidxInput=minidx,startoff=startoff,numavg=numavg)
+        hLE = frac*(H-BL)+BL
+        leadBins,leadWF = [],[]
+        i = minidx
+        while wf[i]<BL and i>0:
+            leadBins.append(i)
+            leadWF.append(wf[i])
+            i-=1
+        leadBins = numpy.array(leadBins,'float')
+        leadWF   = numpy.array(leadWF,'float')
+        f = scipy_interpolate.interp1d(leadWF,leadBins)
+        leadingEdge = f(hLE)
+        #print 'minidx,leadingEdge,leadBins[-1],leadBins[0]',minidx,leadingEdge,leadBins[-1],leadBins[0]
+        return leadingEdge,leadBins[-1],leadBins[0]
+    def getBL(self,wf,minidxInput=None,startoff=None,numavg=None):
+        '''
+        return baseline for input waveform
+        '''
+        minidx = minidxInput
+        if minidxInput is None : minidx = numpy.argmin(wf)
+        BL = sum(wf[int(minidx-startoff-numavg):int(minidx-startoff)])/float(numavg)
+        return BL
+    def simple(self,fn = '/Users/djaffe/work/LSQAData/LiLS01/run3566934507.h5'):
         '''
         used for testing, debugging, visualizing
         '''
+        bn = os.path.basename(fn).replace('.h5','')
         usePulseAnal = False
-        startoff, fastint, totint, numavg = 100, 200, 500, 200
+        startoff, fastint, totint, numavg = self.startoff, 120, 600, self.numavg
         nsd = 3.0
         ph,ct = self.getWFMs(fn)
         print 'len(ph),len(ct)',len(ph),len(ct)
-        for ip in range(0,len(ph),281):
+        for ip in range(0,len(ph),233):
             wf = ph[ip]
             if usePulseAnal:
                 ped,pedsd,iPulse,subPperP,pArea,pTime = self.wfa.pulseAnal(wf,'LSQA',debug=1,nsd=nsd)
                 print 'ped,pedsd,iPulse,subPperP,pArea,pTime',ped,pedsd,iPulse,subPperP,pArea,pTime
                 words = 'pulseAnal'
             else:
+                iPulse = []
                 minidx = numpy.argmin(wf)
-                iPulse = [[minidx-startoff, minidx+ totint]]
-                pTime = [float(minidx)]
-                words = 'simple'
+                windows = [ [minidx-startoff-numavg,minidx-startoff], [minidx-50,minidx+totint], [minidx-50,minidx+fastint] ]
+                lE,b0,b1 = self.getLeadingEdge(wf)
+                
+                windows.append( [int(b0),int(b1)])
+                windows.append( [int(lE),int(lE+1.)] )
+                title = 'Evt '+str(ip) + ' ' + bn
+                self.drawPulse(wf,windows=windows,title=title)
             if len(iPulse)>0:
                 for j,p in enumerate(iPulse):
                     title = words+ ' Evt '+str(ip)+ ' pulse#'+str(j)+' of '+str(len(iPulse)-1)+' t '+str(pTime[j])
                     self.drawPulse(wf,window=iPulse[j],title=title)
         return       
-    def drawPulse(self,wf,window=None,title='waveform'):
+    def drawPulse(self,wf,windows=None,title='waveform'):
         '''
-        draw a waveform
+        draw a waveform. overlay windows used for integration
+        windows = [ [minBL,maxBL], [minT,maxT], [minF,maxF] ]
+        where [minX,maxX] is the min,max sample number corresponding
+        to X=BL,T,F = baseline,total,fast
         '''
         plt.clf()
         plt.grid()
         plt.title(title)
-        colorpoint = {0: 'b.', 1:'ro'}
-        i1,i2 = 0,len(wf)
-        loop = 1
-        if window is not None: loop = 2
-        for l in range(loop):
-            if window is not None:
-                i1,i2 = window
-                if l==0:
-                    d1 = max(200,i2-i1)
-                    d2 = max(400,i2-i1)
-                    i1 = max(0,i1-d1)
-                    i2 = min(len(wf),i2+d2)
-            #print l,i1,i2
+        figpdf = 'FIG_'+title.replace(' ','_') + '.pdf'
+
+        colorpoint =  ['b.', 'go', 'r.', 'co', 'mD', 'kD']
+        i1,i2 = windows[0]
+        for w in windows:
+            i1 = min(i1,w[0])
+            i2 = max(i2,w[1])
+        i1 = max(0,i1-100)
+        i2 = min(len(wf),i2+100)
+        W = [ [i1,i2] ]
+        W.extend(windows)
+        for i,w in enumerate(W):
+            i1,i2 = w
             x = numpy.array(range(i1,i2))
             y = numpy.array(wf[i1:i2])
-            plt.plot(x,y,colorpoint[l])
+            plt.plot(x,y,colorpoint[i])
         plt.show()
+        #plt.savefig(figpdf)
+        #print 'lsqa.drawPulse Wrote',figpdf
         return
         
         
 if __name__ == '__main__':
+    if sys.argv[1]=='SIMPLE':
+        L = lsqa(SIMPLE=True)
+        L.simple()
+        sys.exit('')
+
+    
     if len(sys.argv)<=1:
         sys.exit('lsqa.py ERROR! Must specify input filename with full path')
     fn = sys.argv[1]
