@@ -42,7 +42,7 @@ class readLogFile():
                 if sources is None:
                     print 'readLogFile.readFile in',fn,'No sources in line:',newl
             if 'Sample being measured' in l:
-                sample = l.split()[-1]
+                sample = l.split(':')[-1][:-1]
             if 'Request run time' in l:
                 try: 
                     request = float(l.split()[-1])
@@ -96,10 +96,10 @@ if __name__ == '__main__' :
         import get_filepaths
         gfp = get_filepaths.get_filepaths()
         file_paths = gfp.get_filepaths(fp)
-        for fn in file_paths:
+        for fn in sorted( file_paths ):
             ts,s,sam,rt = rLF.readFile(fn=fn)
             Show = False
             if ts is None or s is None or sam is None or rt is None: Show = True
             if s is not None and 'Ac-227' not in s: Show = True
-            if sam is not None and 'LiLS#2'!=sam: Show = True
+            if sam is not None and 'LiLS#2'not in sam: Show = True
             if Show: print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt

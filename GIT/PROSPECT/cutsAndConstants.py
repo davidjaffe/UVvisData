@@ -76,8 +76,9 @@ class cutsAndConstants():
         else:
             sampleName = inputSampleName
                         
-            
+        sampleName = sampleName.replace(' ','') # remove blanks
         if sampleName in self.SampleMass: return self.SampleMass[sampleName]
+
 
         sN = sampleName.replace('#','') # remove # from string
         if sN in self.SampleMass: return self.SampleMass[sN]
@@ -89,9 +90,13 @@ class cutsAndConstants():
             if key.replace("#","").lower()==sN.lower() : return self.SampleMass[key]
 
         # Danielle initially used simple name for initial spiked sample
-        if sampleName=='LiLS' :
+        # or bad typing run225
+        # or deal with 'LiLS#2pedestal' and similar runs 260-265
+        if sampleName=='LiLS' or sampleName=='LiLS#2s' or 'LiLS#2' in sampleName:
             key = 'LiLS2'
             return self.SampleMass[key]
+
+        
                 
 
         # can't do it

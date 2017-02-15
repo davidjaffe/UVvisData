@@ -25,6 +25,8 @@ import Logger
 import livetime
 import get_filepaths
 
+import makeTTree
+
 class calibWaveDump():
     def __init__(self,Log=True):
 
@@ -35,6 +37,7 @@ class calibWaveDump():
         self.cAC = cutsAndConstants.cutsAndConstants()
         self.lt = livetime.livetime()
         self.gfp = get_filepaths.get_filepaths()
+        self.mTT = makeTTree.makeTTree()
 
         self.psdCut = self.cAC.psdCut
         self.lowChargeCut = self.cAC.lowChargeCut
@@ -52,6 +55,9 @@ class calibWaveDump():
         fmt = '%Y%m%d_%H%M%S_%f'
         self.start_time = cnow = now.strftime(fmt)
 
+        self.outTreeDir = 'CalibTrees/'
+        self.outTree    = self.outTreeDir + 'tree_'+cnow+'.root'
+        
         if Log:
             lfn = self.logdir + cnow + '.log'
             sys.stdout = Logger.Logger(fn=lfn)
@@ -153,6 +159,7 @@ class calibWaveDump():
         but fitted lifetime when both normalization and lifetime are free fit
         '''
         if not os.path.isfile(fn): return None
+
         hf = ROOT.TFile.Open(fn,'r')
         bn = os.path.basename(fn).replace('.root','')
         dname,oname = 'dvdt','ovdt'
@@ -341,6 +348,8 @@ class calibWaveDump():
         listOfHistFiles = self.get_filepaths(self.outFileDir,exclude='summary')
         listOfLogFiles  = self.get_filepaths(self.logFileDir)
 
+        
+
         Threshold = 10. # minimum number of coincidences for a GOOD run
         Ac227only = True # only process runs with Ac227 (no Cs137, for example)
         if Ac227only:
@@ -362,9 +371,15 @@ class calibWaveDump():
         T = []  # time of start of run
         ER,dER = [],[] # expected rate and uncertainty of sample at start of run
         GoodCut = [],[]
+        Run = []
+        sampleName = []
+            
+            
 
         listOfRunsAS = []     # AS=AsStrings
         listOfGoodRunsAS = []
+        Quick = False #True
+        nQuick = 10
         
         for fn in listOfHistFiles:
             rn = os.path.basename(fn).split('.')[0] # run00xxx
@@ -399,6 +414,10 @@ class calibWaveDump():
                     if not GOOD: print 'calibWaveDump.main',rn,'too few coincidences'
                 if GOOD:
                     listOfGoodRunsAS.append(rn)
+
+                    nQuick -= 1
+                    Run.append( runNum )
+                    sampleName.append( sample )
                     
                     # estimate effy of GoodCh0 cut
                     g = self.getGstats(fn=fn)
@@ -457,12 +476,38 @@ class calibWaveDump():
                             dPoPeak[x].append(results[x][1])#emean
                             PoS[x].append(results[x][2])    #sigma
                     print words,' ',stuff
+                    if Quick and nQuick<=0:
+                        print '.................QUICK job'
+                        break
+
+
+        '''
+        End of processing
+        '''
+
         #print 'X',X
         #print 'Y',Y
         #print 'dY',dY
         X = numpy.array(X)
         dX = numpy.array([0. for x in X])
         T = numpy.array(T)
+
+        tdict = {}
+        # fill dict for ttree
+        for i,V in enumerate(Prompt):
+            n = PromptName[i]
+            dn = 'd'+n
+            tdict[n] = V
+            tdict[dn]= dPrompt[i]
+        for n,V in zip(LIFEName,LIFE):
+            tdict[n] = V
+        tdict['ER'] = ER
+        tdict['dER']= dER
+        tdict['ts'] = T
+        tdict['run']= Run
+        tdict['sample'] = sampleName
+
+
         tmg = self.gU.makeTMultiGraph('Po215_Rate_Hz_vs_run')
         tmgT= self.gU.makeTMultiGraph('Po215_Rate_Hz_vs_time')
         tmgEC = self.gU.makeTMultiGraph('EffCorr_Po215_Rate_Hz_vs_run')
@@ -598,12 +643,21 @@ class calibWaveDump():
         effGood= numpy.array(GoodCut[0])
         errGood= numpy.array(GoodCut[1])
         #print 'effPSD.shape,errPSD.shape,effGood.shape,errGood.shape',effPSD.shape,errPSD.shape,effGood.shape,errGood.shape
+        tdict['effGood'] = effGood
+        tdict['errGood'] = errGood
+        tdict['effPSD']  = effPSD
+        tdict['errPSD']  = errPSD
+        tdict['effPrompt']=numpy.array([effPrompt for x in effPSD]) # same value correct number of times
         
         for l in sorted(Y.keys()):
             y = numpy.array(Y[l])
             #print 'l',l,'y,effPSD,effGood,effPeak,effPrompt',y,effPSD,effGood,effPeak,effPrompt
             ycorr = y/effPSD/effGood/effPeak/effPrompt
             dycorr= ycorr*numpy.sqrt( errPSD*errPSD/effPSD/effPSD + errGood*errGood/effGood/effGood)
+            tdict['corrPo215Hz'+str(l)]  =  ycorr
+            tdict['dcorrPo215Hz'+str(l)] = dycorr
+
+            
             name = 'EffCorr_Po215Rate_Hz_vs_run_with_'+str(l)+'lifetime_cut'
             title = name.replace('_',' ')
             g = self.gU.makeTGraph(X,ycorr,title,name,ex=dX,ey=dycorr)
@@ -629,6 +683,8 @@ class calibWaveDump():
         pcorr = p/effPSD/effLo/effGood/nAlpha
         #print 'pcorr[0],p[0],effPSD[0],effLo,effGood[0],nAlpha',pcorr[0],p[0],effPSD[0],effLo,effGood[0],nAlpha
         dpcorr=  pcorr*numpy.sqrt( errPSD*errPSD/effPSD/effPSD + errGood*errGood/effGood/effGood)
+        tdict['corrPromptHz'] =  pcorr
+        tdict['dcorrPromptHz']= dpcorr
         name = 'EffCorr_PromptRate_Hz_vs_run'
         title = name.replace('_',' ')
         g = self.gU.makeTGraph(X,pcorr,title,name,ex=dX,ey=dpcorr)
@@ -730,7 +786,11 @@ class calibWaveDump():
         for h in hists: rfn.WriteTObject(h)
         rfn.Close()
         print 'calibWaveDump.main Wrote',len(graphs),'graphs,',len(hists),'hists to',fn
-            
+
+
+        
+        self.mTT.makeTTree(tdict,fn=self.outTree,treename='cWD')
+          
         return
     def normResults(self,results):
         '''
@@ -748,7 +808,6 @@ class calibWaveDump():
                 mean,emean,sgm, S,E = results[x]
                 norm[x] = [mean,emean,sgm, S/runtime,E/runtime]
         return norm
-        
 if __name__ == '__main__' :
     '''
     arguments
