@@ -141,6 +141,7 @@ class functions():
     def test3(self):
         '''
         try to fit decay curve
+        iterative approach
         '''
         fn = 'Samples/LiLS01/run3566934507/Figures/optimize_run3566934507.root'
         fn = 'Samples/P50-1/run3568649727/Figures/optimize_run3568649727.root'
@@ -265,6 +266,9 @@ class functions():
         raw_input("Waiting....Hit <CR> to continue")
         return
     def test5(self,fn = 'Samples/P50-1/run3568649727/Figures/optimize_run3568649727.root'):
+        '''
+        test drawMultiObjects
+        '''
         name_hn = 'neutron_vs_time_in_ns'
         name_hg = 'gamma_vs_time_in_ns'
         f = ROOT.TFile.Open(fn,'r')
@@ -273,6 +277,9 @@ class functions():
         hn = f.Get(name_hn)
         hg = f.Get(name_hg)
         objlist,Logy = [ [hn,hg] ], [True]
+
+        #objlist.extend( [hn, hg] )     # temp for testing # of panels
+        #Logy.extend( [False, False] ) # temp for testing # of panel
 
         objlist.append(f.Get('f100_t800'))
         Logy.append(False)
@@ -283,10 +290,50 @@ class functions():
         for i in range(5,65,10):
             name = 'PSD_Q'+str(i).zfill(2)+'_'+str(i+10)+'f100_t800N'
             objlist.append(f.Get(name))
-            Logy.append( False)
-        self.gU.drawMultiObjects(objlist,fname='test5_'+bn,statOpt=0,setLogy=Logy,abscissaIsTime=False,Grid=True,changeColors=True,addLegend=True,dopt='histfunc',gopt='AP',biggerLabels=True)
+            Logy.append( True)
+        self.gU.drawMultiObjects(objlist,fname='test5_'+bn,statOpt=0,setLogy=Logy,abscissaIsTime=False,Grid=True,changeColors=True,addLegend=True,dopt='histfunc',gopt='AP',biggerLabels=False)
         
         return
+    def test6(self,fn = 'Samples/P50-1/run3568649727/Figures/optimize_run3568649727.root'):
+        '''
+        test finding optimal PSD cut
+        open fitted hist, extract function, determine position of valley between
+        two peaks
+        '''
+        debug = True
+        f = ROOT.TFile.Open(fn,'r')
+        favFast = 100
+        favTotal= 800
+        Qlo,Qhi = 15.,25.
+        hname = 'PSD_Q'+ str(int(Qlo)).zfill(2) + '_' + str(int(Qhi)).zfill(2)
+        hname+= 'f' + str(int(favFast)) + '_t' + str(int(favTotal)) + 'N'
+        h = f.Get(hname)
+        ff = None
+        for a in h.GetListOfFunctions():
+            if 'TF1' in a.ClassName(): ff = a
+        print 'hist',h.GetName(),'function',ff.GetName(),'Npar',ff.GetNpar()
+        if ff.GetName()=='GG' and ff.GetNpar()==6:
+            xmi,xma = h.GetXaxis().GetXmin(),h.GetXaxis().GetXmax()
+            xmi,xma = ff.GetParameter(1),ff.GetParameter(1+3) # fitted means of gaussians
+            nx = 100
+            dx = (xma-xmi)/float(nx)
+            xlo,FX = xmi,ff.Eval(xmi)
+            for i in range(nx):
+                x = xmi + (float(i)+0.5)*dx
+                fx = ff.Eval(x)
+                if i%10==0: print 'x',x,'func(x)',fx
+                if fx<FX : FX,xlo = fx,x
+            print 'minimum of',FX,'at',xlo
+            text = ROOT.TText(xlo,FX,'MINIMUM')
+            c = ROOT.TCanvas()
+            h.Draw()
+            h.Draw("same func")
+            text.SetTextAngle(90.)
+            text.Draw()
+            self.drawAndWait(c,SetLogy=False)
+                
+        return
+        
 if __name__ == '__main__':
     F = functions()
     #F.test1()
@@ -294,3 +341,4 @@ if __name__ == '__main__':
     #F.test2()
     #F.test3()
     F.test5()
+    #F.test6()

@@ -44,7 +44,8 @@ class lsqa():
             sd = fn.split('LSQAData')[1]
             dirname = 'Samples' +sd.replace(bn,rn) + '/'
             #print 'bn,rn,sd,dirname',bn,rn,sd,dirname
-        
+
+        self.sampledir = dirname
         self.figdir = dirname+'Figures/'
         self.logdir = dirname+'Logfiles/'
         for dn in [self.figdir, self.logdir]:
@@ -221,7 +222,7 @@ class lsqa():
         f.close()
         print '\rlsqa.wfanaFile Processed',fn
         return Events,gWFToAvg,nWFToAvg
-    def gammaCalib(self,Events):
+    def gammaCalib(self,Events,draw=True):
         '''
         return estimates of compton edge give sets of Qfast,Qtot
         Also return histogram for favorite value of total
@@ -232,7 +233,8 @@ class lsqa():
         fastValues = self.fastValues 
         totalValues= self.totalValues 
         IntValues = [[x,y] for x in fastValues for y in totalValues]
-        nx,xmi,xma = 95,5.,100.
+        nx,xmi = 100,5.+2.
+        xma = xmi+float(nx)/2
         fopt = "SQ"
         EperQ = {}
         E = numpy.array(Events)
@@ -268,7 +270,7 @@ class lsqa():
                 print 'lsqa.gammaCalib Compton edge at',Qedge,'for',name
                 EperQ[key] = -1.
                 if Qedge>0: EperQ[key] = self.Cs137edge/Qedge
-        self.gU.drawMultiHists(hists,'gammaCalib',figdir=self.figdir,Grid=True,fitOpt=1111)
+        if draw : self.gU.drawMultiHists(hists,'gammaCalib',figdir=self.figdir,Grid=True,fitOpt=1111)
         c1.Close()
         writeROOT = False
         if writeROOT:
@@ -283,6 +285,45 @@ class lsqa():
         bn = os.path.basename(fn)
         ts = int((bn.split('.')[0]).replace('run',''))
         return ts
+    def findPreviousOutput(self,fn=None):
+        '''
+        return filename of root file produced by previous analysis of current file.
+        If not, try to find a root file by analysis of run close in time to the current file
+        '''
+        if fn is None: sys.exit('lsqa.findPreviousOutput ERROR No input filename')
+    
+        debug = True
+
+        bn = os.path.basename(fn).split('.')[0] # should be runxxxxxx where xxxxxx = run#
+        runnum = int(bn.replace('run','')) # integer, current run number
+        drun = 10000000000000
+        rbn = 'optimize_'+bn+'.root'
+        rfn = None
+        if bn in self.figdir:  # directory for this run exists, look for root file
+            rfn = self.figdir + rbn
+
+        if not os.path.isfile(rfn): # look in other directories
+            listoffiles = self.gfp.get_filepaths(self.sampledir)
+            sampleName = self.sampledir.split('/')[-2]
+
+            oldrun = None
+            for name in listoffiles:
+                if sampleName in name:
+                    s = name.split('/')
+                    i = s.index(sampleName)
+                    if 'run' in s[i+1]: 
+                        newrun = int(s[i+1].replace('run',''))
+                        if newrun!=oldrun:
+                            if abs(newrun-runnum)<drun:
+                                rbn = 'optimize_'+s[i+1]+'.root'
+                                rfn = self.sampledir + s[i+1] + '/Figures/'+rbn
+                                if os.path.isfile(rfn):
+                                    drun = abs(newrun-runnum)
+                                    oldrun = newrun
+                            
+        if os.path.isfile(rfn): return rfn
+        return None
+                
     def findGammaRun(self,fn=None):
         '''
         find file with run with gamma source closest in time to input file
@@ -347,8 +388,13 @@ class lsqa():
         totalValues= self.totalValues 
         IntValues = [[x,y] for x in fastValues for y in totalValues]
 
+        PSDcut = self.updatePSDcut(fn=filename)
+        print 'lsqa.main Update PSDcut from',self.PSDcut,'to',PSDcut
+        self.PSDcut = PSDcut 
+        
         allhists = []
-        opshists = [] # One Page Summary Histograms
+        opsobjects,opsLogy = [],[] # One Page Summary objects and logy specifications
+    
         
         nx = len(fastValues)
         dx = float(fastValues[1]-fastValues[0])/2.
@@ -364,6 +410,10 @@ class lsqa():
         title= 'Optimize 6Li FOM'
         h6li = ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
         allhists.append(h6li)
+        name = 'Opt_6LiZ'
+        title= 'Optimize 6Li Z'
+        hZ  = ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
+        allhists.append(hZ)
 
         # uncompress input file, if needed
         fn = filename
@@ -381,8 +431,9 @@ class lsqa():
         hng1,hng2 = self.avgWF(nWF,title='Cs137_neutron')
         avWFhists = [ [hgg1,hng1], [hgg2,hng2] ]
         allhists.extend( [hgg1,hng1,hgg2,hng2])
-        EperQ,hfav = self.gammaCalib(gEvents)
-        opshists.append(hfav)
+        EperQ,hfav = self.gammaCalib(gEvents,draw=False)
+        opsobjects.append(hfav)
+        opsLogy.append(False)
         print 'lsqa.main EperQ',EperQ
 
         
@@ -392,7 +443,8 @@ class lsqa():
         hn1,hn2 = self.avgWF(nWF,title='neutron')
         avWFhists.extend( [ [hg1,hn1], [hg2,hn2] ] )
         allhists.extend( [hg1,hn1, hg2,hn2] )
-        opshists.append( [hg2,hn2] )
+        opsobjects.append( [hg2,hn2] )
+        opsLogy.append(True)
         words = self.runType(fn)  # should be either 'G' (for gamma+neutron source) or 'N' (for neutron source only)
 
         if idebug>0:
@@ -404,6 +456,7 @@ class lsqa():
         E = numpy.array(Events)
         hists,qhists,graphs = [],[],[]
         tmg = self.gU.makeTMultiGraph('FOMerific_'+bn)
+        tmgZ= self.gU.makeTMultiGraph('Zerific_'+bn)
         nx,xmi,xma = 100,0.,100.
         ny,ymi,yma = 100,0.,0.5
         for i,vv in enumerate(IntValues):
@@ -414,9 +467,11 @@ class lsqa():
             title = 'PSD vs Qtot '+name.replace('_',' ')
             h = ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
             qname = 'Etot_'+name+'_wPSDcut'
-            qtitle = 'Etot ' + name + 'PSD>'+str(self.PSDcut)
+            qtitle = 'Etot ' + name + 'PSD>'+ '{0:.4f}'.format(self.PSDcut)
             qh= ROOT.TH1D(qname,qtitle,nx,EperQ[eKey]*xmi,EperQ[eKey]*xma)
-            if favorite: opshists.extend( [h,qh] )
+            if favorite:
+                opsobjects.extend(  [h,qh] )
+                opsLogy.extend( [False for i in range(len([h,qh]))] )
             
             aQtot,aPSD = [],[]
             for pair in E[:,i]:
@@ -431,40 +486,57 @@ class lsqa():
             qhists.append(qh)
             aQtot = numpy.array(aQtot)
             aPSD  = numpy.array(aPSD)
-            FOM,dFOM,FOMhists,FOMgraph,QAFOM = self.beerFOM(aQtot,aPSD,Qlo,Qhi,EperQ[eKey],PSDdef+words,bn,Draw=True,debug=False)
+            FOM,dFOM,FOMhists,FOMgraph,QAFOM,Zgraph,ZFOM = self.beerFOM(aQtot,aPSD,Qlo,Qhi,EperQ[eKey],PSDdef+words,bn,Draw=True,debug=False)  # QAFOM, ZFOM are 2 element arrays
             sFOM,sdFOM = numpy.sum(FOM),numpy.sqrt(numpy.sum([x*x for x in dFOM]))
             sumFOM[PSDdef+words] = (sFOM,sdFOM)+QAFOM
             hcum.Fill(float(ifast),float(itot),sFOM)
             h6li.Fill(float(ifast),float(itot),float(QAFOM[0]))
+            hZ.Fill(float(ifast),float(itot),float(ZFOM[0]))
             #print 'lsqa.main {0} sum {1:.2f}({2:.2f})'.format(PSDdef+words,sFOM,sdFOM) 
+            if favorite:
+                opsobjects.extend( FOMhists )
+                opsLogy.extend( [True for i in range(len(FOMhists))] )
+                opsobjects.append( FOMgraph )
+                opsobjects.append( Zgraph )
+                opsLogy.append( False ) # FOMgraph
+                opsLogy.append( False ) # Zgraph
             allhists.extend( FOMhists )
             graphs.append( FOMgraph )
+            graphs.append( Zgraph )
             self.gU.color(FOMgraph,i,i,setMarkerColor=True)
+            self.gU.color(Zgraph,i,i,setMarkerColor=True)
             tmg.Add( FOMgraph )
+            tmgZ.Add( Zgraph )
+            
 
 
         print " PSD_defn      Cum_FOM   6LiFOM     Sorted by Cum_FOM  lsqa.main"
         for g in sorted( sumFOM.items(), key=lambda x: x[1]):
             print ' {0:12} {1:.2f}({2:.2f}) {3:.3f}({4:.3f})'.format(g[0],g[1][0],g[1][1],g[1][2],g[1][3])
 
+        for i,h in enumerate(opsobjects):
+            logy = opsLogy[i]
+            if type(h) is list:
+                for hh in h: print 'lsqa.main opsobjects multi,logy',i,hh.GetName(),logy
+            else:
+                print 'lsqa.main opsobjects,logy',i,h.GetName(),logy
+
+        self.gU.drawMultiObjects(opsobjects,setLogy=opsLogy,fname='summary_'+bn,figdir=self.figdir,statOpt=0,abscissaIsTime=False,Grid=True,changeColors=True,addLegend=True,biggerLabels=1.5,dopt='histfunc',gopt='AP',forceNX=3)
+
         self.gU.drawMultiHists(hists,'optimize_'+bn,figdir=self.figdir,forceNX=4,Grid=True)
         self.gU.drawMultiHists(qhists,'keVee_with_PSDcut_'+bn,figdir=self.figdir,forceNX=4,Grid=True)
-        self.gU.drawMultiHists([h6li,hcum],'scan_'+bn,figdir=self.figdir,Grid=False,statOpt=0,dopt='colztextcont3')
+        self.gU.drawMultiHists([h6li,hcum,hZ],'scan_'+bn,figdir=self.figdir,Grid=False,statOpt=0,dopt='colztextcont3')
         tmg.SetMinimum(0.)
         tmg.SetMaximum(3.0)
         canvas = self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='keVee',yAxisLabel='FOM',NLegendColumns=3)
+        canvasZ = self.gU.drawMultiGraph(tmgZ,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='keVee',yAxisLabel='Z',NLegendColumns=3)
         graphs.append( tmg )
+        graphs.append( tmgZ )
 
 
-        self.gU.drawMultiHists(avWFhists,fname='avergeWF_'+bn,statOpt=0,setLogy=True,abscissaIsTime=False,Grid=True,changeColors=True,addLegend=True)
+        self.gU.drawMultiHists(avWFhists,fname='avergeWF_'+bn,figdir=self.figdir,statOpt=0,setLogy=True,abscissaIsTime=False,Grid=True,changeColors=True,addLegend=True)
 
-        for i,h in enumerate(opshists):
-            if type(h) is list:
-                for hh in h: print 'lsqa.main opshists multi',i,hh.GetName()
-            else:
-                print 'lsqa.main opshists',i,h.GetName()
 
-        self.gU.drawMultiHists(opshists,fname='summary_'+bn,statOpt=0,abscissaIsTime=False,Grid=True,changeColors=True,addLegend=True,biggerLabels=False)
 
         rfn = self.figdir + 'optimize_'+bn+'.root'
         f = ROOT.TFile.Open(rfn,'RECREATE')
@@ -620,11 +692,13 @@ class lsqa():
         ybinsize = (yma-ymi)/float(ny)
 
         FOMmin,FOMmax = 0.,3.
+        Zmin,Zmax     = 0.,0.2
 
         gMean,nMean,gSigma,nSigma = None,None,0.02,0.02  # initial guesses
         nysig = int(0.02/ybinsize + 0.01)  # 1 sigma in bins
         c1 = ROOT.TCanvas() # open, so it can be closed
-        X,dX,Y,dY = [],[],[],[]            
+        X,dX,Y,dY = [],[],[],[]  # X = charge or energy, Y = FOM
+        Z,dZ = [],[]         # Z = difference in means for nuclear and electronic recoils
         for lo,hi in zip(Qlo,Qhi):
             A = (lo<=Qtot)*(Qtot<hi)
             title = name = 'PSD_Q'+str(int(lo)).zfill(2)+'_'+str(int(hi)).zfill(2) + PSDdef
@@ -657,6 +731,8 @@ class lsqa():
                 FWHM = 2.*math.sqrt(2.*math.log(2.))*math.sqrt(gSigma*gSigma + nSigma*nSigma)
                 FOM = abs(gMean-nMean)/FWHM
 
+                dgMean,dnMean = GG.GetParError(1),GG.GetParError(1+3)
+
                 par = []
                 for ii in range(6): par.append( GG.GetParameter(ii) )
                 par = numpy.array(par)
@@ -672,24 +748,36 @@ class lsqa():
             if FOM is None:
                 Y.append(0.)
                 dY.append(10.)
+                Z.append(0.)
+                dZ.append(10.)
                 if debug: print FOM
             else:
                 Y.append(FOM)
                 dY.append(dFOM)
+                Z.append(nMean-gMean)
+                dz = math.sqrt(dnMean*dnMean+dgMean*dgMean)
+                dZ.append(dz)
                 FOMmin = min(FOM-dFOM,FOMmin)
                 FOMmax = max(FOM+dFOM,FOMmax)
+                #Zmin = min(nMean-gMean-dz,Zmin)
+                Zmax = max(nMean-gMean+dz,Zmax)
                 if debug: print ' {0:.2f}({1:.2f})'.format(FOM,dFOM)
             
         c1.Close() 
         name = 'FOM_v_Q_'+PSDdef+bn
-        QA_FOM = None
+        nameZ= 'Z_v_Q_'+PSDdef+bn
+        QA_FOM,QA_Z = None,None
         if EperQ is not None:
-            'FOM_v_keVee_'+PSDdef+bn
+            name,nameZ = 'FOM_v_keVee_'+PSDdef+bn, 'Z_v_keVee_'+PSDdef+bn
             QA_FOM = self.getFOMat6Li(numpy.array(X),numpy.array(Y),numpy.array(dX),numpy.array(dY))
-        title = name.replace('_',' ')
-        g = self.gU.makeTGraph(X,Y,title,name,ex=dX,ey=dY)
+            QA_Z   = self.getFOMat6Li(numpy.array(X),numpy.array(Z),numpy.array(dX),numpy.array(dZ))
+        title,titleZ = name.replace('_',' '),nameZ.replace('_',' ')
+        g,gZ = self.gU.makeTGraph(X,Y,title,name,ex=dX,ey=dY),self.gU.makeTGraph(X,Z,titleZ,nameZ,ex=dX,ey=dZ)
         self.gU.color(g,0,0,setMarkerColor=True)
-        if Draw: self.gU.drawGraph(g,figDir=self.figdir,option='AP',yLimits=[FOMmin,FOMmax])
+        self.gU.color(gZ,0,0,setMarkerColor=True)
+        if Draw:
+            self.gU.drawGraph(g,figDir=self.figdir,option='AP',yLimits=[FOMmin,FOMmax])
+            self.gU.drawGraph(gZ,figDir=self.figdir,option='AP',yLimits=[Zmin,Zmax])
 
 
         
@@ -706,7 +794,7 @@ class lsqa():
             if len(hists2d)>0: self.gU.drawMultiHists(hists2d,nameForFile+'_2d',figdir=self.figdir,forceNX=2,Grid=True)
 
         
-        return Y,dY,hists,g,QA_FOM
+        return Y,dY,hists,g,QA_FOM,gZ,QA_Z
     def getFOMat6Li(self,E,FOM,dE,dFOM):
         '''
         estimate FOM and uncertainty at 6Li capture energy in keVee given FOM as function of energy
@@ -870,7 +958,50 @@ class lsqa():
         #plt.savefig(figpdf)
         #print 'lsqa.drawPulse Wrote',figpdf
         return
-        
+    def updatePSDcut(self,fn = None):
+        '''
+         #'Samples/P50-1/run3568649727/Figures/optimize_run3568649727.root'):
+
+        return optimal PSD cut based on past (or near in time) processing of same sample
+        open fitted hist, extract function, determine position of valley between
+        two peaks
+        '''
+        debug = False
+        PSDcut = self.PSDcut 
+        rfn = self.findPreviousOutput(fn=fn)
+        if rfn is None: return PSDcut # no file found
+        print 'lsqa.updatePSDcut For update, use',rfn
+        f = ROOT.TFile(rfn,'r')
+        favFast = self.favFast
+        favTotal= self.favTotal
+        Qlo,Qhi = self.QforAvg
+        hname = 'PSD_Q'+ str(int(Qlo)).zfill(2) + '_' + str(int(Qhi)).zfill(2)
+        hname+= 'f' + str(int(favFast)) + '_t' + str(int(favTotal)) + 'N'
+        h = f.Get(hname)
+        ff = None
+        for a in h.GetListOfFunctions():
+            if 'TF1' in a.ClassName(): ff = a
+        if ff is None:
+            print 'lsqa.updatePSDcut WARNING PSD cut NOT updated. Could not find function in hist',hname
+            return PSDcut
+        if debug: print 'lsqa.updatePSDcut hist',h.GetName(),'function',ff.GetName(),'Npar',ff.GetNpar()
+
+        if ff.GetName()=='GG' and ff.GetNpar()==6:
+            xmi,xma = h.GetXaxis().GetXmin(),h.GetXaxis().GetXmax()
+            xmi,xma = ff.GetParameter(1),ff.GetParameter(1+3) # fitted means of gaussians
+            nx = 100
+            dx = (xma-xmi)/float(nx)
+            xlo,FX = xmi,ff.Eval(xmi)
+            for i in range(nx):
+                x = xmi + (float(i)+0.5)*dx
+                fx = ff.Eval(x)
+                if i%10==0 and debug : print 'ls.updatePSDcut scan x',x,'func(x)',fx
+                if fx<FX : FX,xlo = fx,x
+            PSDcut = xlo
+            if debug: print 'lsqa.updatePSDcut minimum of',FX,'at updated PSDcut',xlo
+                
+        return PSDcut
+
         
 if __name__ == '__main__':
     if sys.argv[1]=='SIMPLE':
