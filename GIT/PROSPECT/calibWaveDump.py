@@ -155,6 +155,8 @@ class calibWaveDump():
         return normalization (# of events) and fitted lifetime (and uncertainties)
         from delayed energy vs tDelay-dPrompt distribution using off-time window
         background subtraction
+        At present delayed energy vs deltaT runs from deltaT = (0,5*Po215lifetimes)
+        from max(lifeRange in cutsAndConstants.py).
         20170105 return normalization when lifetime is fixed to nominal lifetime,
         but fitted lifetime when both normalization and lifetime are free fit
         '''
@@ -368,6 +370,8 @@ class calibWaveDump():
         PromptName = ['Prompt_Mean','Prompt_StdDev','Prompt_Median','Prompt_Rate_Hz']
         LIFE  = [],[],[],[] # N,dN,tau,dtau
         LIFEName = ['Po215Hz','dPo215Hz','Fitted_Tau','dFitted_Tau']
+        ecLIFE = [],[]
+        ecLIFEName = ['effcPo215Hz','deffcPo215Hz']
         T = []  # time of start of run
         ER,dER = [],[] # expected rate and uncertainty of sample at start of run
         GoodCut = [],[]
@@ -408,6 +412,9 @@ class calibWaveDump():
                     GOOD = False
                     print 'calibWaveDump.main',rn,'bad run'
                 if GOOD:
+                    # loop returns results of fit to bkgd-subtracted delayed hist
+                    # results[key] are mean,dmean,sigma, area,darea for
+                    #   key=integer cut on coincidence window in number of lifetimes
                     results = self.loop(fn=fn,withPromptCut=withPromptCut)
                     for l in results:
                         if results[l][3]<Threshold : GOOD = False
@@ -436,23 +443,29 @@ class calibWaveDump():
                         if i==3:
                             dPrompt[i].append( math.sqrt(float(pStats[3]))/norm[i] )
                             
-                    # fit PSD distribution to estimate PSD cut effy    
-                    psdEffy = self.fitPSD(fn=fn)
+                    # fit PSD distribution to estimate PSD cut effy
+                    # fitPSD returns  eff_est1, deff_est1, eff_est2, deff_est2, eff_combine,deff_combine
+                    # eff_est1 = fractional fitted gaussian area above PSD cut
+                    # eff_est2 = fractional bkgd-subtracted hist area above PSD cut
+                    # eff_combine = average eff_est1 & eff_est2
+                    psdEffy = self.fitPSD(fn=fn) 
                     for i,psd in enumerate(PSD):
                         psd.append( psdEffy[i] )
                         
                     # fit putative Po215 lifetime distribution to extract
                     # fitted lifetime, number and rate of Po215 events
+                    # getLife returns N,dN, tau,dtau
+                    # tau,dtau = fitted lifetime, error for 2 parameter (N,tau) fit
+                    # N,dN = fitted # events, error for 1 parameter fit, tau fixed at known Po215 lifetime
                     lf = self.getLife(fn=fn,withPromptCut=withPromptCut)
                     norm = (runtime,runtime,1.,1.)
                     for i,life in enumerate(LIFE):
                         life.append( lf[i]/norm[i] )
 
-                        
-                        
-
-                    # get per run results (start timestamp, sources used, sample name, runtim    
+                    # get per run results (start timestamp, sources used, sample name, runtim
+                    # add to results dict with key=rn=string run number =runXXXXX
                     results[rn] = [timestamp,sources,sample,runtime]
+                    # normalize Po215 peak area and uncertainty for each lifetime cut
                     norm = self.normResults(results)
 
                     # expected Ac227 rate at start of run given timestamp(converted from ms) and sample name
@@ -519,14 +532,15 @@ class calibWaveDump():
         tmgL= self.gU.makeTMultiGraph('Fitted_lifetime_vs_run')
         tmgAll = self.gU.makeTMultiGraph('Ac227_rate_Hz_vs_run')
         tmgAllT = self.gU.makeTMultiGraph('Ac227_rate_Hz_vs_time')
-        graphs = [tmg,tmgT,tmgEC,tmgTEC,tmgP,tmgS,tmgPSD,tmgN,tmgL,tmgAll,tmgAllT]
+        tmgEff = self.gU.makeTMultiGraph('Efficiency_vs_run')
+        graphs = [tmg,tmgT,tmgEC,tmgTEC,tmgP,tmgS,tmgPSD,tmgN,tmgL,tmgAll,tmgAllT, tmgEff]
         hists = []
 
         title = 'Expected sample rate vs run'
         name  = title.replace(' ','_')
         y,dy = numpy.array(ER),numpy.array(dER)
         g = self.gU.makeTGraph(X,y,title,name,ey=dy,ex=dX)
-        self.gU.color(g,27,27,setMarkerColor=True)
+        self.gU.color(g,3,3,setMarkerColor=True)
         tmg.Add(g)
         tmgEC.Add(g)
         tmgN.Add(g)
@@ -536,7 +550,7 @@ class calibWaveDump():
         title = 'Expected sample rate vs time'
         name  = title.replace(' ','_')
         g = self.gU.makeTGraph(T,y,title,name,ey=dy,ex=dX)
-        self.gU.color(g,27,27,setMarkerColor=True)
+        self.gU.color(g,3,3,setMarkerColor=True)
         tmgT.Add(g)
         tmgTEC.Add(g)
         tmgAllT.Add(g)
@@ -629,11 +643,14 @@ class calibWaveDump():
         self.gU.color(g,1,1,setMarkerColor=True)
         self.gU.drawGraph(g,figDir=self.figdir)
         graphs.append(g)
+        tmgEff.Add(g)
 
         # apply effy corrections to Po215 rate and prompt spectrum (entire alpha spectrum)
         Ycorr,dYcorr = [],[] # will become corrected Po215 rate
         Pcorr,dPcorr = [],[] # will become prompt corrected rate
+        # effPeak is efficiency of selecting Po215 in bkgd-subtracted delayed spectrum
         effPeak = quad(scipy.stats.norm.pdf,-self.cAC.nsigmaCutPo215Peak,self.cAC.nsigmaCutPo215Peak)[0]
+        # effPrompt is putative effy of cut on prompt energy distribution to isolate Po215 in delayed dist.
         effPrompt = 1.
         if withPromptCut : effPrompt = self.cAC.promptChargeCutEffy
         effLo     = self.cAC.lowChargeCutEffy
@@ -648,6 +665,42 @@ class calibWaveDump():
         tdict['effPSD']  = effPSD
         tdict['errPSD']  = errPSD
         tdict['effPrompt']=numpy.array([effPrompt for x in effPSD]) # same value correct number of times
+        tdict['effLo']    =numpy.array([effLo     for x in effPSD]) # same value correct number of times
+
+        name = 'PSDEffy_vs_run'
+        title = name.replace('_',' ')
+        g = self.gU.makeTGraph(X,effPSD,title,name,ex=dX,ey=errPSD)
+        self.gU.color(g,2,2,setMarkerColor=True)
+        graphs.append(g)
+        tmgEff.Add(g)
+
+        name = 'LowEnCutEffy_vs_run'
+        title = name.replace('_',' ')
+        g = self.gU.makeTGraph(X,tdict['effLo'],title,name,ex=dX,ey=dX) # no uncertainty on this effy
+        self.gU.color(g,3,3,setMarkerColor=True)
+        graphs.append(g)
+        tmgEff.Add(g)
+        
+
+        # apply efficiency correction to Po215 rate from lifetime fit
+        # effy corr is square of product of effy of goodCh0, PSD and lowChargeCut
+        #  because same cuts are applied to both prompt and delayed candidates.
+        #  Assume no uncertainty on lowChargeCut
+        for i,Nlf in enumerate(LIFE[0]):
+            dNlf = LIFE[1][i] # fitted error on N of events from lifetime fit
+            fG,dG = effGood[i],errGood[i]
+            fP,dP = effPSD[i],errPSD[i]
+            ec = math.pow(fG*fP*effLo,2)
+            R  = Nlf/ec
+            dR= math.sqrt( dG*dG/fG/fG + dP*dP/fP/fP ) * 2. * R
+            dR= math.sqrt( dR*dR/R/R + dNlf*dNlf/Nlf/Nlf ) * R
+            ecLIFE[0].append( R )
+            ecLIFE[1].append( dR)
+        for word,value in zip(ecLIFEName,ecLIFE):
+            tdict[word] = value
+            
+        
+        
         
         for l in sorted(Y.keys()):
             y = numpy.array(Y[l])
@@ -664,7 +717,7 @@ class calibWaveDump():
             self.gU.color(g,int(l),int(l),setMarkerColor=True)
             self.gU.drawGraph(g,figDir=self.figdir)
             tmgEC.Add(g)
-            tmgAll.Add(g)
+
             graphs.append(g)
 
             name = 'EffCorr_Po215Rate_Hz_vs_time_with_'+str(l)+'lifetime_cut'
@@ -673,7 +726,7 @@ class calibWaveDump():
             self.gU.color(g,int(l),int(l),setMarkerColor=True)
             self.gU.drawGraph(g,figDir=self.figdir)
             tmgTEC.Add(g)
-            tmgAllT.Add(g)
+
             graphs.append(g)
             
 
@@ -688,7 +741,7 @@ class calibWaveDump():
         name = 'EffCorr_PromptRate_Hz_vs_run'
         title = name.replace('_',' ')
         g = self.gU.makeTGraph(X,pcorr,title,name,ex=dX,ey=dpcorr)
-        self.gU.color(g,9,9,setMarkerColor=True)
+        self.gU.color(g,4,4,setMarkerColor=True)
         self.gU.drawGraph(g,figDir=self.figdir)
         tmgAll.Add(g)
         graphs.append(g)
@@ -696,7 +749,7 @@ class calibWaveDump():
         name = 'EffCorr_PromptRate_Hz_vs_time'
         title = name.replace('_',' ')
         g = self.gU.makeTGraph(T,pcorr,title,name,ex=dX,ey=dpcorr)
-        self.gU.color(g,9,9,setMarkerColor=True)
+        self.gU.color(g,4,4,setMarkerColor=True)
         self.gU.drawGraph(g,figDir=self.figdir)
         tmgAllT.Add(g)
         graphs.append(g)
@@ -718,50 +771,61 @@ class calibWaveDump():
         
 
         # effy-corrected Po215 rate from lifetime fit
-        y,dy = numpy.array(LIFE[0]),numpy.array(LIFE[1])
-        ycorr = y/effPSD/effLo/effGood
-        dycorr= ycorr*numpy.sqrt( errPSD*errPSD/effPSD/effPSD + errGood*errGood/effGood/effGood )
+        y,dy = numpy.array(ecLIFE[0]),numpy.array(ecLIFE[1])
         name = 'EffCorr_Po215_rate_from_lifetime_fit_vs_run'
         title = name.replace('_',' ')
-        g = self.gU.makeTGraph(X,ycorr,title,name,ex=dX,ey=dycorr)
-        self.gU.color(g,8,8,setMarkerColor=True)
+        g = self.gU.makeTGraph(X,y,title,name,ex=dX,ey=dy)
+        self.gU.color(g,2,2,setMarkerColor=True)
         self.gU.drawGraph(g,figDir=self.figdir)
         tmgAll.Add(g)
         graphs.append(g)
 
-        name = 'EffCorr_Po215_rate_from_lifetime_fit'
+        name = 'EffCorr_Po215_rate_from_lifetime_fit_vs_time'
         title = name.replace('_',' ')
-        xma,xmi,dq = max(ycorr),min(ycorr),(max(ycorr)-min(ycorr))/10.
-        h = self.gU.makeTH1D(ycorr,title,name,xmi=xmi-dq,xma=xma+dq,nx=50)
-        hists.append(h)
-        
-        name = 'EffCorr_Po215_residual_from_lifetime_fit'
-        title = name.replace('_',' ')
-        q = (ycorr-er)/numpy.sqrt( dycorr*dycorr + der*der)
-        xma,xmi,dq = max(q),min(q),(max(q)-min(q))/10.
-        h = self.gU.makeTH1D(q,title,name,xmi=xmi-dq,xma=xma+dq,nx=50)
-        hists.append(h)
-        
-        # correlations?
-        for k in range(0,5,4):
-            name = 'Ac227_effcor_fromPrompt_vs_Po215_effcor_fromLifetime_'+str(k)
-            title = name.replace('_',' ')
-            if k==0:
-                xmi=ymi=min(min(ycorr),min(pcorr))
-                xma=yma=max(max(ycorr),max(pcorr))
-                dq = (xma-xmi)/20.
-            elif k>0:
-                xa,ya,sx,sy = numpy.mean(ycorr),numpy.mean(pcorr),numpy.std(ycorr),numpy.std(pcorr)
-                xmi,ymi = xa-float(k)*sx,ya-float(k)*sy
-                xma,yma = xa+float(k)*sx,ya+float(k)*sy
-                dq = 0.
-            h = self.gU.makeTH2D(ycorr,pcorr,title,name,xmi=xmi-dq,xma=xma+dq,ymi=ymi-dq,yma=yma+dq)
-            hists.append(h)
-        
+        g = self.gU.makeTGraph(T,y,title,name,ex=dX,ey=dy)
+        self.gU.color(g,2,2,setMarkerColor=True)
+        self.gU.drawGraph(g,figDir=self.figdir)
+        tmgAllT.Add(g)
+        graphs.append(g)
 
-        self.gU.drawMultiHists(hists,'Ac227Hists',figdir=self.figdir,statOpt='2211',biggerLabels=False,Grid=True)
-                                                
-        
+        # difference between effy-correcgted Po215 rate from lifetime fit and expected rate
+        name = 'Po215_rate_from_lifetime_fit_minus_expected_rate_vs_run'
+        title = name.replace('_',' ')
+        v1,v2 = numpy.array(ecLIFE[1]),numpy.array(dER)
+        Q,dQ = numpy.subtract(ecLIFE[0],ER),numpy.sqrt( v1*v1 + v2*v2 )
+        g = self.gU.makeTGraph(X,Q,title,name,ex=dX,ey=dQ)
+        self.gU.color(g,1,1,setMarkerColor=True)
+        self.gU.drawGraph(g,figDir=self.figdir)
+        graphs.append(g)
+
+        name = name.replace('run','time')
+        title = name.replace('_',' ')
+        g = self.gU.makeTGraph(T,Q,title,name,ex=dX,ey=dQ)
+        self.gU.color(g,2,2,setMarkerColor=True)
+        self.gU.drawGraph(g,figDir=self.figdir)
+        graphs.append(g)
+
+        hQ = self.gU.makeTH1D(Q/dQ,'(Po215rate(lifetime fit) - expected rate)/uncertainty','Po215_er_by_unc',nx=50,xmi=-5.,xma=5.)
+        hists.append( hQ )
+            
+        # difference between effy-correcgted Ac227 rate from prompt rate  and expected rate
+        name = 'Ac227_rate_from_prompt_rate_minus_expected_rate_vs_run'
+        title = name.replace('_',' ')
+        Q,dQ = numpy.subtract(pcorr,ER),numpy.sqrt( dpcorr*dpcorr + v2*v2 )
+        g = self.gU.makeTGraph(X,Q,title,name,ex=dX,ey=dQ)
+        self.gU.color(g,3,3,setMarkerColor=True)
+        self.gU.drawGraph(g,figDir=self.figdir)
+        graphs.append(g)
+
+        name = name.replace('run','time')
+        title = name.replace('_',' ')
+        g = self.gU.makeTGraph(T,Q,title,name,ex=dX,ey=dQ)
+        self.gU.color(g,4,4,setMarkerColor=True)
+        self.gU.drawGraph(g,figDir=self.figdir)
+        graphs.append(g)
+
+        hQ = self.gU.makeTH1D(Q/dQ,'(Ac227rate(prompt events) - expected rate)/uncertainty','Ac227_er_by_unc',nx=50,xmi=-5.,xma=5.)
+        hists.append( hQ )
             
 
         self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Coincidence rate(Hz)')
@@ -776,6 +840,8 @@ class calibWaveDump():
 
         self.gU.drawMultiGraph(tmgAll,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Ac227 rate (Hz)')
         self.gU.drawMultiGraph(tmgAllT,figdir=self.figdir,abscissaIsTime=True,xAxisLabel='Run number',yAxisLabel='Ac227 rate (Hz)')
+
+        self.gU.drawMultiGraph(tmgEff,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Efficiency')
         
         rl = sorted(listOfGoodRunsAS)
         print 'calibWaveDump.main Opened',len(listOfRunsAS),'root files with',len(listOfGoodRunsAS),'good runs. First,last good runs',rl[0],rl[-1]
@@ -788,8 +854,8 @@ class calibWaveDump():
         print 'calibWaveDump.main Wrote',len(graphs),'graphs,',len(hists),'hists to',fn
 
 
-        
-        self.mTT.makeTTree(tdict,fn=self.outTree,treename='cWD')
+
+        self.mTT.makeTTree(tdict,fn=self.outTree,treename='cWD',debug=False)
           
         return
     def normResults(self,results):

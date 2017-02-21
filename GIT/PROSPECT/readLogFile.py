@@ -99,7 +99,10 @@ if __name__ == '__main__' :
         for fn in sorted( file_paths ):
             ts,s,sam,rt = rLF.readFile(fn=fn)
             Show = False
-            if ts is None or s is None or sam is None or rt is None: Show = True
-            if s is not None and 'Ac-227' not in s: Show = True
-            if sam is not None and 'LiLS#2'not in sam: Show = True
-            if Show: print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt
+            Flag = 0
+            if ts is None or s is None or sam is None or rt is None: Flag += 1
+            if s is not None and 'Ac-227' not in s: Flag += 10
+            if sam is not None and 'LiLS#2'not in sam: Flag += 100
+            if sam=='LiLS#2s': Flag += 1000
+            if Flag: print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt,'Flag',Flag
+        print 'Flag: 1=any=None, 10=bad src, 100=bad sample, 1000=LiLS#2s'

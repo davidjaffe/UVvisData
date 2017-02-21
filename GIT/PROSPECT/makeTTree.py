@@ -13,7 +13,7 @@ from array import array
 class makeTTree():
     def __init__(self):
         return
-    def makeTTree(self,C,fn='TTREE.ROOT',treename='tree'):
+    def makeTTree(self,C,fn='TTREE.ROOT',treename='tree',debug=False):
         '''
         given dict C create tree treename in file fn
 
@@ -21,7 +21,8 @@ class makeTTree():
         floats, ints in Branch from http://wlav.web.cern.ch/wlav/pyroot/tpytree.html
         
         '''
-        debug = False
+
+        
             
         
         f = ROOT.TFile( fn, 'recreate' )
@@ -31,6 +32,7 @@ class makeTTree():
         TD = {}
         orderedkeys = sorted( C.keys() )
         KIND = {}
+        LENGTH = {}
         L = 0
         for idx,key in enumerate(orderedkeys):
             D = C[key]
@@ -41,6 +43,7 @@ class makeTTree():
             if kind=='C':
                 # stuff for string
                 l = max([len(q) for q in C[key]])
+                LENGTH[key] = l
                 if debug: print 'self.makeTTree l',l
                 TD[key] =   bytearray(l+1) 
                 A = key + '['+str(l+1)+']/'+kind
@@ -58,13 +61,16 @@ class makeTTree():
                 kind = KIND[key]
                 D = C[key]
                 if kind=='C':
+                    for j in range(LENGTH[key]):
+                        TD[key][j] = ' '
+                    if debug: print 'prefill key,TD[key]',key,TD[key]
                     for j,c in enumerate(D[i]):
                         TD[key][j] = c
                 else:
                     TD[key][0] =  D[i]
             if debug : print 'makeTTree.makeTTree i,TD',i,TD
             t.Fill()
-        if debug : t.Scan()
+
 
         if debug : t.Print()
         f.Write()

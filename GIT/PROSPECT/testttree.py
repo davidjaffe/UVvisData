@@ -49,13 +49,13 @@ if 0:
 if 1:
     name,run,x = [],[],[]
     for i in range(5):
-        name.append('ABC'+ ''.join(['x' for q in range(i)]))
+        name.append('ABC'+ ''.join(['x' for q in range(5-i)]))
         run.append(i)
         x.append(float(i)+float(i)/9.)
         
     print 'name',name,'\nrun',run,'\nx',x,'\n'
 
 C = {'run': run, 'x': x, 'name': name}
-mtt.makeTTree(C,fn='TTREE.ROOT',treename='tree')
+mtt.makeTTree(C,fn='TTREE.ROOT',treename='tree',debug=True)
 sys.exit('that is all')
 
