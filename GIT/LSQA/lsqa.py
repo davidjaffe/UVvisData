@@ -24,13 +24,22 @@ import gzip,shutil
 import datetime,Logger
 from scipy import signal as scipy_signal # used by getPeaks
 from scipy import interpolate as scipy_interpolate # used by getFOMat6Li
-
+import convertLabviewTime
 
 class lsqa():
     def __init__(self,fn=None,SIMPLE=False):
         self.wfa = wfanal.wfanal()
         self.gU  = graphUtils.graphUtils()
         self.gfp = get_filepaths.get_filepaths()
+        self.cLT = convertLabviewTime.convertLabviewTime()
+
+        # file to be updated with summary results for each job
+        self.resultsSummaryFile = 'Samples/resultsSummaryFile.txt'
+                    
+        # job start time
+        now = datetime.datetime.now()
+        fmt = '%Y%m%d_%H%M%S_%f'
+        self.cnow = cnow = now.strftime(fmt)
 
         if SIMPLE:
             print 'lsqa__init__ SIMPLE processing only'
@@ -58,11 +67,8 @@ class lsqa():
                     print 'lsqa.__init__',e
                 else:
                     print 'lsqa.__init__ created',dn
-                    
+        
         # produce logfile name and route stdout to logfile and terminal
-        now = datetime.datetime.now()
-        fmt = '%Y%m%d_%H%M%S_%f'
-        cnow = now.strftime(fmt)
         lfn = self.logdir + rn + '_' + cnow + '.log'
         sys.stdout = Logger.Logger(fn=lfn)
         print 'lsqa__init__ Output directed to terminal and',lfn
@@ -348,7 +354,7 @@ class lsqa():
             size = float(os.path.getsize(n))
             if debug>0 : print 'lsqa.findGammaRun path,extension,size',n,extension,size
             if extension in sizes:
-                if abs(size/sizes[extension]-1.)<0.1:
+                if abs(size/sizes[extension]-1.)<0.5:
                     ts = self.timestampFromFilename(n)
                     if debug>0 : print 'lsqa.findGammaRun ts,ts-ts0,dt,size/sizes[extension]',ts,ts-ts0,dt,size/sizes[extension]
                     if dt is None:
@@ -394,6 +400,7 @@ class lsqa():
         
         allhists = []
         opsobjects,opsLogy = [],[] # One Page Summary objects and logy specifications
+        summaryInfo = {}
     
         
         nx = len(fastValues)
@@ -421,11 +428,17 @@ class lsqa():
         bn = os.path.basename(fn).replace('.h5','')
 
         ### gamma calibration
+        ### identify gamma file appropriate for this neutron only run
+        ### create histograms of average pulse shape for gamma and neutron band
+        ### then do gamma calibration to get energy/charge for each definition of total integral as well as
+        ### histogram of charge distribution for favorite total integral definition
         gammaFile = ZgammaFile = self.findGammaRun(fn)
         print 'lsqa.main fn',fn,'gammaFile',ZgammaFile
         if ZgammaFile[-3:]=='.gz':
             gammaFile = self.gunzip(ZgammaFile)
         print 'lsqa.main gammaFile',gammaFile
+        summaryInfo['gammaFile'] = gammaFile
+        summaryInfo['gammaRunTime'] = self.fileTime(gammaFile)
         gEvents,gWF,nWF = self.wfanaFile(fn=gammaFile)
         hgg1,hgg2 = self.avgWF(gWF,title='Cs137_gamma')
         hng1,hng2 = self.avgWF(nWF,title='Cs137_neutron')
@@ -435,10 +448,16 @@ class lsqa():
         opsobjects.append(hfav)
         opsLogy.append(False)
         print 'lsqa.main EperQ',EperQ
-
+        key = 't'+str(self.favTotal)
+        
+        summaryInfo['fav'] = [self.favFast, self.favTotal]
+        summaryInfo[key] = EperQ[key]
+        sKeys = ['fav',key,'gammaFile','neutronFile','gammaRunTime','neutronRunTime']
         
         # turn waveforms into sets of Qfast,Qtot pairs
         Events,gWF,nWF = self.wfanaFile(fn=fn)
+        summaryInfo['neutronFile'] = fn
+        summaryInfo['neutronRunTime'] = self.fileTime(fn)
         hg1,hg2 = self.avgWF(gWF,title='gamma')
         hn1,hn2 = self.avgWF(nWF,title='neutron')
         avWFhists.extend( [ [hg1,hn1], [hg2,hn2] ] )
@@ -487,6 +506,13 @@ class lsqa():
             aQtot = numpy.array(aQtot)
             aPSD  = numpy.array(aPSD)
             FOM,dFOM,FOMhists,FOMgraph,QAFOM,Zgraph,ZFOM = self.beerFOM(aQtot,aPSD,Qlo,Qhi,EperQ[eKey],PSDdef+words,bn,Draw=True,debug=False)  # QAFOM, ZFOM are 2 element arrays
+
+            if favorite: 
+                summaryInfo['FOM'] = QAFOM
+                summaryInfo['Z']   = ZFOM
+                sKeys.append('FOM')
+                sKeys.append('Z')
+            
             sFOM,sdFOM = numpy.sum(FOM),numpy.sqrt(numpy.sum([x*x for x in dFOM]))
             sumFOM[PSDdef+words] = (sFOM,sdFOM)+QAFOM
             hcum.Fill(float(ifast),float(itot),sFOM)
@@ -545,7 +571,97 @@ class lsqa():
         for g in graphs: f.WriteTObject(g)
         f.Close()
         print 'lsqa.main Wrote',len(hists)+len(allhists),'hists and',len(graphs),'graphs to',rfn
+
+
+        print 'sKeys',sKeys
+        for key in sKeys:
+            if key=='fav':
+                print 'lsqa.main Summary favorite fast,total integral {0:.1f} {1:.1f}'.format(summaryInfo[key][0],summaryInfo[key][1])
+            elif key=='FOM' or key=='Z':
+                print 'lsqa.main Summary {0} at 6Li peak {1:.4f}({2:.4f})'.format(key,summaryInfo[key][0],summaryInfo[key][1])
+            elif 'File' in key or 'Run' in key:
+                print 'lsqa.main Summary',key,summaryInfo[key]
+            else:
+                print 'lsqa.main Summary keV/charge {0:.3f}'.format(summaryInfo[key])
+        if 0: ##### TESTING
+            import pickle
+            pfn = 'pickleLSAQfile.p'
+            pickle.dump(summaryInfo,open(pfn,'wb'))
+            print 'lsqa.main pickled summaryInfo to',pfn
+    
+        self.writeRSF(summaryInfo)
+        
         return
+    def writeRSF(self,summaryInfo):
+        '''
+        append summary information to results summary file
+        '''
+        fast,total = summaryInfo['fav']
+        Keys = sorted(summaryInfo.keys())
+        Keys.remove('fav')
+
+        run = summaryInfo['neutronFile'].split('/')[-1].split('.')[0]
+        a = ' ' + run
+        h = '*run#'
+        L = max(len(a),len(h))
+        aline = a.ljust(L)
+        header= h.ljust(L)
+        
+        key = 't'+str(total)
+        Keys.remove(key)
+        h = ' ' + 'keV/charge'
+        a = ' {0:.2f}'.format(summaryInfo[key])
+        L = max(len(a),len(h))
+        aline += a.ljust(L)
+        header += h.ljust(L)
+
+        for key in ['FOM','Z']:
+            Keys.remove(key)
+            h = ' ' + key
+            a = ' {0:.4f}({1:.4f})'.format(summaryInfo[key][0],summaryInfo[key][1])
+            L = max(len(a),len(h))
+            aline += a.ljust(L)
+            header += h.ljust(L)
+
+        h = ' fast total'
+        a = ' {0} {1}'.format(fast,total)
+        L = max(len(a),len(h))
+        aline += a.ljust(L)
+        header += h.ljust(L)
+
+        RKeys,FKeys = [],[]
+        for key in Keys:
+            if 'Run' in key: RKeys.append(key)
+            if 'File' in key:FKeys.append(key)
+        RKeys.extend(FKeys)
+        for key in RKeys:
+            Keys.remove(key)
+            a = ' ' + summaryInfo[key].replace('../','')
+            h = ' ' + key
+            L = max(len(a),len(h))
+            aline += a.ljust(L)
+            header+= h.ljust(L)
+        a = ' ' + self.cnow
+        h = ' ' + 'Job time'
+        L = max(len(a),len(h))
+        aline += a.ljust(L)
+        header+= h.ljust(L)
+        aline += '\n'
+        header+= '\n'
+        with open(self.resultsSummaryFile,'a') as rsf:
+            rsf.write(header)
+            rsf.write(aline)
+            rsf.close()
+        print 'lsqa.writeRSF Wrote header',header, 'lsqa.writeRSF Wrote line',aline, 'lsqa.writeRSF to file',self.resultsSummaryFile
+        return
+    def fileTime(self,fn):
+        '''
+        return time of start of run YYYYMMDD HH:MM:SS using timestamp (aka run number) from filename
+        '''
+        ts = fn.split('/')[-1].split('.')[0].replace('run','')
+        its = int(ts)
+        fT = self.cLT.convert(its)
+        return fT
     def avgWF(self,lEWF,title='Average waveform'):
         '''
         return histograms of average waveform given pairs of leading edge and waveforms
@@ -1008,6 +1124,16 @@ if __name__ == '__main__':
         L = lsqa(SIMPLE=True)
         L.simple()
         sys.exit('')
+
+    if sys.argv[1]=='PICKLE':
+        L = lsqa(SIMPLE=True)
+        pfn = 'pickleLSAQfile.p'
+        import pickle
+        summaryInfo =     pickle.load(open(pfn,'rb'))
+        print 'read pickled summaryInfo from',pfn
+        L.writeRSF(summaryInfo)
+        sys.exit('END OF lsqa.writeRSF test')
+
 
     
     if len(sys.argv)<=1:
