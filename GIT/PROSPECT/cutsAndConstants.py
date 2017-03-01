@@ -43,10 +43,27 @@ class cutsAndConstants():
         self.Ac227MassPerLiLSGram = self.dispensedAc227mass/self.initialAc227mass / self.totalLiLSmass
         
         self.LiLS2mass = 10.030 # grams, according to notebook 20161215
-        self.LiLS2massUnc = 0.010 # grams, estimated
+        self.LiLSmassUnc = 0.010 # grams, estimated, common for all measurements
+        self.LiLS2massUnc = self.LiLSmassUnc
 
         # this will be the database for sample masses
         self.SampleMass = {'LiLS2':self.LiLS2mass}
+
+        self.SampleMass['LiLS3'] = self.LiLS3mass = 9.98 # g, https://elog-phy.bnl.gov/PROSPECT+Ac227/19
+        self.SampleMass['LiLS4'] = self.LiLS4mass = 9.98
+        self.SampleMass['LiLS5'] = self.LiLS5mass = 9.999
+        self.SampleMass['LiLS6'] = self.LiLS6mass = 9.99
+        self.SampleMass['LiLS7'] = self.LiLS7mass = 9.981
+        self.SampleMass['LiLS8'] = self.LiLS7mass =10.011
+
+        # materials 
+        self.SampleMaterial = {'LiLS2':'Reference'}
+        self.SampleMaterial['LiLS3'] = 'UVTacrylic'
+        self.SampleMaterial['LiLS4'] = 'FEP'
+        self.SampleMaterial['LiLS5'] = 'PLA'
+        self.SampleMaterial['LiLS6'] = 'PEEK'
+        self.SampleMaterial['LiLS7'] = 'RG188'
+        self.SampleMaterial['LiLS8'] = 'Viton'
 
         self.spikeLiLSmass = None
         
@@ -99,8 +116,6 @@ class cutsAndConstants():
         if sampleName=='LiLS' or sampleName=='LiLS#2s' or 'LiLS#2' in sampleName:
             key = 'LiLS2'
             return self.SampleMass[key]
-
-        
                 
 
         # can't do it
@@ -110,7 +125,7 @@ class cutsAndConstants():
     def setSpikeLiLSmass(self,mass):
         self.spikeLiLSmass = mass
         return
-    def expectAc227Rate(self,inputDay=None,mass=None, sampleName=None):
+    def expectAc227Rate(self,inputDay=None,mass=None, sampleName=None, massUnc=None):
         '''
         return expected Ac227 activity in Bq given date and spiked LiLS mass or sample name
         Use today's date if no date is given.
@@ -129,6 +144,8 @@ class cutsAndConstants():
                 mass = self.spikeLiLSmass
             else:
                 mass = self.getSampleMass(sampleName)
+                
+        if massUnc is None: massUnc = self.LiLSmassUnc
             
         day = None
         if inputDay is None: day = now = datetime.datetime.now()
@@ -159,13 +176,84 @@ class cutsAndConstants():
 
 
         
-        drate = rate * math.sqrt(math.pow(self.initialAc227ActivityRelUnc,2) + math.pow(self.dispensedAc227massUnc/self.dispensedAc227mass,2) + math.pow(self.LiLS2massUnc/self.LiLS2mass,2) )
+        drate = rate * math.sqrt(math.pow(self.initialAc227ActivityRelUnc,2) + math.pow(self.dispensedAc227massUnc/self.dispensedAc227mass,2) + math.pow(massUnc/mass,2) )
             
         return rate,drate
+    def allSampleRates(self,inputDay=None):
+        '''
+        calculates all sample rates given inputDay.
+        if no Day given, calculates rate today
+        '''
+        print 'cutsAndConstants.allSampleRates sample,material,mass(g), area(cm2), rate(Hz) on',inputDay
+        sr,sr2, sm,sm2 = 0.,0.,0.,0.
+        for sN in sorted(self.SampleMass.keys()):
+            area = self.sampleArea(sampleName=sN)
+            rate,drate = self.expectAc227Rate(sampleName=sN,inputDay=inputDay)
+            sr += rate
+            sr2+= rate*rate
+            mat = self.SampleMaterial[sN]
+            m = self.SampleMass[sN]
+            sm += m
+            sm2+= m*m
+            dm= self.LiLSmassUnc
+            print ' {0} {1:10} {2:6.3f}({3:5.3f}) {4:4.1f} {5:.2f}({6:.2f})'.format(sN,mat,m,dm,area,rate,drate)
+        N = float(len(self.SampleMass))
+        sr = sr/N
+        sr2= sr2/N
+        dr = math.sqrt((sr2-sr*sr)/(N-1.))
+        sm = sm/N
+        sm2= sm2/N
+        dm = math.sqrt((sm2-sm*sm)/(N-1.))
+        print 'mean mass {0:.3f}({1:.3f}) rate {2:.2f}({3:.2f}) Hz '.format(sm,dm,sr,dr)
+        return
+    def sampleArea(self,sampleName=None):
+        '''
+        calculate sample total surface area in square cm from measurements in logbook 20170224
+        '''
+        area = -1.
+        if sampleName=='LiLS3': # UVT acrylic
+            length = 1.0
+            width  = 1.15
+            thick  = 0.1
+            area = 2*(length*width + length*thick + thick*width)
+        if sampleName=='LiLS4': # FEP
+            length = 1.5
+            width  = 1.5
+            thick  = 0.003*2.54
+            area = 2*(length*width + length*thick + thick*width)
+        if sampleName=='LiLS5': # PLA (10 disks)
+            diam = 0.5
+            thick= 0.1
+            n    = 10.
+            area = n*(2.*math.pi*diam*diam/2. + math.pi*diam*thick)
+        if sampleName=='LiLS6': # PEEK nut
+            e = 1.1  # corner to corner
+            d = 1.0  # side to side = 2 x apothem
+            D = 0.5  # diameter of hole
+            t = 0.5  # thickness
+            c = math.sqrt(e*e-d*d)
+            area = 2.*(3./2.*c*d - math.pi*D*D/4) # top + bottom area with hole subtracted
+            area+= 6*c*t       # outer sides
+            area+= math.pi*D*t # hole wall
+        if sampleName=='LiLS7': # RG-188 cable
+            h = 2.54 # height of liquid
+            d = 2.54/2. # ID of vial (estimated, OD=28mm according to spec sheet)
+            t = 0.2489 # diameter of cable from spec sheet
+            length = 2.*math.sqrt(h*h + d*d/4.)
+            area = math.pi*t*length
+        if sampleName=='LiLS8': # viton (10 o-rings)
+            OD = 0.6
+            ID = 0.3
+            t  = 0.15
+            n = 10.
+            area = n*(OD+ID)/2.*math.pi*t
+        return area
+        
+        
 if __name__ == '__main__':
     cAC = cutsAndConstants()
 
-    if 1:
+    if 0:
         sn = 'LiLS#2'
         m = cAC.getSampleMass(sn)
         cAC.setSpikeLiLSmass(m)
@@ -173,3 +261,6 @@ if __name__ == '__main__':
         inputDay = '20170103'
         x,dx = cAC.expectAc227Rate(inputDay=inputDay)
         print sn,'inputDay',inputDay,'rate',x,'+/-',dx
+    if 1:
+        cnow = datetime.datetime.now().strftime('%Y%m%d')
+        cAC.allSampleRates(inputDay=cnow)
