@@ -1,0 +1,10 @@
+*run#          keV/charge FOM            Z              fast total gammaRunTime      neutronRunTime    gammaFile                       neutronFile                     Job time              
+ run3568386939 28.98      1.3831(0.0199) 0.1073(0.0008) 100 800    20170127 16:30:53 20170127 18:35:39 LSQAData/P50-1/run3568379453.h5 LSQAData/P50-1/run3568386939.h5 20170227_154254_504984
+*run#          keV/charge FOM            Z              fast total gammaRunTime      neutronRunTime    gammaFile                       neutronFile                     Job time              
+ run3568565429 29.60      1.4057(0.0194) 0.1012(0.0007) 100 800    20170129 18:15:58 20170129 20:10:29 LSQAData/P50-1/run3568558558.h5 LSQAData/P50-1/run3568565429.h5 20170227_154754_447226
+*run#          keV/charge FOM            Z              fast total gammaRunTime      neutronRunTime    gammaFile                       neutronFile                     Job time              
+ run3568649727 28.92      1.3085(0.0187) 0.0993(0.0008) 100 800    20170130 15:14:29 20170130 19:35:27 LSQAData/P50-1/run3568634069.h5 LSQAData/P50-1/run3568649727.h5 20170227_155250_911278
+*run#          keV/charge FOM            Z              fast total gammaRunTime      neutronRunTime    gammaFile                       neutronFile                     Job time              
+ run3569856498 26.94      1.3752(0.0198) 0.0985(0.0008) 100 800    20170213 16:52:14 20170213 18:48:18 LSQAData/P50-1/run3569849534.h5 LSQAData/P50-1/run3569856498.h5 20170227_155751_662809
+*run#          keV/charge FOM            Z              fast total gammaRunTime      neutronRunTime    gammaFile                       neutronFile                     Job time              
+ run3570538570 28.44      1.3382(0.0196) 0.0996(0.0008) 100 800    20170221 14:07:26 20170221 16:16:10 LSQAData/P50-1/run3570530846.h5 LSQAData/P50-1/run3570538570.h5 20170227_160302_453025
