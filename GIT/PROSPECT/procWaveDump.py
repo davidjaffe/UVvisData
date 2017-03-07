@@ -157,6 +157,7 @@ class procWaveDump():
         '''
         get actual run time in seconds from logfile given root file name rfn
         use global variable if it has already been initialized
+        20170307 Avoid problem with crazy 'Actual run time' that began 20170227 (after run 286) after mods to DAQ by Danielle, Don
         '''
         if self.runTime is not None: return self.runTime
             
@@ -172,7 +173,7 @@ class procWaveDump():
             if 'Actual run time'  in l: actual  = float(l.split()[-1])
         f.close()
         self.runTime = request 
-        if actual>-1. :
+        if actual>-1. and actual<6001.:
             self.runTime = actual
         
         return self.runTime
@@ -517,6 +518,7 @@ class procWaveDump():
         return
     def TH2D(self,title,nx,xmi,xma,ny,ymi,yma):
         name = title.replace(' ','_')
+        #print 'procWaveDump.TH2D name,title,nx,xmi,xma,ny,ymi,yma',name,title,nx,xmi,xma,ny,ymi,yma
         self.hists[name] =  ROOT.TH2D(name,title,nx,xmi,xma,ny,ymi,yma)
         return
     def inside(self,x,l):
