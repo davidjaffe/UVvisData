@@ -1,0 +1,13 @@
+20170307 Explanation of column headers in resultsSummaryFile.txt
+
+*run#       = run number of neutron data file
+keV/charge  = EperQ = position of 137Cs compton edge in charge units
+FOM         = Figure of Merit = difference of means divided by sum of FWHMS in quadrature
+Z           = difference of means
+fast total  = number of time bins used in 'fast' and 'tota' waveform sample to compute PSD = (total-fast)/total
+gammaRunTime   = time of gamma calibration run (137Cs) from file name
+neutronRunTime = time of neutron calibration run
+gammaFile      = path to gamma calibration run file
+neutronFile    = path to neutron calibration run file
+Job time       = time of analysis job start YYYYMMDD_hhmmss_microseconds
+
