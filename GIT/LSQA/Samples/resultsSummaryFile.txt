@@ -10,3 +10,9 @@
  run3570538570 28.44      1.3382(0.0196) 0.0996(0.0008) 100 800    20170221 14:07:26 20170221 16:16:10 LSQAData/P50-1/run3570530846.h5 LSQAData/P50-1/run3570538570.h5 20170227_160302_453025
 *run#          keV/charge FOM            Z              fast total gammaRunTime      neutronRunTime    gammaFile                                     neutronFile                                   Job time              
  run3571322081 24.56      1.3825(0.0210) 0.0999(0.0008) 100 800    20170302 15:26:12 20170302 17:54:41 LSQAData/LiLS_batch1_sample1/run3571313172.h5 LSQAData/LiLS_batch1_sample1/run3571322081.h5 20170303_091857_465014
+*run#          keV/charge FOM            Z              fast total gammaRunTime      neutronRunTime    gammaFile                                     neutronFile                                   Job time              
+ run3571322081 24.56      1.3825(0.0210) 0.0999(0.0008) 100 800    20170302 15:26:12 20170302 17:54:41 LSQAData/LiLS_batch1_sample1/run3571313172.h5 LSQAData/LiLS_batch1_sample1/run3571322081.h5 20170306_090646_257295
+*run#          keV/charge FOM            Z              fast total gammaRunTime      neutronRunTime    gammaFile                                     neutronFile                                   Job time              
+ run3571665388 25.19      1.3724(0.0205) 0.1002(0.0008) 100 800    20170306 15:35:02 20170306 17:16:28 LSQAData/LiLS_batch1_sample2/run3571659302.h5 LSQAData/LiLS_batch1_sample2/run3571665388.h5 20170307_085131_075282
+*run#          keV/charge FOM            Z              fast total gammaRunTime      neutronRunTime    gammaFile                                     neutronFile                                   Job time              
+ run3571665388 25.19      1.3724(0.0205) 0.1002(0.0008) 100 800    20170306 15:35:02 20170306 17:16:28 LSQAData/LiLS_batch1_sample2/run3571659302.h5 LSQAData/LiLS_batch1_sample2/run3571665388.h5 20170307_085712_972108
