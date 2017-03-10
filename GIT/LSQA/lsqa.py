@@ -354,16 +354,17 @@ class lsqa():
             size = float(os.path.getsize(n))
             if debug>0 : print 'lsqa.findGammaRun path,extension,size',n,extension,size
             if extension in sizes:
-                if abs(size/sizes[extension]-1.)<0.5:
+                if abs(size/sizes[extension]-1.)<0.7:
                     ts = self.timestampFromFilename(n)
-                    if debug>0 : print 'lsqa.findGammaRun ts,ts-ts0,dt,size/sizes[extension]',ts,ts-ts0,dt,size/sizes[extension]
-                    if dt is None:
-                        dt = abs(ts-ts0)
-                        gammaFile = n
-                    else:
-                        if abs(ts-ts0)<dt:
+                    if ts!=ts0:  # AVOID IDENTICAL TIME STAMPS. GammaFile cannot be the same as NeutronFile!
+                        if debug>0 : print 'lsqa.findGammaRun ts,ts-ts0,dt,size/sizes[extension]',ts,ts-ts0,dt,size/sizes[extension]
+                        if dt is None:
                             dt = abs(ts-ts0)
                             gammaFile = n
+                        else:
+                            if abs(ts-ts0)<dt:
+                                dt = abs(ts-ts0)
+                                gammaFile = n
 
         return gammaFile
     def gunzip(self,fn):
@@ -1120,6 +1121,18 @@ class lsqa():
 
         
 if __name__ == '__main__':
+    '''
+    Usage:
+    1. python lsqa.py NeutronFilename
+      Will process NeutronFilename twice (allows result from first processing to be used to set PSD cuts)
+      [DEFAULT MODE]
+    2. python lsqa.py NeutronFilename ONCE
+      Only process NeutronFilename once
+    3. python lsqa.py SIMPLE
+      simple study
+    4. python lsqa.py PICKLE
+      used to test writing of summary info
+    '''
     if sys.argv[1]=='SIMPLE':
         L = lsqa(SIMPLE=True)
         L.simple()
@@ -1140,6 +1153,9 @@ if __name__ == '__main__':
         sys.exit('lsqa.py ERROR! Must specify input filename with full path')
     fn = sys.argv[1]
     L = lsqa(fn=fn)
+    L.main(filename=fn)
+    if len(sys.argv)>2:
+        sys.exit('--- Only process ' + fn + ' ONCE')
     L.main(filename=fn)
 
 
