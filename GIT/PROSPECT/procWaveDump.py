@@ -34,6 +34,7 @@ class procWaveDump():
         
         # graphing using root
         self.gU = graphUtils.graphUtils()
+        
         # manipulation of root tree contents
         self.eventDict = {}
         self.tree = None
@@ -42,6 +43,7 @@ class procWaveDump():
         self.miniOrder = None
         self.miniOrderIndices = None
         self.usemOI = False
+        
 
         # initialize cuts, constraints
         self.cAC = cutsAndConstants.cutsAndConstants()
