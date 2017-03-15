@@ -43,15 +43,21 @@ class showLSQAResults():
         parse results file
         '''
         fn = self.resFile
+        outfn = self.curFile
         f = open(fn,'r')
+        outf = open(outfn,'w')
 
         self.cols = cols = ['run','EperQ','FOM','Z','fast','total','gDate','gTime','nDate','nTime','gFile','nFile','jobTime']
         self.results = results = {}
+
+        current = {'1A':None}
+        line0 = None
 
         cjT = 'jobTime'
         N = 0
         
         for line in f:
+            if current['1A'] is None: current['1A'] = line
             if line[0]!='*' : # not a comment line
                 N += 1
                 s = line.split()
@@ -65,8 +71,13 @@ class showLSQAResults():
                         sys.exit('showLSQAResults.reader ERROR Replacing data with later job time with data from earlier job time!')
                     
                 results[ s[0] ] = r
+                current[ s[0] ] = line
         f.close()
         print 'showLSQAResults.reader Read',N,'lines. Found',len(results),'results from',fn
+        for key in sorted( current.keys()) :
+            #print 'key',key,'current',current[key]
+            outf.write(current[key])
+        print 'showLSQAResults.reader Wrote',len(current),'lines to',outfn
         return
     def translate(self):
         '''
