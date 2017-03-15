@@ -8,6 +8,8 @@ import sys
 import numpy
 import datetime
 import matplotlib.pyplot as plt
+from matplotlib import dates
+from matplotlib.ticker import AutoMinorLocator
 import convertLabviewTime
 
 class showLSQAResults():
@@ -23,6 +25,7 @@ class showLSQAResults():
         self.lenpoints = len(self.points)
 
         self.resFile= 'Samples/resultsSummaryFile.txt'
+        self.curFile= 'Samples/currentResultsSummaryFile.txt'
         
         self.figdir = 'Samples/ResultsFigures/'
         return
@@ -115,16 +118,59 @@ class showLSQAResults():
         for rn in useful:
             s = useful[rn]['sampleName']
             if s not in samples: samples.append(s)
+        # make P50-1 the first sample and sort the rest of the samples
+        cP50 =  'P50-1'
+        samples.remove(cP50)
+        samples.sort()
+        samples.insert(0,cP50)
         cSN = self.compactSampleNames(samples)
+
+        print 'showLSQAResults.main samples',samples
         
         # plot Quantity, unc for all runs
 
 
         Quantities = ['Z','FOM','EperQ']
+        factors    = [1000., 1., 1.]
+        histlabels = []
+        for f,Q in zip(factors,Quantities):
+            lab = Q
+            if f!=1.:
+                lab = str(int(f))
+                lab += r'$\times$'+Q
+            histlabels.append(lab)
+#xlabel(r'\textbf{time} (s)')                
 
-        fig, axes = plt.subplots(nrows=len(Quantities))
+        showHist = True
+        
+        
+        if showHist:
+            fig = plt.figure()
+            axes = []
+            NCOL = len(Quantities)
+            NROW = len(Quantities)+1
+            for i in range(len(Quantities)):
+                if i==0:
+                    ax = plt.subplot2grid( (NROW,NCOL), (i,0), colspan=NCOL)
+                else:
+                    ax = plt.subplot2grid( (NROW,NCOL), (i,0), colspan=NCOL, sharex=axes[0])
+                    plt.setp(axes[i-1].get_xticklabels(), visible=False)
+
+                    
+                axes.append(ax)
+            Haxes = []
+            for i in range(len(Quantities)):
+                ax = plt.subplot2grid( (NROW,NCOL), (NROW-1,i))
+                Haxes.append(ax)
+            #Hfig,Haxes= plt.subplots(ncols=len(Quantities))
+            #fig, axes = plt.subplots(nrows=len(Quantities))
+        else:
+            fig, axes = plt.subplots(nrows=len(Quantities))
         for iQ,Q in enumerate(Quantities):
+            f = factors[iQ]
             ax = axes[iQ]
+            if showHist:    Hax=Haxes[iQ]
+            y50, ybs = [],[]
             tmi,tma = None,None
             for s in samples:
 
@@ -137,11 +183,16 @@ class showLSQAResults():
                         Z = u[Q]
                         if Q in ['FOM','Z']:
                             z,dz = Z
+                            z,dz = f*z,f*dz
                         elif Q=='EperQ':
-                            z,dz = Z,0.
+                            z,dz = f*Z,f*0.
                         else:
                             print 'showLSQAResults.main Unknown quantity',Q
                         y.append(z)
+                        if s==cP50:
+                            y50.append(z)
+                        else:
+                            ybs.append(z)
                         dy.append(dz)
                         T = u['run'] # integer version of labview time
                         if tmi==None: tmi,tma = T,T
@@ -152,32 +203,55 @@ class showLSQAResults():
                         dx.append(0.)
                 x,y,dx,dy = numpy.array(x),numpy.array(y),numpy.array(dx),numpy.array(dy)
                 ax.errorbar(x, y, color=self.colors[ic],marker=self.points[ip], yerr=dy, linestyle='empty',label=cSN[s])
+
+            # histograms
+            if showHist:
+                YY = numpy.concatenate((y50,ybs))
+                ymi,yma = min(YY)-(max(YY)-min(YY))/10.,max(YY)+(max(YY)-min(YY))/10.
+                bins = numpy.linspace(ymi,yma,20)
+                Hax.hist(y50,bins,histtype='stepfilled',label=cP50,color='black')
+                Hax.hist(ybs,bins,histtype='stepfilled',label='batches',color='red')
+                Hax.set_xlabel(histlabels[iQ])
+                Hax.grid()
+                ylo,yhi = Hax.get_ylim()
+                yhi = yhi + (yhi-ylo)/10.
+                Hax.set_ylim( (ylo,yhi) )
+                xlo,xhi = Hax.get_xlim()
+            #Hax.xaxis.set_ticks(numpy.linspace(xlo,xhi,4))
+            
             #plt.plot(x,y,yerr=dy)
             # limits
             dt = (tma-tmi)/20
             t1 = self.cLT.convert(tmi-dt,fmt=None)
             t2 = self.cLT.convert(tma+dt,fmt=None)
             ax.set_xlim((t1,t2))
-            ax.set_ylabel(Q)
+            hfmt = dates.DateFormatter('%Y%m%d')
+            ax.xaxis.set_major_formatter(hfmt)
+            ax.xaxis.set_minor_locator(AutoMinorLocator())
+            ax.yaxis.set_minor_locator(AutoMinorLocator())
+            ax.set_ylabel(histlabels[iQ])
             ax.grid()
             if iQ==0:
-                #print 'ax.legend loc next'
                 ax.legend(loc='upper center')
-                #print 'ax.legend bbox next'
                 ncol = len(samples)/2+1
-                #print 'ncol',ncol
                 ax.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,  ncol=ncol, borderaxespad=0., numpoints=1,labelspacing=0.1,columnspacing=0.1,handletextpad=0.1) #mode="expand"
-
                 
+            if iQ==len(Quantities)-1:
+                if showHist: Hax.legend(loc='upper right')
+
+        plt.tight_layout(h_pad=-0.5,w_pad=-0.2,pad=2.0)
+#        plt.xticks(rotation=30)#'vertical')
         #plt.title('Z vs time all samples')
         fmt = '%Y%m%d_%H%M%S_%f'
         cnow = datetime.datetime.now().strftime(fmt)
         fig.suptitle('PSD QA jobtime '+cnow,y=0.05)
+
         Show = not self.makeFigure
         if Show: 
             plt.show()
         else:
             pdf = self.figdir + cnow + '.pdf'
+
             fig.set_size_inches(8.5,11)
             plt.savefig(pdf)
             print 'showLSQAResults.main Wrote',pdf
