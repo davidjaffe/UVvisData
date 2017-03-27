@@ -24,11 +24,12 @@ import cutsAndConstants
 import Logger
 import livetime
 import get_filepaths
+import twod
 
 import makeTTree
 
 class calibWaveDump():
-    def __init__(self,Log=True):
+    def __init__(self,Log=True,Speedy=False):
 
 
         self.gU = graphUtils.graphUtils()
@@ -38,15 +39,18 @@ class calibWaveDump():
         self.lt = livetime.livetime()
         self.gfp = get_filepaths.get_filepaths()
         self.mTT = makeTTree.makeTTree()
+        self.twod= twod.twod()
 
         self.psdCut = self.cAC.psdCut
         self.lowChargeCut = self.cAC.lowChargeCut
 
         
         name = 'calibWaveDump'
+        if Speedy : name = 'calibSpeedy'
         self.rootFileDir = '/Users/djaffe/work/WaveDumpData/rootfiles/'
         self.logFileDir  = self.rootFileDir.replace('rootfiles','logfiles')
         self.outFileDir  = 'Output/'
+        if Speedy : self.outFileDir = 'Speedy/Output/'
         self.figdir      = 'Figures/'+name+'/'
         self.perrunfigdir= self.figdir + 'perRun/'
 
@@ -56,6 +60,7 @@ class calibWaveDump():
         self.start_time = cnow = now.strftime(fmt)
 
         self.outTreeDir = 'CalibTrees/'
+        if Speedy : self.outTreeDir = 'speedyTrees/'
         self.outTree    = self.outTreeDir + 'tree_'+cnow+'.root'
         
         if Log:
@@ -340,6 +345,97 @@ class calibWaveDump():
         if debug: print 'calibWaveDump.fitPSD effy,erry',effy,erry,'effy2,erry2',effy2,erry2,'ef3,er3',ef3,er3
         hf.Close()      
         return effy,erry, effy2,erry2, ef3,er3
+    def analPSDvQ(self,h):
+        '''
+        analyze input file of PSD vs charge without cuts
+        '''
+        hnew = h.Clone("hnew")
+        return
+        
+    def speedyMain(self,useLastTime=True):
+        '''
+        main routine for processing output of procWaveDump with Speedy option
+        '''
+        listOfHistFiles = self.get_filepaths(self.outFileDir,exclude='summary')
+        listOfLogFiles  = self.get_filepaths(self.logFileDir)
+        Ac227only = True # only process runs with Ac227 (no Cs137, for example)
+        if Ac227only:
+            goodSources = ['Ac-227']
+            badSources  = ['Cs-137','Ba-133']
+        else:
+            goodSources = ['Ac-227','Cs-137']
+            badSources  = []
+        print 'calibWaveDump.speedyMain goodSources',goodSources,'badSources',badSources,'useLastTime',useLastTime
+
+        # create dict to be used to create ttree
+        # run,
+        # events, error on mean # of events, rms in # of events, average error
+        # same but from normalized hists
+        # timestamp, runtime in seconds, sample name, sample number
+        tdict = {}
+        evtNames = ['evts','eom','rms','ae']
+        tkeys = ['run']
+        tkeys.extend( evtNames )
+        tkeys.extend( [x+'N' for x in evtNames] )
+        tkeys.extend( ['ts','runtime','sample','sn'] )
+        for key in tkeys: tdict[key] = []
+
+        nQuick = 5000
+        
+        for fn in listOfHistFiles:
+            rn = os.path.basename(fn).split('.')[0] # run00xxx
+            runNum = int(rn.replace('run','')) # integer run number
+
+            lf = None
+            for lfn in listOfLogFiles:
+                if rn in lfn:
+                    lf = lfn
+                    break
+            if lf is not None:
+                timestamp,sources,sample,runtime = self.rLF.readFile(lf)
+                samplenumber = self.rLF.getSampleNumber(sample)
+                if useLastTime:
+                    lastTime = self.lt.getLastTime(rn)
+                    if lastTime is not None: runtime = lastTime
+                GOOD = False
+                if sources is not None:
+                    for src in goodSources:
+                        if src in sources: GOOD = True
+                    for src in badSources:
+                        if src in sources: GOOD = False
+                if not GOOD: print 'calibWaveDump.speedyMain',rn,'no good sources'
+                if sample is None: GOOD = False
+                if runNum in self.cAC.badRuns :
+                    GOOD = False
+                    print 'calibWaveDump.speedyMain',rn,'bad run'
+                if GOOD:
+                    print 'calibWaveDump.speedyMain run',runNum
+                    tdict['run'].append(runNum)
+                    tdict['ts'].append( float(timestamp) )
+                    tdict['sample'].append( sample )
+                    tdict['runtime'].append( runtime )
+                    tdict['sn'].append( samplenumber )
+
+
+                    suffix = ''
+                    for hn,suffix in zip(["PSD_vs_Charge","PSD_vs_ChargeN"], ["","N"]):
+                        evtCount = self.twod.gimme(fn,hn)
+                        for word,r in zip(evtNames,evtCount):
+                            key = word+suffix
+                            tdict[key].append(r)
+
+                    nQuick -= 1
+                    if nQuick<=0: break
+
+
+
+        '''
+        End of processing
+        '''
+        if len(tdict)>0: 
+            self.mTT.makeTTree(tdict,fn=self.outTree,treename='sWD',debug=False)
+        
+        return
     def main(self,withPromptCut=True,useLastTime=True):
         '''
         main routine
@@ -882,11 +978,15 @@ if __name__ == '__main__' :
     '''
     Log = True
     withPromptCut = False
+    Speedy = True
     if len(sys.argv)>1 : withPromptCut = sys.argv[1].lower()=='true' or sys.argv[1]=='1'
     if len(sys.argv)>2 : Log = sys.argv[2].lower()=='false' or sys.argv[1].lower()=='no'
     
-    cWD = calibWaveDump(Log=Log) 
-    cWD.main(withPromptCut=withPromptCut)
+    cWD = calibWaveDump(Log=Log,Speedy=Speedy)
+    if Speedy:
+        cWD.speedyMain()
+    else:
+        cWD.main(withPromptCut=withPromptCut)
 
 
     

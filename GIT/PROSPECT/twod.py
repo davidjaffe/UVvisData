@@ -57,10 +57,14 @@ class twod():
         self.h = h = f.Get(hn)
         print 'twod.getHist: fn',fn,'hn',hn
         return h
-    def anal(self,h):
+    def anal(self,h,iDraw=False,iFigure=False,iPrint=False):
         '''
-        analysis of 2d hist
+        return weighted mean, uncertainty on mean, rms and average of uncertainty of all measurements
+        analysis of 2d hist h
         work with a copy that gets deleted
+        iDraw = True = interactive drawing
+        iPrint= True = print results to terminal
+        iFigure= True = write hists with fits to figures file
         '''
         #print 'twod.anal h',h
 
@@ -71,39 +75,42 @@ class twod():
         wx,wy = hnew.GetXaxis().GetBinWidth(1),hnew.GetYaxis().GetBinWidth(1)
 
         upper = [ny,140,120,100]
-        lower = [10,12,14,16,18,20]
-        
-        c1 = ROOT.TCanvas("c1")
-        c1.SetGrid()
-        c1.SetTicks()
+        lower = [10,15,20]
 
-        h.Draw("colz")
+        if iDraw:
+            c1 = ROOT.TCanvas("c1")
+            c1.SetGrid()
+            c1.SetTicks()
 
-        ymi,yma = h.GetYaxis().GetBinLowEdge(1),h.GetYaxis().GetBinUpEdge(ny)
-        
+            hnew.Draw("colz")
 
-        line = {}
-        for x1 in numpy.concatenate((upper,lower)):
-            X1 = h.GetXaxis().GetBinLowEdge(x1)
-            #print 'x1,ymi,yma,X1',x1,ymi,yma,X1
-            line[x1] = ROOT.TLine(X1,ymi,X1,yma)
-            line[x1].SetLineColor(ROOT.kRed)
-            line[x1].Draw("same")
-        
-        c1.Modified()
-        c1.Update()
-        wait = raw_input()
-        c1.Clear()
-        if wait!='' : return
+            ymi,yma = h.GetYaxis().GetBinLowEdge(1),h.GetYaxis().GetBinUpEdge(ny)
+            line = {}
+            for x1 in numpy.concatenate((upper,lower)):
+                X1 = h.GetXaxis().GetBinLowEdge(x1)
+                line[x1] = ROOT.TLine(X1,ymi,X1,yma)
+                line[x1].SetLineColor(ROOT.kRed)
+                line[x1].Draw("same")
+
+            c1.Modified()
+            c1.Update()
+            wait = raw_input()
+            c1.Clear()
+            if wait!='' : return
         
         ncv = 2
-        fo = ["QMR","QMLR"]
+        fo = ["QMR0","QMLR0"]
         xcut = [[0.2,1.],[0.2,1.]]
-        c1.Divide(1,ncv)
-        c1.SetGrid()
-        c1.SetTicks()
-        ROOT.gStyle.SetOptFit(1111)
-        ROOT.gStyle.SetOptStat(1)
+        if iDraw: 
+            c1.Divide(1,ncv)
+            c1.SetGrid()
+            c1.SetTicks()
+            ROOT.gStyle.SetOptFit(1111)
+            ROOT.gStyle.SetOptStat(1)
+            newfo = []
+            for fitopt in fo:
+                newfo.append( fitopt.replace('0',"") ) # plot results of fit
+            fo = newfo
         
         gN,gMean,gSigma, nN,nMean,nSigma = 10000.,.25,.02, 10000.,.4,.02
 
@@ -111,7 +118,7 @@ class twod():
         iv = 0
         v,dv,x,dx = [],[],[],[]
 
-        WAIT = True#False
+        WAIT = iDraw
         
         x0,x1 = 1,ny # first,last bin to include in projection
         for x1 in upper:
@@ -123,8 +130,9 @@ class twod():
                     fitopt = fo[i]
                     hnew_py = hnew.ProjectionY(newname+sx0+sx1+fitopt,x0,x1)
 
-                    c1.cd(i+1)                
-                    c1.SetLogy()
+                    if iDraw: 
+                        c1.cd(i+1)                
+                        c1.SetLogy()
                     self.defineFF(wy,xcut[i][0],xcut[i][1])
                     GG = self.GG
                     GG.SetParameters(gN, gMean, gSigma, nN, nMean, nSigma)
@@ -137,70 +145,75 @@ class twod():
                         
                     PSDcut = self.setPSDcut(hnew_py)
                     n,dn = self.getNevt(hnew_py,P,PSDcut)
-                    
-                    print sx0+sx1+fitopt,'PSDcut',PSDcut,'nN',n,'+-',dn
+
+                    if iPrint: print sx0+sx1+fitopt,'PSDcut',PSDcut,'nN',n,'+-',dn
 
                     iv += 1
                     v.append( n )
                     dv.append( dn )
                     x.append( float(iv) )
                     dx.append( 0. )
-                    c1.SetLogy()
-                    hnew_py.Draw("same")
-                    c1.SetLogy()
+                    if iDraw:
+                        c1.SetLogy()
+                        hnew_py.Draw("same")
+                        c1.SetLogy()
                     gN,gMean,gSigma, nN,nMean,nSigma = P
-                #print 'x0,x1',x0,x1,'gN,gMean,gSigma, nN,nMean,nSigma',gN,gMean,gSigma, nN,nMean,nSigma
-                c1.Modified()
-                c1.Update()
-                if WAIT : wait = raw_input()
 
-        c1.Clear()
-        c1.Divide(1,2)
-        c1.cd(1)
-        ROOT.gStyle.SetOptStat(11111111)
+                if iDraw:
+                    c1.Modified()
+                    c1.Update()
+                    if WAIT : wait = raw_input()
+
+        if iDraw: 
+            c1.Clear()
+            c1.Divide(1,2)
+            c1.cd(1)
+            ROOT.gStyle.SetOptStat(11111111)
         dv = numpy.array(dv)
         v = numpy.array(v)
         ev = max(max(5.*dv),max(v/100.))
         vlo = min(v-ev)
         vhi = max(v+ev)
-        hh = self.gU.makeTH1D(v,'Yield','Yield',nx=40,xmi=vlo,xma=vhi)
-        hh.Draw()
+        hh = self.gU.makeTH1D(v,'Yield','Yield',nx=20,xmi=vlo,xma=vhi)
+        if iDraw: 
+            hh.Draw()
 
-        c1.cd(2)
+        if iDraw: 
+            c1.cd(2)
         g = self.gU.makeTGraph(x,v,'yield','yield',ex=dx,ey=dv)
         self.gU.color(g,2,2,setMarkerColor=True)
-        g.Draw("AP")
+        if iDraw:
+            g.Draw("AP")
         
         w = sum(1./dv/dv)
         m = sum(v/dv/dv)/w
         s = math.sqrt(1./w)
         rms = math.sqrt( sum( (v-m)*(v-m) )/(float(len(v))-1.) )
         ae = sum(dv)/float(len(dv))
-        print 'Weighted mean {0:.1f}({1:.1f}) sqrt(rms) {2:.1f} average unc. {3:.1f}'.format(m,s,rms,ae)
-        #print 'len(v),len(dv),len(x),len(dx)',len(v),len(dv),len(x),len(dx)
-        #print 'v,dv',[[q,dq] for q,dq in zip(v,dv)]
+        print hname,'Weighted mean {0:.1f}({1:.1f}) sqrt(rms) {2:.1f} average unc. {3:.1f}'.format(m,s,rms,ae)
 
-        L = {}
-        for j in [-1,0,1]:
-            L[j] = ROOT.TLine(min(x),m+float(j)*s,max(x),m+float(j)*s)
-            L[j].SetLineColor(ROOT.kRed)
-            if j!=0 : L[j].SetLineStyle(2)
-            L[j].Draw("same")
-        LL = {}
-        for j in [-1,1]:
-            LL[j] = ROOT.TLine(min(x),m+float(j)*rms,max(x),m+float(j)*rms)
-            LL[j].SetLineColor(ROOT.kBlue)
-            LL[j].SetLineStyle(2)
-            LL[j].Draw("same")
-        
-        c1.Modified()
-        c1.Update()
-        wait = raw_input()
+        if iDraw: 
+            L = {}
+            for j in [-1,0,1]:
+                L[j] = ROOT.TLine(min(x),m+float(j)*s,max(x),m+float(j)*s)
+                L[j].SetLineColor(ROOT.kRed)
+                if j!=0 : L[j].SetLineStyle(2)
+                L[j].Draw("same")
+            LL = {}
+            for j in [-1,1]:
+                LL[j] = ROOT.TLine(min(x),m+float(j)*rms,max(x),m+float(j)*rms)
+                LL[j].SetLineColor(ROOT.kBlue)
+                LL[j].SetLineStyle(2)
+                LL[j].Draw("same")
+
+            c1.Modified()
+            c1.Update()
+            wait = raw_input()
 
         
                 
-        del hnew
-        return
+        del hnew,hnew_py,hh
+        return [m,s,rms,ae]
     def makeG(self,h,P,suffix='_gA'):
         '''
         return TF1 object of gaussian with parameters P nominally a fit to histogram h
@@ -305,19 +318,24 @@ class twod():
             if debug: print 'twod.setPSDcut minimum of',FX,'at updated PSDcut',xlo
                 
         return PSDcut
-    def main(self,fn):
-        hn = "PSD_vs_Charge"
+    def gimme(self,fn,hn):
         h = self.getHist(fn,hn)
-        #print 'twod.main h',h,'self.h',self.h
-        self.anal(h)
-
+        if h:
+            evtCount = self.anal(h)
+        else:
+            evtCount = [-1.,-1.,-1.,-1.]
         self.f.Close()
+        return evtCount
+    def main(self,fn):
+        for hn in ["PSD_vs_Charge","PSD_vs_ChargeN"]:
+            evtCount = self.gimme(fn,hn)
         return
 
 if __name__ == '__main__' :
     T = twod()
-    fn = 'Speedy/Output/run00491.root' # lils#2
+    fn = 'Speedy/Output/run00164.root' 
     T.main(fn)
-    fn = 'Speedy/Output/run00660.root' # lils#8
-    T.main(fn)
+    
+    #fn = 'Speedy/Output/run00660.root' # lils#8
+    #T.main(fn)
 

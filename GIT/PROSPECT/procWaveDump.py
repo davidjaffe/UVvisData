@@ -20,7 +20,7 @@ import cutsAndConstants
 import Logger
 
 class procWaveDump():
-    def __init__(self,fn=None):
+    def __init__(self,fn=None,Speedy=False):
         if fn is None: sys.exit('procWaveDump__init__ ERROR No input filename')
 
         # create prefix for log file for this job
@@ -31,6 +31,7 @@ class procWaveDump():
         self.rootFileDir = '/Users/djaffe/work/WaveDumpData/rootfiles/'
         self.logFileDir  = self.rootFileDir.replace('rootfiles','logfiles')
         self.outFileDir  = 'Output/'
+        if Speedy : self.outFileDir = 'Speedy/Output/'
         
         # graphing using root
         self.gU = graphUtils.graphUtils()
@@ -43,7 +44,7 @@ class procWaveDump():
         self.miniOrder = None
         self.miniOrderIndices = None
         self.usemOI = False
-        
+        self.miniFake = None
 
         # initialize cuts, constraints
         self.cAC = cutsAndConstants.cutsAndConstants()
@@ -68,6 +69,7 @@ class procWaveDump():
 
         #output directories, job start time, start logging to file and terminal
         name = 'procWaveDump'
+        if Speedy : name = 'Speedy'
         self.figdir = 'Figures/'+name+'/'
         self.logdir = 'Logfiles/'+name+'/'
         now = datetime.datetime.now()
@@ -92,7 +94,7 @@ class procWaveDump():
                 else:
                     print name+'__init__ created',self.figdir
         return
-    def main(self,inputfn='run00066_ts1481922242.root',maxE=99999999999,Fast=False):
+    def main(self,inputfn='run00066_ts1481922242.root',maxE=99999999999,Fast=False,Speedy=False):
         '''
         main routine
         Open input root file, get run time from corresponding log file
@@ -113,8 +115,10 @@ class procWaveDump():
         print 'procWaveDump.main initialization dt(time)',initT-startT,'dt(clock)',initC-startC
 
         if Fast:
-            print 'procWaveDump.main Fast option'
-            self.fastLoop(maxE=maxE)
+            s = 'procWaveDump.main Fast option'
+            if Speedy : s = 'procWaveDump.main SPEEDY Fast option. No coincidence loops'
+            print s
+            self.fastLoop(maxE=maxE,Speedy=Speedy)
             #sys.exit('that is all for now')
         else:
             self.eventLoop(maxE=maxE)
@@ -160,8 +164,13 @@ class procWaveDump():
         get actual run time in seconds from logfile given root file name rfn
         use global variable if it has already been initialized
         20170307 Avoid problem with crazy 'Actual run time' that began 20170227 (after run 286) after mods to DAQ by Danielle, Don
+        20170327 Does not use logfile information. Define running time as last time in file minus start time.
         '''
         if self.runTime is not None: return self.runTime
+
+        if self.lastTime is None: sys.exit('procWaveDump.getRunTime ERROR self.lastTime is None')
+        self.runTime = self.lastTime - self.cAC.startTimeCut
+        return self.runTime
             
         if rfn is None:
             print 'procWaveDump.getRunTime FAILED No input file given'
@@ -179,14 +188,121 @@ class procWaveDump():
             self.runTime = actual
         
         return self.runTime
-    def fastLoop(self,maxE=999,debug=False):
+    def fastLoop(self,maxE=999,debug=False,Speedy=False):
         '''
         attempt to loop over events more rapidly, exploiting numpy array tricks
+        20170314 new version, use miniFake events that are displaced by 10 Po215 lifetimes rather than randomly selecting fake candidates
+        20170316 if Speedy is True, then omit coincidence loops
         '''
         freq = 1000
         Nmax = self.entries
         if maxE is not None: Nmax = min(Nmax,maxE)
-        print 'procWaveDump.fastLoop Process',Nmax,'events'
+        print 'procWaveDump.fastLoop Process',Nmax,'events','New version with miniFake events'
+
+        # indices into numpy array 
+        Iabs_time, IpsdCh0, IQtotalCh0, IgoodCh0 = self.miniOrderIndices
+        
+        A = self.miniTree # local name for numpy array with reduced data
+        fakeA = self.miniFake # local name for numpy array with reduced fake-delayed data
+        
+        # Apply goodCh0 cut and redefine A
+        B = A[:,IgoodCh0]==1.
+        fakeB = fakeA[:,IgoodCh0]==1.
+        ONE=numpy.full(len(B),1.) # use this for FillN weighting
+        self.hists['goodCh0'].FillN(len(B),numpy.asarray(B,'double'),ONE)
+        
+        A = A[B]
+        fakeA = fakeA[fakeB]
+        Q = numpy.array(A[:,IQtotalCh0],'double')
+        PSD=numpy.array(A[:,IpsdCh0],'double')
+        self.hists['PSD_vs_Charge'].FillN(len(Q),Q,PSD,ONE)
+        self.hists['Charge_no_cut'].FillN(len(Q),Q,ONE)
+        B = Q>self.lowChargeCut
+        self.hists['psdc'].FillN(len(PSD[B]),PSD[B],ONE)
+
+        # Apply PSD cut and redefine A
+        B = A[:,IpsdCh0]>self.psdCut
+        A = A[B]
+        fakeB = fakeA[:,IpsdCh0]>self.psdCut
+        fakeA = fakeA[fakeB]
+        Q = numpy.array(A[:,IQtotalCh0],'double')
+        self.hists['Charge_PSD_cut'].FillN(len(Q),Q,ONE)
+
+        if Speedy :
+            print 'procWaveDump.fastLoop Speedy option. No coincidence loops'
+            return
+        
+        Nmax = min(Nmax,len(A))
+        
+
+        maxTimeWindow = self.maxTimeWindow 
+        for event,tP in enumerate(A[:Nmax,Iabs_time]):
+            if debug : print 'procWaveDump.fastLoop start event',event
+            if event%freq==0 and not debug:
+                print '\r',event,
+                sys.stdout.flush()
+                
+            B = (A[:,Iabs_time]-tP>=0.) & (A[:,Iabs_time]-tP<=maxTimeWindow)  # time window
+            fakeB = (fakeA[:,Iabs_time]-tP>0.) & (fakeA[:,Iabs_time]-tP<=maxTimeWindow) # fake time window does not include tP
+            if any(B):  
+                AA = A[B]
+                prompt = AA[0]
+                delayed= AA[1:]
+                
+                fake = fakeA[fakeB]
+
+                QP = prompt[IQtotalCh0]
+                goodQP = self.inside(QP,self.promptChargeCut)
+                
+                dt = numpy.array(delayed[:,Iabs_time]-tP,'double')
+                QD = numpy.array(delayed[:,IQtotalCh0],'double')
+                for x,y in zip(dt,QD):
+                    self.hists['dvdt'].Fill(x,y)
+                    if goodQP: self.hists['dvdtc'].Fill(x,y)
+
+                ot = numpy.array(fake[:,Iabs_time]-tP,'double')
+                QO = numpy.array(fake[:,IQtotalCh0],'double')
+                for x,y in zip(ot,QO):
+                    self.hists['ovdt'].Fill(x,y)
+                    if goodQP: self.hists['ovdtc'].Fill(x,y)
+                    
+
+                for l in self.lifeRange:
+                    clife = str(l)
+
+                    # real delayed candidates
+                    tend = tP + float(l)*self.Po215lifetime
+                    DL = delayed[delayed[:,Iabs_time]<tend]   # time cut
+                    self.hists['dm'+clife].Fill( float(len(DL)) ) # multiplicity
+                    for tD,QD in zip(DL[:,Iabs_time],DL[:,IQtotalCh0]):
+                        self.hists['d'+clife].Fill( QD )
+                        self.hists['pvd'+clife].Fill( QD,QP )
+                        if self.inside(QD,self.delayChargeCut):
+                            self.hists['pc'+clife].Fill( QP )
+                        if goodQP : self.hists['dc'+clife].Fill( QD )
+
+                    # fake delayed candidates
+                    tend = tP + float(l)*self.Po215lifetime
+                    DL = fake[fake[:,Iabs_time]<tend]
+                    self.hists['om'+clife].Fill( float(len(DL)) ) # multiplicit
+                    for tD,QD in zip(DL[:,Iabs_time],DL[:,IQtotalCh0]):
+                        self.hists['o'+clife].Fill( QD )
+                        self.hists['pvo'+clife].Fill( QD,QP )
+                        if goodQP : self.hists['oc'+clife].Fill( QD )
+                                                
+                                                
+                                            
+        return
+                
+    def OLDfastLoop(self,maxE=999,debug=False):
+        '''
+        attempt to loop over events more rapidly, exploiting numpy array tricks
+        OLD version. Does not use miniFake
+        '''
+        freq = 1000
+        Nmax = self.entries
+        if maxE is not None: Nmax = min(Nmax,maxE)
+        print 'procWaveDump.fastLoop Process',Nmax,'events','WARNING OLD VERSION'
 
         # indices into numpy array 
         Iabs_time, IpsdCh0, IQtotalCh0, IgoodCh0 = self.miniOrderIndices
@@ -439,22 +555,23 @@ class procWaveDump():
             name = 'oc'+clife
             self.hists[name] = ROOT.TH1D(name,title,nx,xmi,xma)
 
-        
-        nx,xmi,xma = 100, 0., self.Qmax
-        ny,ymi,yma = 100, 0., 1.
+        # 20170316 increase # of bins from 100 to 200 
+        nx,xmi,xma = 200, 0., self.Qmax
+        ny,ymi,yma = 200, 0., 1.
         title = 'PSD vs Charge'
         self.TH2D(title,nx,xmi,xma,ny,ymi,yma)
 
-        nx,xmi,xma = 100, 0., 1.
+        nx,xmi,xma = 200, 0., 1.
         title = 'PSD Charge $>$'+str(self.lowChargeCut)
         name = 'psdc'
         self.hists[name] = ROOT.TH1D(name,title,nx,xmi,xma)
 
-        nx,xmi,xma = 100,0.,self.Qmax
+        nx,xmi,xma = 200,0.,self.Qmax
         title = 'Charge no cut'
         self.TH1D(title,nx,xmi,xma)
         title = 'Charge PSD cut'
         self.TH1D(title,nx,xmi,xma)
+        # 20170316 ------ end of modification in # of bins
 
         nx = int(self.runTime)+1
         xmi,xma = 0.,float(nx)
@@ -573,9 +690,13 @@ class procWaveDump():
     def preFill(self):
         '''
         fill global array with useful variables from entire tree
+        20170317 add global array of useful variables for fake delayed events by displacing events in time and wrapping
+        around events past end of last time in file
+        20170327 Exclude events at very beginning of file (first 0.01s) to exclude high trigger rate periods that occurred
+        after lower trigger threshold. make cut for all runs for convenience
         '''
 
-        print 'procWaveDump.preFill Initializing for',self.entries,'events',   
+        print 'procWaveDump.preFill Initializing for',self.entries,'events with startTimeCut',self.cAC.startTimeCut,   
 
         self.miniOrder = ['abs_time', 'psdCh0', 'QtotalCh0', 'goodCh0']
         
@@ -585,14 +706,52 @@ class procWaveDump():
         IgoodCh0  = self.miniOrder.index('goodCh0')
         self.miniOrderIndices = [Iabs_time, IpsdCh0, IQtotalCh0, IgoodCh0]
         self.usemOI = True
+
+        if self.lastTime is None:
+            sys.exit('procWaveDump.preFill ERROR self.lastTime is not initialized')
+
         
         a = []
+        f = []
         for event in range(self.entries):
             self.tree.GetEntry(event)
-            a.append( [self.tree.abs_time, self.tree.psdCh0, self.tree.QtotalCh0, self.tree.goodCh0] )
+            if self.tree.abs_time> self.cAC.startTimeCut:
+                a.append( [self.tree.abs_time, self.tree.psdCh0, self.tree.QtotalCh0, self.tree.goodCh0] )
+        for V in a:
+            t = V[0]
+            faket = t - self.tOffset
+            if faket>0.:
+                f.append( [faket, V[1],V[2],V[3]] )
+        for V in a:
+            t = V[0]
+            dt = t - self.tOffset
+            if dt<0:
+                f.append( [dt+self.lastTime, V[1],V[2],V[3]])
+            else:
+                break
+            
         self.miniTree = numpy.array(a)
+        self.miniFake = numpy.array(f)
         print '....Done!'
         self.close()
+
+        debug = False
+
+        if debug :
+            rn = 'procWaveDump.preFill'
+            print rn,'First real event',self.miniTree[0]
+            print rn,'Last  real event',self.miniTree[-1]
+            print rn,'First fake event',self.miniFake[0]
+            print rn,'Last  fake event',self.miniFake[-1]
+            print rn,'length real',len(self.miniTree),'fake',len(self.miniFake)
+            for i,V in enumerate(self.miniFake):
+                t = V[0]
+                if i>0:
+                    lastT = self.miniFake[i-1][0]
+                    if t<lastT: print 'procWaveDump: miniFake out of order at index i',i,'t[i]',t,'t[i-1]',lastT
+
+            ##sys.exit('procWaveDump.preFill....TESTING ONLY.....')
+        
         return 
     def open(self,fn=None):
         '''
@@ -633,6 +792,7 @@ if __name__ == '__main__' :
     1 = filename (prefix can be omitted) [REQUIRED]
     2 = maximum number of events to process
     3 = if =='slow' then do not use fast option
+    4 = if =='speedy' then omit coincidence search
     '''
     if len(sys.argv)<=1:
         sys.exit('procWaveDump Filename [max events] fast/slow')
@@ -640,9 +800,11 @@ if __name__ == '__main__' :
     fn = sys.argv[1]
     maxE = 9999999999
     Fast = True
+    Speedy=False
     if len(sys.argv)>2: maxE = int(sys.argv[2])
     if len(sys.argv)>3: Fast = sys.argv[3].lower()!='slow'
+    if len(sys.argv)>4: Speedy = sys.argv[4].lower()=='speedy'
     
-    pWD = procWaveDump(fn=fn)
-    pWD.main(inputfn=fn,maxE=maxE,Fast=Fast)
+    pWD = procWaveDump(fn=fn,Speedy=Speedy)
+    pWD.main(inputfn=fn,maxE=maxE,Fast=Fast,Speedy=Speedy)
 

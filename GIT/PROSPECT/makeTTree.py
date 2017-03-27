@@ -21,10 +21,6 @@ class makeTTree():
         floats, ints in Branch from http://wlav.web.cern.ch/wlav/pyroot/tpytree.html
         
         '''
-
-        
-            
-        
         f = ROOT.TFile( fn, 'recreate' )
         t = ROOT.TTree( treename, treename)
 
@@ -67,6 +63,7 @@ class makeTTree():
                     for j,c in enumerate(D[i]):
                         TD[key][j] = c
                 else:
+                    if debug: print 'makeTTree.makeTTree key,kind,i,D[i]',key,kind,i,D[i]
                     TD[key][0] =  D[i]
             if debug : print 'makeTTree.makeTTree i,TD',i,TD
             t.Fill()
@@ -126,6 +123,68 @@ class makeTTree():
             if kind=='C': y = str(x)
             V.push_back(y)
         return V,kind,decl
+    def getTTree(self,fn=None,ttName=None):
+        '''
+        file dict with contents of TTree ttName in file with name fn
+        only works for simple TTrees
+        '''
+        # bogosity check
+        if fn is None: sys.exit('makeTTree.getTTree ERROR No file name specified')
+        if ttName is None: sys.exit('makeTTree.getTTree ERROR No tree name given for file '+fn)
+        #open the file
+        myfile = ROOT.TFile( fn,'r' )
+
+# retrieve the ntuple of interest
+        tt = ROOT.gDirectory.Get( ttName )
+        LB = tt.GetListOfBranches()
+        bn = []
+        for b in LB:
+            bn.append( b.GetName() )
+
+        tdict = {}
+        for b in bn: tdict[b] = []
+        
+        entries = tt.GetEntriesFast()
+        tt.LoadTree(0)
+
+        # special treatment needed for string/character variables.
+        isAChar = {}
+        for b in bn:
+            l = tt.GetLeaf(b)
+            if l.GetTypeName()=='Char_t':
+                isAChar[b] = bytearray(40)
+                tt.SetBranchAddress(b,isAChar[b])
+
+
+        
+        for jentry in xrange( entries ):
+ # get the next tree in the chain and verify
+            ientry = tt.LoadTree( jentry )
+            if ientry < 0:
+                break
+
+        # copy next entry into memory and verify
+        # take care with character/string and conversion of integers
+            nb = tt.GetEntry( jentry )
+            if nb <= 0:
+                continue
+            for b in bn:
+                l = tt.GetLeaf(b)
+                if b in isAChar:
+                    v = str(isAChar[b]).strip().replace('\x00','')
+                else:
+                    v = l.GetValue()
+                    if l.GetTypeName()=='Int_t': v = int(v)  
+                if  0 and b=='sample':
+                    if jentry%100==0:
+                        print 'jentry,b,v,l.GetTypeName()',jentry,b,v,l.GetTypeName()
+                tdict[b].append(v)
+            #print 'j,evts,evtsN,sample,sn',jentry,sWD.evts,sWD.evtsN,sWD.sample,sWD.sn
+
+        myfile.Close()
+        print 'makeTTree.getTTree filled',len(tdict[bn[0]]),'entries for',len(bn),'variables from TTree',ttName,'from file',fn
+        return tdict
+
         
         
  

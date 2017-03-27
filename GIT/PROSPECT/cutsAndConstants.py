@@ -20,7 +20,7 @@ class cutsAndConstants():
         self.Ac227lifetime = self.Ac227halflife/math.log(2.)
         self.Ac227lifetime_sec = self.Ac227lifetime * 365. * 24. * 60. * 60. # lifetime in seconds
         
-        self.Qmax = 0.05
+        self.Qmax = 0.05*2 # 20170316 increase Qmax range
         self.psdCut = 0.35
         self.lifeRange = [1,2,3,5]
         self.lowChargeCut = 0.012
@@ -29,6 +29,10 @@ class cutsAndConstants():
         mean,sigma = 0.03839, 0.00265 # these values from fit to run74 data
         self.delayChargeCut  = [mean-nsig*sigma,mean+nsig*sigma]
 
+        # exclude high trigger rate at the start of runs after run607 when threshold lowered
+        # apply this cut to all data just to make it easy
+        self.startTimeCut = 0.01 
+        
         self.maxTimeWindow = float(max(self.lifeRange))*self.Po215lifetime
 
         # measured activity and mass from Eckert & Ziegler see doc1482
@@ -54,7 +58,7 @@ class cutsAndConstants():
         self.SampleMass['LiLS5'] = self.LiLS5mass = 9.999
         self.SampleMass['LiLS6'] = self.LiLS6mass = 9.99
         self.SampleMass['LiLS7'] = self.LiLS7mass = 9.981
-        self.SampleMass['LiLS8'] = self.LiLS7mass =10.011
+        self.SampleMass['LiLS8'] = self.LiLS8mass =10.011
 
         # materials 
         self.SampleMaterial = {'LiLS2':'Reference'}
@@ -76,10 +80,15 @@ class cutsAndConstants():
         # run 56 has event with dt = 6.7 second and log file "Comments: Accidently hit keys while running"
         # run 158 has incorrect sample name of LiLS#1, it should be LiLS#2. Tag as bad until software fix implemented.
         # runs 162, 163 have empty log files. Tag as bad until corrected files obtained
-        # runs 259,260,261,262 vial raised in well for optics test
-        # run 263,264 black paper @ 0,90,180 degrees for optics test
-        self.badRuns = [56, 158, 259,260,261,262, 263,264,265 ]
-
+        # runs 258,259,260,261,262 vial raised in well for optics test
+        # run 263,264, 265 black paper @ 0,90,180 degrees for optics test
+        # run 685, 653, 663 high trigger rates
+        # run 676, 266 no HV
+        # run 544 wrong threshold
+        # run 689 high trigger rate
+        # Runs 287-295 are garbage test runs made during modification testing
+        self.badRuns = [56, 158, 258,259,260,261,262, 263,264,265,266, 676, 653, 663, 685, 544, 689 ]
+        self.badRuns.extend(  range(287,295+1) )
         
         
         print 'cutsAndConstants.__init__ Initialized'

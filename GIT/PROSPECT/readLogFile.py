@@ -68,10 +68,40 @@ class readLogFile():
                 pass
 
         ### special fixes
-        if bn=='run00158_ts1483996034.log' and sample=='LiLS#1': sample = 'LiLS#2'
-        if bn=='run00224_ts1484615681.log' and sample=='LiLS#2s':sample = 'LiLS#2'
+        debug = False
+        if debug: 
+            print 'readLogFile.readFile bn',bn,'sample',sample,
+            if sample is not None:
+                print 'len(sample)',len(sample)
+            else:
+                print ''
+        if sample is not None:
+            if bn=='run00158_ts1483996034.log' and sample=='LiLS#1': sample = 'LiLS#2'
+            if bn=='run00224_ts1484615681.log' and (sample=='LiLS#2s' or 'LiLS#2s' in sample) :sample = 'LiLS#2'
+            if  'LiLS#2 pedestal' in sample or 'LiLS#2 black' in sample: sample = 'LiLS#2'
+            if sample==' ': sample = None
             
         return timestamp,sources,sample,runtime
+    def getSampleNumber(self,sample):
+        '''
+        return sample number (int) given sample name (str)
+        if no sample number, return -1
+        '''
+        #print 'readLogFile.getSampleNumber sample',sample
+        if sample is None: return -1
+        if '#' in sample:
+            i = sample.index('#')
+            sn = int( sample[i+1:] )
+            return sn
+        else:
+            for i in range(len(sample)-1,0,-1):
+                try:
+                    sn = int(sample[i:])
+                except ValueError:
+                    if i+1>=len(sample): return -1
+                    sn = int(sample[i+1:])
+                    return sn
+            return sn
     def cleanLine(self,line):
         '''
         return line with spurious characters removed
@@ -89,20 +119,25 @@ if __name__ == '__main__' :
         if len(sys.argv)>1 : fn = sys.argv[1]
             
         ts,s,sam,rt = rLF.readFile(fn=fn)
-        print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt
+        sn = rLF.getSampleNumber(sam)
+        print fn,'timestamp,sources,sample,runtime,sample#',ts,s,sam,rt,sn
     else:
         fp = '/Users/djaffe/work/WaveDumpData/logfiles/'
         print 'readLogFile Check all files in',fp
         import get_filepaths
         gfp = get_filepaths.get_filepaths()
         file_paths = gfp.get_filepaths(fp)
+
         for fn in sorted( file_paths ):
             ts,s,sam,rt = rLF.readFile(fn=fn)
+            sn = rLF.getSampleNumber(sam)
+            #print fn,'timestamp,sources,sample,runtime,sample#',ts,s,sam,rt,sn
             Show = False
             Flag = 0
             if ts is None or s is None or sam is None or rt is None: Flag += 1
             if s is not None and 'Ac-227' not in s: Flag += 10
-            if sam is not None and 'LiLS#2'not in sam: Flag += 100
+#            if sam is not None and 'LiLS#2'not in sam: Flag += 100
             if sam=='LiLS#2s': Flag += 1000
-            if Flag: print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt,'Flag',Flag
-        print 'Flag: 1=any=None, 10=bad src, 100=bad sample, 1000=LiLS#2s'
+            if sam<1 : Flag += 10000
+            if Flag: print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt,sn,'Flag',Flag
+        print 'Flag: 1=any=None, 10=bad src, 100=bad sample, 1000=LiLS#2s, 10000=bad sample#'
