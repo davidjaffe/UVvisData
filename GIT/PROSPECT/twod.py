@@ -57,7 +57,7 @@ class twod():
         self.h = h = f.Get(hn)
         print 'twod.getHist: fn',fn,'hn',hn
         return h
-    def anal(self,h,iDraw=False,iFigure=False,iPrint=False):
+    def anal(self,h,iDraw=False,iFigure=False,iPrint=False,figPrefix=None):
         '''
         return weighted mean, uncertainty on mean, rms and average of uncertainty of all measurements
         analysis of 2d hist h
@@ -65,8 +65,11 @@ class twod():
         iDraw = True = interactive drawing
         iPrint= True = print results to terminal
         iFigure= True = write hists with fits to figures file
+        figPrefix = prefix including directories for files containing figures
         '''
         #print 'twod.anal h',h
+
+        
 
         hname = h.GetName()
         newname = 'new_'+hname
@@ -77,8 +80,15 @@ class twod():
         upper = [ny,140,120,100]
         lower = [10,15,20]
 
-        if iDraw:
+        figNum = 0
+        ps = figPrefix + '_' + str(figNum) + '.ps'
+        canvasName = 'canvasName'
+        if figPrefix is not None: canvasName = figPrefix
+
+        if iDraw or iFigure:
+            if iFigure : ROOT.gROOT.ProcessLine("gROOT->SetBatch()")
             c1 = ROOT.TCanvas("c1")
+            c1.SetTitle(canvasName)
             c1.SetGrid()
             c1.SetTicks()
 
@@ -94,15 +104,22 @@ class twod():
 
             c1.Modified()
             c1.Update()
-            wait = raw_input()
-            c1.Clear()
-            if wait!='' : return
-        
+            if iDraw: 
+                wait = raw_input()
+                c1.Clear()
+                if wait!='' : return
+            if iFigure:
+                self.gU.canvasPrint(c1,ps)
+                c1.Clear()
+            
+        figNum += 1
+        ps = figPrefix + '_' + str(figNum) + '.ps'
         ncv = 2
         fo = ["QMR0","QMLR0"]
         xcut = [[0.2,1.],[0.2,1.]]
-        if iDraw: 
-            c1.Divide(1,ncv)
+        if iDraw or iFigure:
+            c1.Divide(ncv,len(upper)*len(lower),.01/10,.01/5)
+
             c1.SetGrid()
             c1.SetTicks()
             ROOT.gStyle.SetOptFit(1111)
@@ -130,8 +147,9 @@ class twod():
                     fitopt = fo[i]
                     hnew_py = hnew.ProjectionY(newname+sx0+sx1+fitopt,x0,x1)
 
-                    if iDraw: 
-                        c1.cd(i+1)                
+                    if iDraw or iFigure:
+                        c1.cd(1+iv)
+                        #print 'i,iv,1+iv',   i,iv,iv+1
                         c1.SetLogy()
                     self.defineFF(wy,xcut[i][0],xcut[i][1])
                     GG = self.GG
@@ -153,37 +171,45 @@ class twod():
                     dv.append( dn )
                     x.append( float(iv) )
                     dx.append( 0. )
-                    if iDraw:
+                    if iDraw or iFigure:
                         c1.SetLogy()
                         hnew_py.Draw("same")
+                        self.gU.biggerLabels(hnew_py,Factor=2.)
                         c1.SetLogy()
                     gN,gMean,gSigma, nN,nMean,nSigma = P
 
-                if iDraw:
-                    c1.Modified()
-                    c1.Update()
-                    if WAIT : wait = raw_input()
+        if iDraw or iFigure:
+            c1.Modified()
+            c1.Update()
+        if iDraw:
+            if WAIT : wait = raw_input()
+        if iFigure:
+            self.gU.canvasPrint(c1,ps)
 
-        if iDraw: 
+        figNum += 1
+        ps = figPrefix + '_' + str(figNum) + '.ps'
+        if iDraw or iFigure: 
             c1.Clear()
             c1.Divide(1,2)
             c1.cd(1)
-            ROOT.gStyle.SetOptStat(11111111)
+            ROOT.gStyle.SetOptStat(111111)
         dv = numpy.array(dv)
         v = numpy.array(v)
-        ev = max(max(5.*dv),max(v/100.))
+        ev = max(dv)
         vlo = min(v-ev)
         vhi = max(v+ev)
         hh = self.gU.makeTH1D(v,'Yield','Yield',nx=20,xmi=vlo,xma=vhi)
-        if iDraw: 
+        if iDraw or iFigure: 
             hh.Draw()
+            self.gU.biggerLabels(hh,Factor=2.)
 
-        if iDraw: 
+        if iDraw or iFigure: 
             c1.cd(2)
         g = self.gU.makeTGraph(x,v,'yield','yield',ex=dx,ey=dv)
         self.gU.color(g,2,2,setMarkerColor=True)
-        if iDraw:
+        if iDraw or iFigure:
             g.Draw("AP")
+            self.gU.biggerLabels(g,Factor=2.)
         
         w = sum(1./dv/dv)
         m = sum(v/dv/dv)/w
@@ -192,7 +218,7 @@ class twod():
         ae = sum(dv)/float(len(dv))
         print hname,'Weighted mean {0:.1f}({1:.1f}) sqrt(rms) {2:.1f} average unc. {3:.1f}'.format(m,s,rms,ae)
 
-        if iDraw: 
+        if iDraw or iFigure: 
             L = {}
             for j in [-1,0,1]:
                 L[j] = ROOT.TLine(min(x),m+float(j)*s,max(x),m+float(j)*s)
@@ -208,8 +234,10 @@ class twod():
 
             c1.Modified()
             c1.Update()
-            wait = raw_input()
-
+            if iDraw: 
+                wait = raw_input()
+            if iFigure:
+                self.gU.canvasPrint(c1,ps)
         
                 
         del hnew,hnew_py,hh
@@ -318,23 +346,29 @@ class twod():
             if debug: print 'twod.setPSDcut minimum of',FX,'at updated PSDcut',xlo
                 
         return PSDcut
-    def gimme(self,fn,hn):
+    def gimme(self,fn,hn,iDraw=False,iFigure=False,iPrint=False,figPrefix=None):
         h = self.getHist(fn,hn)
         if h:
-            evtCount = self.anal(h)
+            evtCount = self.anal(h,iDraw=iDraw,iFigure=iFigure,iPrint=iPrint,figPrefix=figPrefix)
         else:
             evtCount = [-1.,-1.,-1.,-1.]
         self.f.Close()
         return evtCount
-    def main(self,fn):
+    def main(self,fn,iDraw=False,iFigure=False,iPrint=False,figPrefix=None):
         for hn in ["PSD_vs_Charge","PSD_vs_ChargeN"]:
-            evtCount = self.gimme(fn,hn)
+            draw = iDraw and 'N' in hn
+            figure=iFigure and 'N' in hn
+            evtCount = self.gimme(fn,hn,iDraw=draw,iFigure=figure,iPrint=iPrint,figPrefix=figPrefix)
         return
 
 if __name__ == '__main__' :
     T = twod()
-    fn = 'Speedy/Output/run00164.root' 
-    T.main(fn)
+    fn = 'Speedy/Output/run00164.root'
+    figPrefix = 'FIGPREFIX'
+    iDraw = True
+    iFigure = False
+    
+    T.main(fn,iDraw=iDraw,iFigure=iFigure,iPrint=False,figPrefix=figPrefix)
     
     #fn = 'Speedy/Output/run00660.root' # lils#8
     #T.main(fn)

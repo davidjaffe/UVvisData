@@ -380,7 +380,7 @@ class calibWaveDump():
         tkeys.extend( ['ts','runtime','sample','sn'] )
         for key in tkeys: tdict[key] = []
 
-        nQuick = 5000
+        nQuick = 50000
         
         for fn in listOfHistFiles:
             rn = os.path.basename(fn).split('.')[0] # run00xxx
@@ -419,7 +419,9 @@ class calibWaveDump():
 
                     suffix = ''
                     for hn,suffix in zip(["PSD_vs_Charge","PSD_vs_ChargeN"], ["","N"]):
-                        evtCount = self.twod.gimme(fn,hn)
+                        iFigure = 'ChargeN' in hn
+                        prefix = (self.perrunfigdir + rn + '_' + sample.replace('#','')).replace(' ','')
+                        evtCount = self.twod.gimme(fn,hn,iFigure=iFigure,figPrefix=prefix)
                         for word,r in zip(evtNames,evtCount):
                             key = word+suffix
                             tdict[key].append(r)
