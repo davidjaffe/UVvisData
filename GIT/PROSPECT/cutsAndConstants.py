@@ -234,7 +234,7 @@ class cutsAndConstants():
             diam = 0.5
             thick= 0.1
             n    = 10.
-            area = n*(2.*math.pi*diam*diam/2. + math.pi*diam*thick)
+            area = n*(2.*math.pi*diam*diam/4. + math.pi*diam*thick) # 2ends+ sides
         if sampleName=='LiLS6': # PEEK nut
             e = 1.1  # corner to corner
             d = 1.0  # side to side = 2 x apothem
@@ -253,9 +253,10 @@ class cutsAndConstants():
         if sampleName=='LiLS8': # viton (10 o-rings)
             OD = 0.6
             ID = 0.3
-            t  = 0.15
+            OR = OD/2.
+            IR = ID/2.
             n = 10.
-            area = n*(OD+ID)/2.*math.pi*t
+            area = n*math.pi*math.pi*(OR-IR)*(OR+IR)
         return area
         
         

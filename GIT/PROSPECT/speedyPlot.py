@@ -112,24 +112,31 @@ class speedyPlot():
                 graphs[name] = g
 
         # histograms of measured/expected & measured - expected
+
         for sn in snList:
-            M,E = [],[]
+            M,E,D = [],[],[]
             for i,samnum in enumerate(tdict['sn']):
                 if sn==samnum:
                     M.append( tdict['evtsN'][i]/nAlpha )
+                    D.append( tdict['rmsN'][i]/nAlpha )
                     E.append( tdict['expect'][i] )
             M = numpy.array(M)
+            D = numpy.array(D)
             E = numpy.array(E)
             name = 'meas_minus_expect_LiLS'+str(sn)
             title = 'Measured - Expected LiLS#'+str(sn)
             h = self.gU.makeTH1D(M-E,title,name,xmi=-10.,xma=0.)
-            hists.append( h ) 
+            hists.append( h )
+            name = 'residual_meas_expect_LiLS'+str(sn)
+            title = 'Residual(meas - expected) LiLS#'+str(sn)
+            h = self.gU.makeTH1D((M-E)/D,title,name)
+            hists.append( h )
             name = 'meas_by_expect_LiLS'+str(sn)
             title= 'Measured/Expected LiLS#'+str(sn)
             h = self.gU.makeTH1D(M/E,title,name,xmi=0.9,xma=1.0)
             hists.append( h )
         self.gU.drawMultiObjects(hists, fname='hists',figdir=self.figdir,abscissaIsTime=False,Grid=True,
-                                 addLegend=False,statOpt=1110,biggerLabels=True)
+                                 addLegend=False,statOpt=1110,biggerLabels=True,forceNX=3)
             
         
 
@@ -163,4 +170,5 @@ if __name__ == '__main__' :
     fn="speedyTrees/tree_20170319_124642_615646.root"
     fn = 'speedyTrees/tree_20170324_181234_373694.root'
     fn = "speedyTrees/tree_20170327_201637_890698.root"
+    fn = 'speedyTrees/tree_20170328_131720_516281.root'
     sP.loop(fn=fn)
