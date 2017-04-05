@@ -926,20 +926,22 @@ class calibWaveDump():
         hists.append( hQ )
             
 
-        self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Coincidence rate(Hz)')
-        self.gU.drawMultiGraph(tmgT,figdir=self.figdir,abscissaIsTime=True,xAxisLabel='Time',yAxisLabel='Coincidence rate(Hz)')
-        self.gU.drawMultiGraph(tmgEC,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Effy corrected Coincidence rate(Hz)')
-        self.gU.drawMultiGraph(tmgTEC,figdir=self.figdir,abscissaIsTime=True,xAxisLabel='Time',yAxisLabel='Effy corrected Coincidence rate(Hz)')
-        self.gU.drawMultiGraph(tmgP,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted mean of 215Po peak (nC)')
-        self.gU.drawMultiGraph(tmgS,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted sigma of 215 Po peak (nC)')
-        self.gU.drawMultiGraph(tmgPSD,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='PSD effy estimate')
-        self.gU.drawMultiGraph(tmgN,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Po215 rate (Hz) from lifetime fit')
-        self.gU.drawMultiGraph(tmgL,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted lifetime (s)')
+        CANVAS = self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Coincidence rate(Hz)')
+        CANVAS = self.gU.drawMultiGraph(tmgT,figdir=self.figdir,abscissaIsTime=True,xAxisLabel='Time',yAxisLabel='Coincidence rate(Hz)')
+        CANVAS = self.gU.drawMultiGraph(tmgEC,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Effy corrected Coincidence rate(Hz)')
+        CANVAS = self.gU.drawMultiGraph(tmgTEC,figdir=self.figdir,abscissaIsTime=True,xAxisLabel='Time',yAxisLabel='Effy corrected Coincidence rate(Hz)')
+        CANVAS = self.gU.drawMultiGraph(tmgP,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted mean of 215Po peak (nC)')
+        CANVAS = self.gU.drawMultiGraph(tmgS,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted sigma of 215 Po peak (nC)')
+        CANVAS = self.gU.drawMultiGraph(tmgPSD,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='PSD effy estimate')
+        CANVAS = self.gU.drawMultiGraph(tmgN,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Po215 rate (Hz) from lifetime fit')
+        CANVAS = self.gU.drawMultiGraph(tmgL,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Fitted lifetime (s)')
 
-        self.gU.drawMultiGraph(tmgAll,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Ac227 rate (Hz)')
-        self.gU.drawMultiGraph(tmgAllT,figdir=self.figdir,abscissaIsTime=True,xAxisLabel='Run number',yAxisLabel='Ac227 rate (Hz)')
+        CANVAS = self.gU.drawMultiGraph(tmgAll,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Ac227 rate (Hz)')
+        CANVAS = self.gU.drawMultiGraph(tmgAllT,figdir=self.figdir,abscissaIsTime=True,xAxisLabel='Run number',yAxisLabel='Ac227 rate (Hz)')
 
-        self.gU.drawMultiGraph(tmgEff,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Efficiency')
+        CANVAS = self.gU.drawMultiGraph(tmgEff,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='Run number',yAxisLabel='Efficiency')
+
+        CANVAS.IsA.Destructor(CANVAS) # avoid seg fault?
         
         rl = sorted(listOfGoodRunsAS)
         print 'calibWaveDump.main Opened',len(listOfRunsAS),'root files with',len(listOfGoodRunsAS),'good runs. First,last good runs',rl[0],rl[-1]
