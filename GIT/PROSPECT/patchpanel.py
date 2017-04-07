@@ -18,6 +18,7 @@ import os
 class patchpanel():
     def __init__(self):
         self.sep = 1.12  # separation between centers in inches
+        self.sep = 1.0
         
         return
     def go(self):

@@ -302,11 +302,15 @@ if __name__ == '__main__' :
     '''
     arguments
     '''
-    sP = speedyPlot()
     fn="speedyTrees/tree_20170319_124642_615646.root"
     fn = 'speedyTrees/tree_20170324_181234_373694.root'
     fn = "speedyTrees/tree_20170327_201637_890698.root"
     fn = 'speedyTrees/tree_20170328_131720_516281.root'
     fn = 'speedyTrees/tree_20170403_084215_030514.root'
     fn = 'speedyTrees/tree_20170403_123150_108072.root'
+
+    fn = None
+    if len(sys.argv)>1: fn = sys.argv[1]
+    if fn is None: sys.exit('ERROR! Missing first argument: \npython speedyPlot.py ROOT_FILE_NAME')
+    sP = speedyPlot()
     sP.loop(fn=fn)
