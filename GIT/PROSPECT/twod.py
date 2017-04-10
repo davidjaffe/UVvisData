@@ -218,6 +218,8 @@ class twod():
         ae = sum(dv)/float(len(dv))
         print hname,'Weighted mean {0:.1f}({1:.1f}) sqrt(rms) {2:.1f} average unc. {3:.1f}'.format(m,s,rms,ae)
 
+        # Red solid/dashed line is weighted mean/error on mean
+        # Blue dashed is rms
         if iDraw or iFigure: 
             L = {}
             for j in [-1,0,1]:

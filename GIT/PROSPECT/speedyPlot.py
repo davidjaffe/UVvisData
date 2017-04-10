@@ -49,9 +49,12 @@ class speedyPlot():
         '''
         main processing loop
         '''
+        doFits = True
+        
         tdict = self.mTT.getTTree(ttName='sWD',fn=fn)
 
         snList = [] # list of sample numbers
+        
         samples= {}
         for sn,sample in zip(tdict['sn'],tdict['sample']):
             if sn>0 and sn not in snList:
@@ -59,8 +62,16 @@ class speedyPlot():
                 samples[sn] = sample
         snList.sort()
 
+        matName ={}
+        for sn in snList:
+            snname = 'LiLS'+str(sn)
+            matName[sn] = self.cAC.SampleMaterial[snname]
+        
+
         # define useful local variables and calculate expected rates
-        Timestamps = tdict['ts']
+        Timestamps = [ ]
+        for t in tdict['ts']: Timestamps.append( t/1000. ) # convert from milliseconds
+        tdict['ts'] = Timestamps 
         Runs       = tdict['run']
         tdict['expect'] = []
         tdict['dexpect']= []
@@ -70,7 +81,7 @@ class speedyPlot():
 
         for I,sample in enumerate(tdict['sample']):
             ts = tdict['ts'][I]
-            Ac227rate = self.cAC.expectAc227Rate(inputDay=int(ts/1000.),sampleName=sample)
+            Ac227rate = self.cAC.expectAc227Rate(inputDay=int(ts),sampleName=sample)
 
             tdict['expect'].append( Ac227rate[0] )
             tdict['dexpect'].append( Ac227rate[1] )
@@ -87,6 +98,7 @@ class speedyPlot():
         TMG = {}
 
         noPopUp = False
+        if not doFits: noPopUp = True
         
         for cEvts,dEvts in zip(['evts','evtsN','expect','mme',],['rms','rmsN','dexpect','dmme']):
             nA = 1.
@@ -110,9 +122,11 @@ class speedyPlot():
                     S2T = numpy.array(T)
 
                 sample = samples[sn]
+                mcomp = ' ' + matName[sn]
 
                 title = 'Total '+cEvts+' v run '+sample
                 name = title.replace(' ','_').replace('#','')
+                title += mcomp
                 if len(Y)<1: print 'speedyPlot.loop ERROR title',title,'NO ENTRIES'
                 g = self.gU.makeTGraph(X,Y,title,name,ex=dX,ey=dY)
                 self.gU.color(g,j,j,setMarkerColor=True)
@@ -121,12 +135,24 @@ class speedyPlot():
 
                 title = 'Total '+cEvts+' v time '+sample
                 name = title.replace(' ','_').replace('#','')
+                title += mcomp
                 g = self.gU.makeTGraph(T,Y,title,name,ex=dX,ey=dY)
                 self.gU.color(g,j,j,setMarkerColor=True)
                 self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",yLimits=yLimits,noPopUp=noPopUp)
                 graphs[name] = g
 
+        # fit normed rate vs tim
+        if doFits:
+            prefix = 'Total_evtsN_v_time_LiLS'
+            for sn in snList:
+                name = prefix + str(sn)
+                g = graphs[name]
+                self.fitGLife(g)
+
         # histograms of measured/expected, measured - expected, (meas-exp)/unc, (meas-meas[S2])
+
+        MmMlimits = [-4.01,2.01]
+        mgraphs = [] # for overlay
         
         for j,sn in enumerate(snList):
             M,E,D,T = [],[],[],[]
@@ -141,11 +167,16 @@ class speedyPlot():
             E = numpy.array(E)
             T = numpy.array(T)
             dX= numpy.array([0. for x in E])
+            # compare each sample to reference sample interpolated to each samples time
+            # and corrected for the relative mass
             Mby2,Dby2 = self.interp(T,S2T,S2Y,S2DY)
-            MmM = M-Mby2
+            MmM = M-Mby2*self.cAC.SampleMassByRef['LiLS'+str(sn)]
+
+            mcomp = matName[sn] + ' '
+            
         
             name = 'meas_minus_S2_LiLS'+str(sn)
-            title= 'Measured(LiLS'+str(sn)+') - Measured(LiLS2)'
+            title= mcomp + 'Measured(LiLS'+str(sn)+') - Measured(LiLS2)' 
             h = self.gU.makeTH1D(M-Mby2,title,name)
             hists.append( h )
             name += '_v_time'
@@ -154,9 +185,20 @@ class speedyPlot():
             eY = numpy.sqrt(D*D+Dby2*Dby2)
             g = self.gU.makeTGraph(T,MmM,title,name,ex=dX,ey=eY)
             self.gU.color(g,j,j,setMarkerColor=True)
-            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",noPopUp=noPopUp)
+            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",
+                              noPopUp=noPopUp,yLimits=MmMlimits)
             graphs[name] = g
-            self.fitGraph(g,Draw=True)
+            if doFits: self.fitGraph(g,Draw=True)
+
+            wT,wY,wDT,wDY = self.gU.rebinByWeek(T,MmM,dX,eY)
+            name += '_weekly'
+            title+= ' weekly'
+            g = self.gU.makeTGraph(wT,wY,title,name,ex=wDT,ey=wDY)
+            self.gU.color(g,j,j,setMarkerColor=True)
+            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",
+                              noPopUp=noPopUp,yLimits=MmMlimits)
+            graphs[name] = g
+            if sn!=2: mgraphs.append( g )
             
             name = 'meas_minus_expect_LiLS'+str(sn)
             title = 'Measured - Expected LiLS#'+str(sn)
@@ -173,7 +215,9 @@ class speedyPlot():
         self.gU.drawMultiObjects(hists, fname='hists',figdir=self.figdir,abscissaIsTime=False,Grid=True,
                                  addLegend=False,statOpt=1110,biggerLabels=True,forceNX=4,noPopUp=noPopUp)
             
-        
+        self.gU.drawMultiObjects([ mgraphs], fname='meas_minus_S2_weekly',figdir=self.figdir,
+                                 abscissaIsTime=True,Grid=True,addLegend=True,statOpt=0,biggerLabels=False,
+                                 noPopUp=noPopUp)
 
         #print 'snList',snList
         for ax in ['time','run']:
@@ -202,12 +246,59 @@ class speedyPlot():
         f.Close()
         print 'speedyPlot.loop Wrote',len(graphs),'graphs and',len(hists),'hists to',self.outRootFile
         return
+    def fitGLife(self,g):
+        '''
+        fit graph to N*exp(-(t-t0)/tau)
+        with t0 = first time in graph
+        default tau = Ac227 lifetime in years
+        '''
+        tau = self.cAC.Ac227lifetime # in years
+        t,y = self.gU.getPoints(g)
+        t0 = min(t)
+        ya = sum(y)/float(len(y))
+        slf = '[0]*exp(-(x-'+str(t0)+')/([1]*365.*24.*60.*60.*1000.))'
+        lf = ROOT.TF1("lf",slf)
+        lf.SetParName(0,'N')
+        lf.SetParName(1,'tau')
+        lf.SetParameters(ya,tau)
+
+        gname = g.GetName()
+        gfix = g.Clone(gname+'_fixedTau')
+        gfree= g.Clone(gname+'_freeTau')
+
+
+        opt = 'FEM'
+        gfree.Fit(lf,opt)
+
+        
+        lf.SetParameters(ya,tau)
+        lf.SetParLimits(1,1,-1) # parameter fixed if lower limit > upper limit
+        gfix.Fit(lf,opt+"B")
+
+        c2 = ROOT.TCanvas("c2","c2",int(1000/1.5),int(800/1.5))
+        ROOT.gStyle.SetOptFit(1111)
+        g.Draw("AP")
+        gfree.Draw("P")
+        gfix.Draw("P")
+        c2.Draw()
+        c2.cd()
+        c2.Modified()
+        c2.Update()
+        wait = raw_input()
+        if wait!='':sys.exit('DONE')
+        return
+        
     def fitGraph(self,g,Draw=False):
         '''
         fit graph g with polynomial(s)
         optionally draw result
         '''
+        gname,gmcolor,glcolor = g.GetName(),g.GetMarkerColor(),g.GetLineColor()
         x0 = g.GetXaxis().GetXmin()
+        g0 = g.Clone(gname + '_p0')
+        g0.SetMarkerColor(gmcolor+10),g0.SetLineColor(glcolor+10)
+        g1 = g.Clone(gname + '_p1')
+        g1.SetMarkerColor(gmcolor+11),g1.SetLineColor(glcolor+11)
         
         sp0 = "[0]"
         POL0= ROOT.TF1("POL0",sp0)
@@ -218,30 +309,34 @@ class speedyPlot():
         POL1.SetParName(0,'Offset')
         POL1.SetParName(1,'Slope')
 
-        opt = 'NFEM'
+        opt = 'FEM' # N=don't store fit
         POL0.SetParameter(0,.1)
-        g.Fit("POL0",opt)
+        g0.Fit("POL0",opt)
         c,dc = POL0.GetParameter(0),POL0.GetParError(0)
         chi0,ndf0 = POL0.GetChisquare() , POL0.GetNDF()
 
         POL1.SetParameter(0,.1),POL1.SetParameter(0,-1.e-4)
-        g.Fit("POL1",opt)
+        g1.Fit("POL1",opt)
         off,doff = POL1.GetParameter(0),POL1.GetParError(0)
         slope,dslope = POL1.GetParameter(1),POL1.GetParError(1)
         chi1,ndf1 = POL1.GetChisquare() , POL1.GetNDF()
 
         if Draw:
+            
             #ROOT.gROOT.ProcessLine("gROOT->SetBatch(0)")
             c2 = ROOT.TCanvas("c2","c2",1000,800)
+            ROOT.gStyle.SetOptFit(1111)
             c2.Divide(1,1)
             c2.cd(1)
             xlo,xhi = g.GetXaxis().GetXmin(), g.GetXaxis().GetXmax()
             g.Draw("AIP")
+            g0.Draw("P")
+            g1.Draw("P")
             #raw_input('g.Draw')
             POL0.Draw("same")
             POL1.Draw("same")
 
-            if 1:
+            if 0:
                 L0 = ROOT.TLine(xlo,c,xhi,c)
                 L0.SetLineColor(ROOT.kRed)
                 L0.SetLineStyle(2)
@@ -269,6 +364,7 @@ class speedyPlot():
             c2.IsA().Destructor(c2)
  #           del c2
         return
+    
 
     def interp(self,t0,T,Y,dY):
         '''

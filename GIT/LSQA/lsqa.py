@@ -557,6 +557,7 @@ class lsqa():
         tmg.SetMaximum(3.0)
         canvas = self.gU.drawMultiGraph(tmg,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='keVee',yAxisLabel='FOM',NLegendColumns=3)
         canvasZ = self.gU.drawMultiGraph(tmgZ,figdir=self.figdir,abscissaIsTime=False,xAxisLabel='keVee',yAxisLabel='Z',NLegendColumns=3)
+        canvas.IsA().Destructor(canvas) # avoid segv?
         graphs.append( tmg )
         graphs.append( tmgZ )
 

@@ -69,6 +69,13 @@ class cutsAndConstants():
         self.SampleMaterial['LiLS7'] = 'RG188'
         self.SampleMaterial['LiLS8'] = 'Viton'
 
+        # sample mass divided by reference sample mass
+        if self.SampleMaterial['LiLS2']!='Reference': sys.exit('cutsAndConstants.__init__ ERROR LiLS2 is not the Reference sample')
+        rmass = self.SampleMass['LiLS2']
+        self.SampleMassByRef = {}
+        for key in self.SampleMass:
+            self.SampleMassByRef[key] = self.SampleMass[key]/rmass
+
         self.spikeLiLSmass = None
         
         # derived quantities
@@ -87,7 +94,8 @@ class cutsAndConstants():
         # run 544 wrong threshold
         # run 689 high trigger rate
         # Runs 287-295 are garbage test runs made during modification testing
-        self.badRuns = [56, 158, 258,259,260,261,262, 263,264,265,266, 676, 653, 663, 685, 544, 689 ]
+        # run 658 LiLS6 very low apparent rate, PSD vs charge shows large peak at charge~.001, PSD~0.86
+        self.badRuns = [56, 158, 258,259,260,261,262, 263,264,265,266, 676, 653, 663, 685, 544, 689, 658 ]
         self.badRuns.extend(  range(287,295+1) )
         
         
@@ -193,19 +201,24 @@ class cutsAndConstants():
         calculates all sample rates given inputDay.
         if no Day given, calculates rate today
         '''
-        print 'cutsAndConstants.allSampleRates sample,material,mass(g), area(cm2), rate(Hz) on',inputDay
+        print 'cutsAndConstants.allSampleRates sample,material,mass(g), mass/mass(ref), area(cm2), rate(Hz), rate/rate(ref) on',inputDay
         sr,sr2, sm,sm2 = 0.,0.,0.,0.
+        refrate,drefrate = self.expectAc227Rate(sampleName='LiLS2',inputDay=inputDay)
         for sN in sorted(self.SampleMass.keys()):
             area = self.sampleArea(sampleName=sN)
             rate,drate = self.expectAc227Rate(sampleName=sN,inputDay=inputDay)
+            ratewrtRef = rate/refrate
+            dratewrtRef= ratewrtRef * drate/rate
             sr += rate
             sr2+= rate*rate
             mat = self.SampleMaterial[sN]
             m = self.SampleMass[sN]
+            mr = self.SampleMassByRef[sN]
             sm += m
             sm2+= m*m
             dm= self.LiLSmassUnc
-            print ' {0} {1:10} {2:6.3f}({3:5.3f}) {4:4.1f} {5:.2f}({6:.2f})'.format(sN,mat,m,dm,area,rate,drate)
+            print ' {0} {1:10} {2:6.3f}({3:5.3f}) {9:.4f} {4:4.1f} {5:.2f}({6:.2f}) {7:.4f}({8:.4f})'.format(
+                sN,mat,m,dm,area,rate,drate,ratewrtRef,dratewrtRef,mr)
         N = float(len(self.SampleMass))
         sr = sr/N
         sr2= sr2/N
