@@ -25,6 +25,7 @@ class procWaveDump():
 
         # create prefix for log file for this job
         bn = os.path.basename(fn)
+        runnumber = int((bn.split('_')[0]).replace('run',''))
         lfprefix = bn.replace('.root','')
             
         # input, output directories
@@ -47,7 +48,8 @@ class procWaveDump():
         self.miniFake = None
 
         # initialize cuts, constraints
-        self.cAC = cutsAndConstants.cutsAndConstants()
+        # 20170417 add run number dependence to constants
+        self.cAC = cutsAndConstants.cutsAndConstants(runnumber=runnumber)
         
         self.Po215halflife = self.cAC.Po215halflife 
         self.Po215lifetime = self.cAC.Po215lifetime 

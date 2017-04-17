@@ -49,7 +49,7 @@ class speedyPlot():
         '''
         main processing loop
         '''
-        doFits = True
+        doFits = False
         
         tdict = self.mTT.getTTree(ttName='sWD',fn=fn)
 

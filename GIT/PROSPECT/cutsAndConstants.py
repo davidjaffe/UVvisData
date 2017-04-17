@@ -11,7 +11,7 @@ import datetime
 
 
 class cutsAndConstants():
-    def __init__(self):
+    def __init__(self,runnumber=None):
         self.Po215halflife = 0.001781 # from NNDC, units = seconds
         self.Po215lifetime = self.Po215halflife/math.log(2.)  
         self.tOffset = 10.*self.Po215lifetime
@@ -31,7 +31,12 @@ class cutsAndConstants():
 
         # exclude high trigger rate at the start of runs after run607 when threshold lowered
         # apply this cut to all data just to make it easy
-        self.startTimeCut = 0.01 
+        self.startTimeCut = 0.01
+        if runnumber is not None:
+            if runnumber==813: self.startTimeCut = 101.
+            if runnumber==815: self.startTimeCut = 101.
+            if runnumber==817: self.startTimeCut = 76.05
+            if runnumber==819: self.startTimeCut = 147.5
         
         self.maxTimeWindow = float(max(self.lifeRange))*self.Po215lifetime
 
