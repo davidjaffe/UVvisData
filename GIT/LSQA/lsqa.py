@@ -91,6 +91,11 @@ class lsqa():
         self.QforAvg = [15.,25.] # values of charge to use when averaging pulses
         self.startoff=100
         self.numavg  = 200
+
+        # 20170417 avoid leading edge well outside expected range.
+        # this cut added to wfanaFile due to crash in avgWF for batch15
+        self.nominalLeadingEdge = 2500.  
+        self.nominalLeadingEdgeRange = 1000. 
         
         self.PSDcut = 0.1
         self.sampledt = 0.2 # 1 sample/0.2ns
@@ -181,6 +186,7 @@ class lsqa():
         given input file.
         Also return pairs of (leadingEdge, waveform) for waveforms with a total charge
         within self.QforAvg identified as n-like or g-like
+        20170417 Add cut on position of leading edge due to problem with batch15, first pass, gamma-like events
         '''
 
         fastValues = self.fastValues 
@@ -209,10 +215,11 @@ class lsqa():
                 if self.QforAvg[0]<=abs(Qtot) and abs(Qtot)<=self.QforAvg[1]:
                     PSD = (Qtot-Qfast)/Qtot
                     leadingEdge,lE1,lE2 = self.getLeadingEdge(wfm)
-                    if PSD<self.PSDcut:
-                        gWFToAvg.append( [leadingEdge, wfm] )
-                    else:
-                        nWFToAvg.append( [leadingEdge, wfm] )
+                    if abs(leadingEdge-self.nominalLeadingEdge)<self.nominalLeadingEdgeRange:
+                        if PSD<self.PSDcut:
+                            gWFToAvg.append( [leadingEdge, wfm] )
+                        else:
+                            nWFToAvg.append( [leadingEdge, wfm] )
                 
                 if idebug>0:
                     for iPair,rPair in zip(IntValues,results):
@@ -226,7 +233,7 @@ class lsqa():
                 ievt+=1
 
         f.close()
-        print '\rlsqa.wfanaFile Processed',fn
+        print '\rlsqa.wfanaFile Processed',fn,'Total: Events',len(Events),'gammaEvents',len(gWFToAvg),'neutronEvents',len(nWFToAvg)
         return Events,gWFToAvg,nWFToAvg
     def gammaCalib(self,Events,draw=True):
         '''
@@ -669,6 +676,8 @@ class lsqa():
         return histograms of average waveform given pairs of leading edge and waveforms
         1st hist is vs samples, 2d hist is vs time
         '''
+        debug = False
+        
         startoff,numavg=self.startoff,self.numavg
         i1,i2 = 0-startoff-numavg,0+self.favTotal
         xmi = float(i1)-0.5
@@ -685,12 +694,14 @@ class lsqa():
         h2 = ROOT.TH1D(name,htit,nx,xmi*self.sampledt,xma*self.sampledt)
 
         x = numpy.arange(float(i2-i1))+float(i1)
+        if debug: print 'lsqa.avgWF:min(x),max(x),len(x)=',min(x),max(x),len(x)
         for pair in lEWF:
             leadingEdge,WF = pair
             BL = self.getBL(WF,startoff=startoff,numavg=numavg)
             X = numpy.arange(float(len(WF))) - leadingEdge
             f = scipy_interpolate.interp1d(X,WF)
             y = []
+            if debug: print 'lsqa.avgWF:min(X),max(X),len(X)=',min(X),max(X),len(X),'leadingEdge,BL',leadingEdge,BL
             for v in x:
                 y.append(abs(f(v)-BL))   # invert and subtract baseline
             y = numpy.array(y)

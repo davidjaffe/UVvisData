@@ -132,7 +132,7 @@ class showLSQAResults():
         # make P50-1 the first sample and sort the rest of the samples
         cP50 =  'P50-1'
         samples.remove(cP50)
-        samples.sort()
+        samples.sort(key=lambda x :int(x[x.index('batch')+len('batch'):x.index('_s')])*100+int(x[x.index('sample')+len('sample'):])  )
         samples.insert(0,cP50)
         cSN = self.compactSampleNames(samples)
 
@@ -244,8 +244,13 @@ class showLSQAResults():
             ax.grid()
             if iQ==0:
                 ax.legend(loc='upper center')
-                ncol = len(samples)/2+1
-                ax.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,  ncol=ncol, borderaxespad=0., numpoints=1,labelspacing=0.1,columnspacing=0.1,handletextpad=0.1) #mode="expand"
+                nrow = 2
+                if len(samples)>10: nrow +=1 
+                if len(samples)>30: nrow +=1
+                ncol = len(samples)/nrow+1
+                ax.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,  prop={'size':10},
+                          ncol=ncol, borderaxespad=0., numpoints=1,labelspacing=0.1,
+                          columnspacing=0.1,handletextpad=0.1) #mode="expand"
                 
             if iQ==len(Quantities)-1:
                 if showHist: Hax.legend(loc='upper right')
