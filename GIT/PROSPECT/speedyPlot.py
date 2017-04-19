@@ -152,7 +152,8 @@ class speedyPlot():
         # histograms of measured/expected, measured - expected, (meas-exp)/unc, (meas-meas[S2])
 
         MmMlimits = [-4.01,2.01]
-        mgraphs = [] # for overlay
+        MbyRlimits= [0.94,1.02]
+        mgraphs,rgraphs = [],[] # for overlay
         
         for j,sn in enumerate(snList):
             M,E,D,T = [],[],[],[]
@@ -170,13 +171,14 @@ class speedyPlot():
             # compare each sample to reference sample interpolated to each samples time
             # and corrected for the relative mass
             Mby2,Dby2 = self.interp(T,S2T,S2Y,S2DY)
-            MmM = M-Mby2*self.cAC.SampleMassByRef['LiLS'+str(sn)]
+            MmM = M-Mby2*self.cAC.SampleMassByRef['LiLS'+str(sn)]  # measured - interpolated reference
+            MbyR= M/(Mby2*self.cAC.SampleMassByRef['LiLS'+str(sn)])  # measured/interpolated reference
 
             mcomp = matName[sn] + ' '
             
         
             name = 'meas_minus_S2_LiLS'+str(sn)
-            title= mcomp + 'Measured(LiLS'+str(sn)+') - Measured(LiLS2)' 
+            title= mcomp + 'Measured(LiLS'+str(sn)+') - Interpolated measured(LiLS2)' 
             h = self.gU.makeTH1D(M-Mby2,title,name)
             hists.append( h )
             name += '_v_time'
@@ -199,7 +201,25 @@ class speedyPlot():
                               noPopUp=noPopUp,yLimits=MmMlimits)
             graphs[name] = g
             if sn!=2: mgraphs.append( g )
-            
+
+            name = 'meas_by_S2_LiLS'+str(sn) + '_v_time'
+            title= mcomp +  'Measured(LiLS'+str(sn)+') / Interpolated measured(LiLS2) vs time'
+            eY = MbyR*numpy.sqrt( D*D/M/M + Dby2*Dby2/Mby2/Mby2 )
+            g = self.gU.makeTGraph(T,MbyR,title,name,ex=dX,ey=eY)
+            self.gU.color(g,j,j,setMarkerColor=True)
+            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",noPopUp=noPopUp, yLimits=MbyRlimits)
+            graphs[name] = g
+
+            wT,wY,wDT,wDY = self.gU.rebinByWeek(T,MbyR,dX,eY)
+            name += '_weekly'
+            title+= ' weekly'
+            g = self.gU.makeTGraph(wT,wY,title,name,ex=wDT,ey=wDY)
+            self.gU.color(g,j,j,setMarkerColor=True)
+            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",
+                              noPopUp=noPopUp,yLimits=MbyRlimits)
+            graphs[name] = g           
+            if sn!=2: rgraphs.append( g )
+                
             name = 'meas_minus_expect_LiLS'+str(sn)
             title = 'Measured - Expected LiLS#'+str(sn)
             h = self.gU.makeTH1D(M-E,title,name,xmi=-10.,xma=0.)
@@ -216,6 +236,9 @@ class speedyPlot():
                                  addLegend=False,statOpt=1110,biggerLabels=True,forceNX=4,noPopUp=noPopUp)
             
         self.gU.drawMultiObjects([ mgraphs], fname='meas_minus_S2_weekly',figdir=self.figdir,
+                                 abscissaIsTime=True,Grid=True,addLegend=True,statOpt=0,biggerLabels=False,
+                                 noPopUp=noPopUp)
+        self.gU.drawMultiObjects([ rgraphs], fname='meas_by_S2_weekly',figdir=self.figdir,
                                  abscissaIsTime=True,Grid=True,addLegend=True,statOpt=0,biggerLabels=False,
                                  noPopUp=noPopUp)
 
