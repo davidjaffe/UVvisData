@@ -142,6 +142,7 @@ class showLSQAResults():
 
 
         Quantities = ['Z','FOM','EperQ']
+        yAxLimits  = [ [96., 110.], [1.25, 1.60], [23.,30.] ]
         factors    = [1000., 1., 1.]
         histlabels = []
         for f,Q in zip(factors,Quantities):
@@ -213,15 +214,22 @@ class showLSQAResults():
                         x.append(t)
                         dx.append(0.)
                 x,y,dx,dy = numpy.array(x),numpy.array(y),numpy.array(dx),numpy.array(dy)
+                yLimits = yAxLimits[iQ]
+                if min(y-dy)<yLimits[0] or max(y+dy)>yLimits[1]:
+                    print 'showLSQAResults.main ERROR',Q,'yLimits',yLimits,'ymin,ymax',min(y-dy),max(y+dy)
+                    sys.exit('showLSQAResults.main ERROR Fix y limits for ' + Q)
                 ax.errorbar(x, y, color=self.colors[ic],marker=self.points[ip], yerr=dy, linestyle='empty',label=cSN[s])
+                ax.set_ylim(yLimits)
 
             # histograms
             if showHist:
                 YY = numpy.concatenate((y50,ybs))
                 ymi,yma = min(YY)-(max(YY)-min(YY))/10.,max(YY)+(max(YY)-min(YY))/10.
                 bins = numpy.linspace(ymi,yma,20)
-                Hax.hist(y50,bins,histtype='stepfilled',label=cP50,color='black')
-                Hax.hist(ybs,bins,histtype='stepfilled',label='batches',color='red')
+
+                Hax.hist([y50,ybs],bins,histtype='stepfilled',stacked=True,
+                         label=[cP50,'batches'],color=['black','red'])
+
                 Hax.set_xlabel(histlabels[iQ])
                 Hax.grid()
                 ylo,yhi = Hax.get_ylim()
