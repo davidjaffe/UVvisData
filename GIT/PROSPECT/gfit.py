@@ -7,11 +7,14 @@ comment out langaus usage
 import ROOT
 from array import array
 import math
+import os
+import graphUtils
 
 class gfit():
     def __init__(self):
         #ROOT.gROOT.ProcessLine('.L langaus.C++')
         #self.lgfun = ROOT.langaufun
+        self.gU = graphUtils.graphUtils()
         print 'gfit initialized'
         return
 
@@ -33,6 +36,173 @@ class gfit():
         i1 = max( 1,hname.GetBinLowEdge(xmi) )
         i2 = min(nbins, hname.GetBinLowEdge(xma)+1 )
         return hname.Integral(i1,i2)
+
+    def fourG(self,h,WAIT=False,quietly=True,debug=False,PS=None):
+        '''
+        Return area, unc of nuclear recoil peak in PSD distribution in input hist h
+        Four gaussian fit to PSD distribution.
+        Initial parameters based on Danielle's work.
+        '''
+        qopt = ''
+        if quietly: qopt = 'Q'  # quiet, no output to terminal
+        if not debug : qopt += '0' # don't draw
+        noPopUp = PS is not None
+        if noPopUp : ROOT.gROOT.ProcessLine("gROOT->SetBatch()")
+
+        qopt2 = ''
+        if quietly and PS is not None:
+            qopt2 = 'Q'
+
+
+        w = h.GetXaxis().GetBinWidth(1) # assume equal size bins
+        sw = '*'+str(w)
+        sr2pi = str(math.sqrt(2.*math.pi))
+        sGG = "([0]*exp(-0.5*(x-[1])*(x-[1])/[2]/[2])/[2]/"+sr2pi+  \
+            "+[3]*exp(-0.5*(x-[4])*(x-[4])/[5]/[5])/[5]/"+sr2pi+  \
+            "+[6]*([9]*exp(-0.5*(x-[7])*(x-[7])/[8]/[8])/[8]/"+sr2pi+  \
+            "+(1.-[9])*exp(-0.5*(x-[10])*(x-[10])/[11]/[11])/[11]/"+sr2pi+"))"+sw
+        if debug: print 'gfit.fourG sGG',sGG
+
+        sG = "([0]*exp(-0.5*(x-[1])*(x-[1])/[2]/[2])/[2]/"+sr2pi+")"+sw
+
+        npar = 12
+        xlo,xhi = 0.15,0.55
+
+        c1 = ROOT.TCanvas('c1')
+        G4 = ROOT.TF1('G4',sGG)
+        ROOT.gStyle.SetOptStat(0)
+        ROOT.gStyle.SetOptFit(1111)
+        ROOT.gStyle.SetTitleX(0.8)
+        c1.SetGrid(1)
+        c1.SetTicks(1)
+
+        # fix and set means, sigmas to best guesses 
+        k = 0
+        means = [.2629,.2523,.4261,.4165]
+        meanLimits = [ [0.2,0.3], [0.2,0.3], [0.3,0.5], [0.3,0.5] ]
+        sigmas= [.0222,.0470,.0237,.0310]
+        
+        for i in [1,4,7,10]:
+            j = i+1
+            sk = str(k)
+            G4.SetParName(i,'Mean'+sk)
+            G4.SetParameter(i,means[k])
+            G4.FixParameter(i,means[k])
+            G4.SetParName(j,'Sigma'+sk)
+            G4.SetParameter(j,sigmas[k])
+            G4.FixParameter(j,sigmas[k])
+            k+=1
+        # set amplitudes, including fixed fraction
+        G4.SetParName(0,'A0')
+        G4.SetParameter(0,100./w)
+        G4.SetParName(3,'A1')
+        G4.SetParameter(3,100./w)
+        iN = 6
+        G4.SetParName(iN,'N')
+        G4.SetParameter(iN,400./w)
+        G4.SetParName(9,'f')
+        G4.SetParameter(9,0.4)
+        G4.FixParameter(9,0.4)
+
+        fitopt = ''+qopt
+
+        # 3par fit: amplitudes only
+        h.Fit(G4,fitopt,"",xlo,xhi)
+        c1.Update()
+        ps = h.GetListOfFunctions().FindObject("stats")
+        if ps:
+            ps.SetX1NDC(0.11)
+            ps.SetX2NDC(0.51)
+            ps.SetY1NDC(0.40-0.03)
+            ps.SetY2NDC(1.00-0.03)
+            ps.SetTextSize(0.01*2*1.5)
+        c1.Update()
+        if WAIT: wait = raw_input()
+
+        # 4par fit: release fraction
+        G4.ReleaseParameter(9)
+        G4.SetParameter(9,0.4)
+        G4.SetParLimits(9,0.,1.)
+        self.setPositive(G4,npar)
+        h.Fit(G4,fitopt,"",xlo,xhi)
+        c1.Update()
+        if WAIT: wait = raw_input()
+
+        # if fraction is at limit, reset it
+        f = G4.GetParameter(9)
+        if abs(f-0.5)<0.01: f = 0.4
+        G4.SetParameter(9,f)
+    
+            
+
+        # 12par fits: release means, sigmas
+        k = 0
+        for i in [1,4,7,10]:
+            j = i+1
+            sk = str(k)
+            G4.ReleaseParameter(i)
+            G4.SetParameter(i,means[k])
+            G4.SetParLimits(i,meanLimits[k][0],meanLimits[k][1])
+            G4.ReleaseParameter(j)
+            G4.SetParameter(j,sigmas[k])
+            k += 1
+
+        N,dN = None,None
+        for fitopt in [''+qopt,'I'+qopt,'IM'+qopt,'IME'+qopt2]:
+
+            self.setPositive(G4,npar)
+            h.Fit(G4,fitopt,"",xlo,xhi)
+            c1.Update()
+            ps = h.GetListOfFunctions().FindObject("stats")
+            if ps:
+                ps.SetX1NDC(0.11)
+                ps.SetX2NDC(0.51)
+                ps.SetY1NDC(0.40-0.03)
+                ps.SetY2NDC(1.00-0.03)
+                ps.SetTextSize(0.01*2*1.5)
+            c1.Update()
+            N = G4.GetParameter(iN)
+            dN= G4.GetParError(iN)
+            if debug: print 'N {0:.2f}({1:.2f})   dN/N {2:.4f}  1/sqrt(N) {3:.4f}'.format(N,dN,dN/N,1./math.sqrt(N))
+
+            if WAIT: wait = raw_input()
+
+        # draw the 4 gaussians
+        par = self.getPar(G4,npar)
+        F = {}
+        for i in range(4):
+            if i<2:
+                p = par[i*3:i*3+3]
+            elif i==2:
+                p = [ par[iN]*par[9], par[i*3+1], par[i*3+2] ]
+            else:
+                p = [ par[iN]*(1.-par[9]), par[i*3+1], par[i*3+2] ]
+
+            sf = 'f'+str(i)
+            F[sf] = ROOT.TF1(sf,sG)
+            for j,x in enumerate(p): F[sf].SetParameter(j,x)
+            F[sf].SetLineColor(i+2)
+            F[sf].Draw("SAME")
+            
+        c1.Update()
+        if PS is not None:
+            pdf = PS.replace('.ps','.pdf')
+            self.gU.finishDraw(c1,PS,pdf,ctitle=pdf)
+        if debug : wait = raw_input('all done. cr to continue')
+        
+        return N,dN
+    def getPar(self,F,npar):
+        p = []
+        for i in range(npar): p.append( F.GetParameter(i) )
+        return p
+    def setPositive(self,F,npar):
+        for i in range(npar):
+            p = F.GetParameter(i)
+            F.SetParameter(i,abs(p))
+        return
+    
+
+         
             
     def twoG(self,hname,debug=False,x1min=-100.,x1max=100.,x2max=300.,sgm=None,Unconstrained=False): # two gaussian fit
         name,ave,rms,tot,under,bin1,over,ent,xmi,xma = self.getProp(hname)
@@ -254,3 +424,36 @@ class gfit():
         results['GoodFit'] = True
 
         return True, results
+    def analyzePSD(self):
+        '''
+        main routine for analyzing PSD distributions using 4gaussian fit
+        '''
+        fn = 'Danielle/Histograms_RootTrees/run00701_ts1490121118_Hists.root'
+
+
+        files = ['Danielle/Histograms_RootTrees/run00697_ts1490118343_Hists.root',
+            'Danielle/Histograms_RootTrees/run00698_ts1490118955_Hists.root',
+            'Danielle/Histograms_RootTrees/run00699_ts1490119669_Hists.root',
+            'Danielle/Histograms_RootTrees/run00700_ts1490120403_Hists.root',
+            'Danielle/Histograms_RootTrees/run00701_ts1490121118_Hists.root',
+            'Danielle/Histograms_RootTrees/run00702_ts1490121840_Hists.root',
+            'Danielle/Histograms_RootTrees/run00703_ts1490122550_Hists.root',
+            'Danielle/Histograms_RootTrees/run00704_ts1490123341_Hists.root']
+
+        figdir = 'Danielle/Figures/'
+
+        for fn in files:
+
+            bn = os.path.basename(fn)
+            rn = bn.split('_')[0]
+            ps = figdir + rn + '.ps'
+            f = ROOT.TFile(fn)
+            h = f.Get('hPSD')
+            N,dN = self.fourG(h,PS=ps)
+            if N is not None:
+                print '{0} Nalpha {1:.2f}({2:.2f}) dN/Nalpha {3:.4f}  sqrt(1./N) {4:.4f}'.format(rn,N,dN,dN/N,math.sqrt(1./N))
+
+if __name__ == '__main__' :
+    T = gfit()
+    T.analyzePSD()
+    

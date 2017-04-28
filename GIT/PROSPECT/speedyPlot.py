@@ -35,7 +35,7 @@ class speedyPlot():
     def __init__(self,Log=True,Speedy=False):
 
 
-        self.gU = graphUtils.graphUtils()
+        self.gU = graphUtils.graphUtils(defMarkerSize=2)
         self.mTT= makeTTree.makeTTree()
         self.cAC= cutsAndConstants.cutsAndConstants()
         self.figdir = 'Figures/Speedy/'
@@ -95,6 +95,7 @@ class speedyPlot():
 
         # collect, plot per-sample quantites
         graphs = {}
+        moregraphs = []
         hists = []
         TMG = {}
 
@@ -155,7 +156,8 @@ class speedyPlot():
         MmMlimits = [-4.01,2.01]
         MbyRlimits= [0.94,1.02]
         MmElimits = [-9.01,-1.99]
-        mgraphs,rgraphs,egraphs = [],[],[] # for overlay
+        mgraphs,rgraphs,egraphs = [],[],[] # for overlay: m=difference to S2,r=ratio,e=difference to expected
+        rgraphsDaily,mgraphsDaily,egraphsDaily = [],[],[]
         
         for j,sn in enumerate(snList):
             M,E,D,T = [],[],[],[]
@@ -188,16 +190,19 @@ class speedyPlot():
                               noPopUp=noPopUp,yLimits=MmElimits)
             graphs[name] = g
             
-            wT,wY,wDT,wDY = self.gU.rebinByWeek(T,M-E,dX,eY)
-            name += '_weekly'
-            title+= ' weekly'
-            g = self.gU.makeTGraph(wT,wY,title,name,ex=wDT,ey=wDY)
-            self.gU.color(g,j,j,setMarkerColor=True)
-            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",
-                              noPopUp=noPopUp,yLimits=MmElimits)
-            graphs[name] = g
-            egraphs.append( g ) # include reference
-            
+            Qname,Qtitle = name,title
+            for byDay,durName in zip( [False,True], ['weekly','daily'] ):
+                wT,wY,wDT,wDY = self.gU.rebinByWeek(T,M-E,dX,eY,byDay=byDay)
+                name = Qname + '_' + durName
+                title= Qtitle+ ' ' + durName
+                g = self.gU.makeTGraph(wT,wY,title,name,ex=wDT,ey=wDY)
+                self.gU.color(g,j,j,setMarkerColor=True)
+                self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",
+                                  noPopUp=noPopUp,yLimits=MmElimits)
+                graphs[name] = g
+                if not byDay:egraphs.append( g ) # include reference
+                if byDay: egraphsDaily.append( g )
+                
             
             
             # measured sample minus corrected, interpolated reference
@@ -216,16 +221,20 @@ class speedyPlot():
             graphs[name] = g
             if doFits: self.fitGraph(g,Draw=True)
 
-            wT,wY,wDT,wDY = self.gU.rebinByWeek(T,MmM,dX,eY)
-            name += '_weekly'
-            title+= ' weekly'
-            g = self.gU.makeTGraph(wT,wY,title,name,ex=wDT,ey=wDY)
-            self.gU.color(g,j,j,setMarkerColor=True)
-            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",
-                              noPopUp=noPopUp,yLimits=MmMlimits)
-            graphs[name] = g
-            if sn!=2: mgraphs.append( g )
-
+            Qname,Qtitle = name,title
+            for byDay,durName in zip( [False,True], ['weekly','daily'] ):
+                wT,wY,wDT,wDY = self.gU.rebinByWeek(T,MmM,dX,eY,byDay=byDay)
+                name = Qname + '_' + durName
+                title= Qtitle+ ' ' + durName
+                g = self.gU.makeTGraph(wT,wY,title,name,ex=wDT,ey=wDY)
+                self.gU.color(g,j,j,setMarkerColor=True)
+                self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",
+                                  noPopUp=noPopUp,yLimits=MmMlimits)
+                graphs[name] = g
+                if sn!=2:
+                    if not byDay: mgraphs.append( g )
+                    if byDay: mgraphsDaily.append(g )
+                            
             # measured sample divided by corrected, interpolated reference
             name = 'meas_by_S2_LiLS'+str(sn) + '_v_time'
             title= mcomp +  'Measured(LiLS'+str(sn)+') / Interpolated measured(LiLS2) vs time'
@@ -235,15 +244,21 @@ class speedyPlot():
             self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",noPopUp=noPopUp, yLimits=MbyRlimits)
             graphs[name] = g
 
-            wT,wY,wDT,wDY = self.gU.rebinByWeek(T,MbyR,dX,eY)
-            name += '_weekly'
-            title+= ' weekly'
-            g = self.gU.makeTGraph(wT,wY,title,name,ex=wDT,ey=wDY)
-            self.gU.color(g,j,j,setMarkerColor=True)
-            self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",
-                              noPopUp=noPopUp,yLimits=MbyRlimits)
-            graphs[name] = g           
-            if sn!=2: rgraphs.append( g )
+            Qname,Qtitle = name,title
+            for byDay,durName in zip( [False,True], ['weekly','daily'] ):
+                wT,wY,wDT,wDY = self.gU.rebinByWeek(T,MbyR,dX,eY,byDay=byDay)
+                name  = Qname + '_' + durName
+                title = Qtitle+ ' ' + durName
+                g = self.gU.makeTGraph(wT,wY,title,name,ex=wDT,ey=wDY)
+                self.gU.color(g,j,j,setMarkerColor=True)
+                self.gU.drawGraph(g,figDir=self.figdir,abscissaIsTime=True,option="AP",
+                                  noPopUp=noPopUp,yLimits=MbyRlimits)
+                graphs[name] = g           
+                if sn!=2:
+                    if byDay:
+                        rgraphsDaily.append( g )
+                    else:
+                        rgraphs.append( g )
                 
             name = 'meas_minus_expect_LiLS'+str(sn)
             title = 'Measured - Expected LiLS#'+str(sn)
@@ -261,14 +276,26 @@ class speedyPlot():
                                  addLegend=False,statOpt=1110,biggerLabels=True,forceNX=4,noPopUp=noPopUp)
             
         self.gU.drawMultiObjects([ mgraphs], fname='meas_minus_S2_weekly',figdir=self.figdir,
-                                 abscissaIsTime=True,Grid=True,addLegend=True,statOpt=0,biggerLabels=False,
+                                 abscissaIsTime=True,Grid=True,
+                                 addLegend=True,statOpt=0,biggerLabels=False,
+                                 noPopUp=noPopUp)
+        self.gU.drawMultiObjects([ mgraphsDaily], fname='meas_minus_S2_daily',figdir=self.figdir,
+                                 abscissaIsTime=True,Grid=True,
+                                 addLegend=True,statOpt=0,biggerLabels=False,
                                  noPopUp=noPopUp)
         self.gU.drawMultiObjects([ rgraphs], fname='meas_by_S2_weekly',figdir=self.figdir,
-                                 abscissaIsTime=True,Grid=True,addLegend=True,statOpt=0,biggerLabels=False,
-                                 noPopUp=noPopUp)
+                                 abscissaIsTime=True,Grid=True,addLegend=True,statOpt=0,
+                                 biggerLabels=False,noPopUp=noPopUp)
+        self.gU.drawMultiObjects([ rgraphsDaily], fname='meas_by_S2_daily',figdir=self.figdir,
+                                 abscissaIsTime=True,Grid=True,addLegend=True,statOpt=0,
+                                 biggerLabels=False,noPopUp=noPopUp)
         self.gU.drawMultiObjects([ egraphs], fname='meas_minus_expected_weekly',figdir=self.figdir,
-                                 abscissaIsTime=True,Grid=True,addLegend=True,statOpt=0,biggerLabels=False,
-                                 noPopUp=noPopUp)
+                                 abscissaIsTime=True,Grid=True,addLegend=True,statOpt=0,
+                                 biggerLabels=False,noPopUp=noPopUp)
+        self.gU.drawMultiObjects([ egraphsDaily], fname='meas_minus_expected_daily',
+                                 figdir=self.figdir,
+                                 abscissaIsTime=True,Grid=True,addLegend=True,statOpt=0,
+                                 biggerLabels=False,noPopUp=noPopUp)
 
         #print 'snList',snList
         # plot material sample and reference sample vs time, run
@@ -292,36 +319,63 @@ class speedyPlot():
                                              addLegend=True,statOpt=0,biggerLabels=False,debug=False,noPopUp=noPopUp)
 
 
-        ### plots of just the first two weeks after spiking 27feb2017 (monday) - 200310 (friday)
-        feb26 = datetime.datetime.strptime('20170226','%Y%m%d')
-        mar11 = datetime.datetime.strptime('20170311','%Y%m%d')
-        tsfeb26 = time.mktime(feb26.timetuple())
-        tsmar11 = time.mktime(mar11.timetuple())
-        tLimits = [tsfeb26,tsmar11]
-        gc2 = None
-        zgraphs = []
-        for sn in snList:
-            name = 'Total_evtsN_v_time_LiLS'+str(sn)
-            g = graphs[name]
-            gc = g.Clone()
-            gc.SetName(name + '_zoom')
-            fname = name + '_and_LiLS2_zoom'
-            if sn==2: gc2 = gc.Clone()
-            self.gU.drawGraph(gc,figDir=self.figdir,abscissaIsTime=True,option="AP",
-                              noPopUp=noPopUp,xLimits=tLimits)
-            if sn!=2: self.gU.drawMultiObjects([[gc,gc2]], fname=fname,figdir=self.figdir,abscissaIsTime=True,
-                                               Grid=True,addLegend=True,biggerLabels=False,debug=False,noPopUp=noPopUp)
-            if sn!=2: 
-                name =  'meas_by_S2_LiLS'+str(sn) + '_v_time'
+        ### plots of restricted time ranges
+        ### first two weeks after spiking 27feb2017 (monday) - 200310 (friday)
+        ### first day, first week
+        fmt = '%Y%m%d'
+        fmth= '%Y%m%d:%H'
+        tsfeb26 = self.getTimestamp('20170226')
+        tsmar11 = self.getTimestamp('20170311')
+        ts1stday0=self.getTimestamp('20170227:08',fmt=fmth) # 08:00 first day
+        ts1stday1=self.getTimestamp('20170227:21',fmt=fmth) # 21:00 first day
+        ts1stwk1 =self.getTimestamp('20170302:23',fmt=fmth) # 23:00 end friday, 1st week
+        tsLimits = [ [ts1stday0, ts1stday1], [ts1stday0,ts1stwk1], [tsfeb26,tsmar11] ]
+        tsName   = [ 'first_day',           'first_week',          '1st_2weeks']
+        for Name,tLimits in zip(tsName,tsLimits):
+
+            gc2 = None
+            zgraphs = []
+            for sn in snList:
+                name = 'Total_evtsN_v_time_LiLS'+str(sn)
                 g = graphs[name]
                 gc = g.Clone()
-                gc.SetName(name + '_zoom')
+                gc.SetName(name + '_'+Name)
+                fname = name + '_and_LiLS2_'+Name
+                if sn==2: gc2 = gc.Clone()
                 self.gU.drawGraph(gc,figDir=self.figdir,abscissaIsTime=True,option="AP",
-                                noPopUp=noPopUp,xLimits=tLimits)
-                zgraphs.append( gc )
-        fname = 'meas_by_S2_zoom'
-        self.gU.drawMultiObjects([zgraphs], fname=fname,figdir=self.figdir,abscissaIsTime=True,
-                Grid=True,addLegend=True,biggerLabels=False,debug=False,noPopUp=noPopUp)
+                                  noPopUp=noPopUp,xLimits=tLimits)
+                if sn!=2: self.gU.drawMultiObjects([[gc,gc2]], fname=fname,figdir=self.figdir,abscissaIsTime=True,
+                                                   Grid=True,addLegend=True,biggerLabels=False,debug=False,noPopUp=noPopUp)
+                if sn!=2: 
+                    name =  'meas_by_S2_LiLS'+str(sn) + '_v_time'
+                    g = graphs[name]
+                    gc = g.Clone()
+                    gc.SetName(name + '_'+Name)
+                    self.gU.drawGraph(gc,figDir=self.figdir,abscissaIsTime=True,option="AP",
+                                    noPopUp=noPopUp,xLimits=tLimits)
+                    zgraphs.append( gc )
+            fname = 'meas_by_S2_'+Name
+            self.gU.drawMultiObjects([zgraphs], fname=fname,figdir=self.figdir,abscissaIsTime=True,
+                    Grid=True,addLegend=True,biggerLabels=False,debug=False,noPopUp=noPopUp)
+
+            # same scheme for weekly and daily ratios
+            GRAPHS = [ egraphs, egraphsDaily, rgraphs, rgraphsDaily, mgraphs, mgraphsDaily ]
+            NAMES  = ['meas_minus_exp_weekly','meas_minus_exp_daily',
+                      'meas_by_S2_weekly','meas_by_S2_daily',
+                      'meas_minus_S2_weekly','meas_minus_S2_daily']
+            for cName,cGraph in zip(NAMES,GRAPHS):
+                zgraphs = []
+                for g in cGraph:
+                    gc = g.Clone()
+                    gc.SetName( g.GetName() + '_' + Name )
+                    self.gU.drawGraph(gc,figDir=self.figdir,abscissaIsTime=True,option="AP",
+                                      noPopUp=noPopUp,xLimits=tLimits)
+                    zgraphs.append( gc )
+                fname = cName + '_' + Name
+                self.gU.drawMultiObjects([zgraphs], fname=fname,figdir=self.figdir,abscissaIsTime=True,
+                        Grid=True,addLegend=True,biggerLabels=False,debug=False,noPopUp=noPopUp)
+
+            
                 
         f = ROOT.TFile(self.outRootFile,'RECREATE')
         for g in graphs: f.WriteTObject( graphs[g] )
@@ -370,7 +424,13 @@ class speedyPlot():
         wait = raw_input()
         if wait!='':sys.exit('DONE')
         return
-        
+    def getTimestamp(self,DATE,fmt = '%Y%m%d'):
+        '''
+        return timestamp given input DATE
+        '''
+        T = datetime.datetime.strptime(DATE,fmt)
+        ts = time.mktime(T.timetuple())
+        return ts
     def fitGraph(self,g,Draw=False):
         '''
         fit graph g with polynomial(s)
