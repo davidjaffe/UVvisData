@@ -424,6 +424,24 @@ class gfit():
         results['GoodFit'] = True
 
         return True, results
+    def analyze2D(self):
+
+        fn = 'Speedy/Output/run00164.root'
+        f = ROOT.TFile(fn)
+        rn = os.path.basename(fn).replace('.root','')
+        hists = ["PSD_vs_Charge","PSD_vs_ChargeN"]
+        for hn in hists:
+            h = f.Get(hn)
+            newname = 'new_'+hn
+            hnew = h.Clone(newname)
+           
+            hnew_py = hnew.ProjectionY(newname+'py',1,hnew.GetNbinsY())
+
+            N,dN = self.fourG(hnew_py,WAIT=False,quietly=True)
+            if N is not None:
+                print '{0} {5} Nalpha {1:.2f}({2:.2f}) dN/Nalpha {3:.4f}  sqrt(1./N) {4:.4f}'.format(rn,N,dN,dN/N,math.sqrt(1./N),hn)
+
+        return
     def analyzePSD(self):
         '''
         main routine for analyzing PSD distributions using 4gaussian fit
@@ -452,8 +470,9 @@ class gfit():
             N,dN = self.fourG(h,PS=ps)
             if N is not None:
                 print '{0} Nalpha {1:.2f}({2:.2f}) dN/Nalpha {3:.4f}  sqrt(1./N) {4:.4f}'.format(rn,N,dN,dN/N,math.sqrt(1./N))
-
+        return
 if __name__ == '__main__' :
     T = gfit()
-    T.analyzePSD()
+    #T.analyzePSD()
+    T.analyze2D()
     

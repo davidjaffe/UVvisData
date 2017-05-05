@@ -14,11 +14,15 @@ import matplotlib
 import matplotlib.pyplot as plt
 import datetime,os
 import cutsAndConstants
+import alphan
 
 class detMC():
     def __init__(self,pe_MeV=10.):
 
         self.cAC = cutsAndConstants.cutsAndConstants()
+        self.aN  = alphan.alphan()
+        self.material = 'fluorine'
+        self.material = 'carbon'
 
         self.DautNames = ['227Ac','227Th','223Ra','219Rn','215Po','211Pb','211Bi','207Tl','219At']
         self.colors    = ['b'    ,'g'    ,'r'    ,'c'    ,'m'    ,'y'    ,'k'    ,'p'    , 'lime']
@@ -174,6 +178,15 @@ class detMC():
         ip = int(parent[:3])
         id = int(daut[:3])
         return ip-id==4
+    def getNeutrons(self,Ealpha):
+        '''
+        return numpy array of neutrons per alpha for each alpha energy in input array Ealpha
+        '''
+        neutrons = []
+        for e in Ealpha:
+            eMeV = e/1.e3
+            neutrons.append( self.aN.getNperA(eMeV, target=self.material) )
+        return numpy.array( neutrons )
     def expt(self,events=10,units='keV',cf=1.):
         '''
         perform a toy experiment
@@ -183,6 +196,7 @@ class detMC():
         
         print 'detMC.expt Generate',events,'per isotope'
         decays = {}
+        neutrons = {}
         hists = {}
         Ndecays = events
         Nbin = 600
@@ -199,24 +213,32 @@ class detMC():
 #        bins = [float(x) for x in range(int(emi),int(ema+d),int(d))]
         Nbin = bins
         Eall = numpy.array([])
+        Nall = numpy.array([])
         nrows,ncols=4,2
         fs = 10
         fst=  6
         fig,axs = plt.subplots(nrows=nrows,ncols=ncols)
         irow,icol = 0,0
+        ytext = 1000.
         for isotope in self.DautNames:
             decays[isotope] = cf*self.fill(Branch=isotope,Ndecays=Ndecays)
+            if self.pePerMeVa<=0:
+                neutrons[isotope] = self.getNeutrons(decays[isotope])
+                ytext = 1000.
+            else:
+                neutrons[isotope] = numpy.array([1. for a in decays[isotope]])
+                ytext = 2.
             print 'isotope,len(decays[isotope])',isotope,len(decays[isotope])
             if isotope=='219Rn' and units=='pC':
                 vmi,vma = self.cAC.promptChargeCut[0]*1e3, self.cAC.promptChargeCut[1]*1e3 # 30.,40. # pC
                 effy = self.cutEffy(decays[isotope],vmi,vma)
                 print isotope,'effy',effy,'cut range('+units+')',vmi,vma
             if len(decays[isotope])>0:
-                label = isotope#+' '+str(len(decays[isotope])) + ' entries'
+                label = isotope #+' '+str(len(decays[isotope])) + ' entries'
                 axs[irow,icol].set_xlim([emi,ema])
-                axs[irow,icol].hist(decays[isotope],Nbin,label=label,facecolor='red',histtype='step',color='red',alpha=1.,fill='True')
+                axs[irow,icol].hist(decays[isotope],Nbin,label=label,facecolor='red',histtype='step',color='red',alpha=1.,fill='True',weights=neutrons[isotope])
                 #axs[irow,icol].set_title(label,fontsize=fs,loc='left',weight='bold')
-                axs[irow,icol].text(emi+0.05*(ema-emi),1000.,label,fontsize=fs,weight='bold')
+                axs[irow,icol].text(emi+0.05*(ema-emi),ytext,label,fontsize=fs,weight='bold')
                 axs[irow,icol].set_xlabel('Alpha energy ('+units+')',fontsize=fs)
                 irow += 1
                 if irow==nrows:
@@ -224,17 +246,19 @@ class detMC():
                     irow = 0
 
                 Eall = numpy.append(Eall,decays[isotope])
+                Nall = numpy.append(Nall,neutrons[isotope])
         # effy of cut on sum of all distributions
         if units=='pC':
             vmi,vma = self.cAC.lowChargeCut*1.e3, self.cAC.Qmax*1.e3
             effy = self.cutEffy(Eall,vmi,vma)
             print 'low charge cut effy',effy,'cut range('+units+')',vmi,vma
         axs[irow,icol].set_xlim([emi,ema])
-        axs[irow,icol].hist(Eall,Nbin,label='Sum',facecolor='red',histtype='step',color='red',alpha=1.,fill='True')
+        axs[irow,icol].hist(Eall,Nbin,label='Sum',facecolor='red',histtype='step',color='red',alpha=1.,fill='True',weights=Nall)
 
-        axs[irow,icol].text(emi+0.1*(ema-emi),1000.,'Sum',fontsize=fs,weight='bold')
+        axs[irow,icol].text(emi+0.1*(ema-emi),ytext,'Sum',fontsize=fs,weight='bold')
         axs[irow,icol].set_xlabel('Alpha energy ('+units+')',fontsize=fs)
         ymi,yma = axs[irow,icol].get_ylim()
+        yma *= 1.05
         for irow in range(nrows):
             for icol in range(ncols):
                 axs[irow,icol].set_ylim([ymi,yma])
@@ -244,12 +268,23 @@ class detMC():
 
 
         fig.subplots_adjust(hspace=0.4)
-        fig.suptitle(str(self.pePerMeVa) +' pe/MeV of alpha energy')
+        if self.pePerMeVa>0:
+            fig.suptitle(str(self.pePerMeVa) +' pe/MeV of alpha energy')
+        else:
+            words = 'Expect {0:.1f} total neutrons from {1} 227Ac decays in thick {2} target'.format(sum(Nall),events,self.material)
+            fig.suptitle(words)
+            print 'detMC.expt '+words
         #plt.tight_layout()
-        pdf = self.figdir + str(int(self.pePerMeVa)) + 'pePerMeValpha_units_'+units+'.pdf'
+        pdf = self.figdir + str(int(self.pePerMeVa)) + 'pePerMeValpha_units_'+units
+        if self.pePerMeVa<0:
+            pdf += self.material
+        pdf += '.pdf'
         plt.savefig(pdf)
         print 'detMC.expt Wrote',pdf
         #        plt.show()
+
+        for isotope in self.DautNames:
+            self.reportNperA(isotope)
         return
     def cutEffy(self,values,vmi,vma):
         '''
@@ -305,24 +340,53 @@ class detMC():
                 bsum += b
                 s = self.Res(e)
                 #print 'Branch,b,e,s',Branch,b,e,s
-                E = numpy.append(E, numpy.random.normal(e,s,int(Ndecays*b*BF)))
+                if s>0:
+                    E = numpy.append(E, numpy.random.normal(e,s,int(Ndecays*b*BF)))
+                else:
+                    E = numpy.append(E, numpy.array([e for i in range(int(Ndecays*b*BF))]))
         E = numpy.asarray(E)
         #print 'Branch,bsum',Branch,bsum
         return E
+    def reportNperA(self,Branch='222Th'):
+        '''
+        report neutrons per alpha for alphas from input branch
+        '''
+        printAll = False
+        alphaBranches = self.DautAlpha[Branch]
+        BF = self.alphaBF[Branch]
+        if len(alphaBranches)==0:
+            print 'detMC:',Branch,'no alphas'
+        else:
+            totalnpera = 0
+            for pair in alphaBranches:
+                if len(pair)>0:
+                    e,b = pair
+                    E = numpy.array([e])
+                    n = self.getNeutrons(E)[0]
+                    if printAll: print 'detMC: {0} alphaBF {3:.2e} BF(E) {4:.2e} E {1:.1f} n/alpha {2:.1e}'.format(Branch,e,n,BF,b)
+                    totalnpera += b*n
+            totalnpera *= BF
+            print 'detMC: {0} Total n/alpha {1:.2e} (summed over alpha energies and weighted by branching fraction)'.format(Branch,totalnpera)
+        return
     def Res(self,E):
-        Emev = E/1000.
-        Npe = self.pePerMeVa * Emev
-        s = math.sqrt(Npe)
-        s = s/Npe * Emev
-        s = s * 1000.
+        if self.pePerMeVa<=0:
+            s = -1.
+        else:
+            Emev = E/1000.
+            Npe = self.pePerMeVa * Emev
+            s = math.sqrt(Npe)
+            s = s/Npe * Emev
+            s = s * 1000.
         return s
 
 if __name__ == '__main__' :
+    ''' set pe_MeV (1st arg) to be negative to calculate neutrons per day for all alpha energys '''
     pe_MeV = 10.
     Nev    = 100000
     units  = 'keV'
     cf     = 1.0
     if len(sys.argv)>1: pe_MeV = float(sys.argv[1])
+    if pe_MeV < 0: Nev = 1.8 * 24.* 60. * 60. # total alphas per day
     if len(sys.argv)>2: Nev    = int(sys.argv[2])
     if len(sys.argv)>3:
         units = 'pC'

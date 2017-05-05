@@ -38,6 +38,7 @@ class cutsAndConstants():
             if runnumber==817: self.startTimeCut = 76.05
             if runnumber==819: self.startTimeCut = 147.5
             if runnumber==697: self.startTimeCut = 66.5
+            if runnumber==901: self.startTimeCut = 6.15
         
         self.maxTimeWindow = float(max(self.lifeRange))*self.Po215lifetime
 

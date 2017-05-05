@@ -27,6 +27,13 @@ class alphan():
         self.MTdescrip= {}
 
         self.makeFigure = makeFigure
+
+        # initialize in getNperA
+        self.tgt = None
+        self.alphaEnergy      = None
+        self.neutronsPerAlpha = None
+
+        
         
         return
     def readJENDL(self,idebug=0):
@@ -150,7 +157,25 @@ class alphan():
                 if nucleus is None: sys.exit('alphan.read ERROR no nucleus ' + line[:-1] )
                 NperA[nucleus].append( [e,npera] )
         f.close()
-        return NperA 
+        return NperA
+    def getNperA(self,Ealpha,target='fluorine'):
+        '''
+        return neutrons per alpha in thick target approximation using Heaton data
+        given alpha energy in MeV and target material
+        '''
+        if self.tgt!=target:
+            NperA = self.read()
+            if target not in NperA: sys.exit('alphan.getNperA ERROR Unknown target ' + target)
+            self.tgt = target
+            x = [pair[0] for pair in NperA[target]]
+            y = [pair[1] for pair in NperA[target]]
+            self.alphaEnergy      = numpy.array(x)
+            self.neutronsPerAlpha = numpy.array(y)
+        E = self.alphaEnergy
+        nA= self.neutronsPerAlpha
+
+        n = numpy.interp(Ealpha, E,nA)
+        return n
     def main(self,mode=2):
         '''
         main routine
@@ -267,5 +292,13 @@ class alphan():
 if __name__ == '__main__' :
     makeFigure = len(sys.argv)>1
     A = alphan(makeFigure=makeFigure)
-    mode = 2 # 1=heaton,2=jendl
-    A.main(mode=mode)
+
+    if 0:
+        EalphaPo210 =     5.30433 # MeV
+        for target in ['fluorine','carbon','oxygen']:
+            npa = A.getNperA(EalphaPo210,target=target)
+            print 'EalphaPo210',EalphaPo210,'n/alpha',npa,'for thick',target,'target'
+    else:
+    
+        mode = 2 # 1=heaton,2=jendl
+        A.main(mode=mode)
