@@ -142,7 +142,7 @@ class showLSQAResults():
 
 
         Quantities = ['Z','FOM','EperQ']
-        yAxLimits  = [ [96., 110.], [1.25, 1.60], [23.,30.] ]
+        yAxLimits  = [ [96., 110.], [1.25, 1.60], [22.,30.] ]
         factors    = [1000., 1., 1.]
         histlabels = []
         for f,Q in zip(factors,Quantities):
