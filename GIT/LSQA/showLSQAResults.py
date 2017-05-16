@@ -142,7 +142,7 @@ class showLSQAResults():
 
 
         Quantities = ['Z','FOM','EperQ']
-        yAxLimits  = [ [96., 110.], [1.25, 1.60], [22.,30.] ]
+        yAxLimits  = [ [94., 110.], [1.25, 1.60], [22.,30.] ]
         factors    = [1000., 1., 1.]
         histlabels = []
         for f,Q in zip(factors,Quantities):
@@ -244,7 +244,7 @@ class showLSQAResults():
             t1 = self.cLT.convert(tmi-dt,fmt=None)
             t2 = self.cLT.convert(tma+dt,fmt=None)
             ax.set_xlim((t1,t2))
-            hfmt = dates.DateFormatter('%Y%m%d')
+            hfmt = dates.DateFormatter('%y%m%d')
             ax.xaxis.set_major_formatter(hfmt)
             ax.xaxis.set_minor_locator(AutoMinorLocator())
             ax.yaxis.set_minor_locator(AutoMinorLocator())
@@ -254,9 +254,10 @@ class showLSQAResults():
                 ax.legend(loc='upper center')
                 nrow = 2
                 if len(samples)>10: nrow +=1 
-                if len(samples)>30: nrow +=1
+                if len(samples)>25: nrow +=1
+                if len(samples)>40: nrow +=1
                 ncol = len(samples)/nrow+1
-                ax.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,  prop={'size':10},
+                ax.legend(bbox_to_anchor=(0.-.05, 1.0002, 1.+.05, .102+.01), loc=3,  prop={'size':9},
                           ncol=ncol, borderaxespad=0., numpoints=1,labelspacing=0.1,
                           columnspacing=0.1,handletextpad=0.1) #mode="expand"
                 
