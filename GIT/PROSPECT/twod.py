@@ -349,6 +349,10 @@ class twod():
                 
         return PSDcut
     def gimme(self,fn,hn,iDraw=False,iFigure=False,iPrint=False,figPrefix=None):
+        '''
+        anal returns weighted mean, uncertainty on mean, rms and average of uncertainty of all measurements
+        '''
+
         h = self.getHist(fn,hn)
         if h:
             evtCount = self.anal(h,iDraw=iDraw,iFigure=iFigure,iPrint=iPrint,figPrefix=figPrefix)

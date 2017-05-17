@@ -153,7 +153,7 @@ class speedyPlot():
 
         # histograms of measured/expected, measured - expected, (meas-exp)/unc, (meas-meas[S2])
 
-        MmMlimits = [-4.01,2.01]
+        MmMlimits = [-5.01,2.01]
         MbyRlimits= [0.94,1.02]
         MmElimits = [-9.01,-1.99]
         mgraphs,rgraphs,egraphs = [],[],[] # for overlay: m=difference to S2,r=ratio,e=difference to expected
