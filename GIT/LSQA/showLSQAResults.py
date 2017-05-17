@@ -112,7 +112,7 @@ class showLSQAResults():
         '''
         cSN = {}
         for s in samples:
-            c = s.replace('LiLS_','').replace('batch','B').replace('sample','S')
+            c = s.replace('LiLS_','').replace('batch','B').replace('sample','S').replace('_repeat','r')
             cSN[s] = c
         return cSN
     def main(self):
@@ -132,7 +132,7 @@ class showLSQAResults():
         # make P50-1 the first sample and sort the rest of the samples
         cP50 =  'P50-1'
         samples.remove(cP50)
-        samples.sort(key=lambda x :int(x[x.index('batch')+len('batch'):x.index('_s')])*100+int(x[x.index('sample')+len('sample'):])  )
+        samples.sort(key=lambda x :int(x[x.index('batch')+len('batch'):x.index('_s')].replace('_repeat',''))*100+int(x[x.index('sample')+len('sample'):].replace('_repeat',''))  )
         samples.insert(0,cP50)
         cSN = self.compactSampleNames(samples)
 
