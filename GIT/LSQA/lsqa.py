@@ -96,8 +96,9 @@ class lsqa():
         # this cut added to wfanaFile due to crash in avgWF for batch15
         self.nominalLeadingEdge = 2500.  
         self.nominalLeadingEdgeRange = 1000. 
-        
-        self.PSDcut = 0.1
+
+        # 20170510 (after batch24) change PSDcut from 0.1 to 0.25
+        self.PSDcut = 0.25
         self.sampledt = 0.2 # 1 sample/0.2ns
         self.favFast = 100
         self.favTotal= 800
@@ -930,7 +931,9 @@ class lsqa():
         '''
         debug = False
         Q = {}
-        if debug : print 'lsqa.getFOMat6Li E,FOM,dE,dFOM',E,FOM,dE,dFOM
+        if debug :
+            print 'lsqa.getFOMat6Li E,FOM,dE,dFOM',E,FOM,dE,dFOM
+            print 'lsqa.getFOMat6Li self.LiCaptureEnergy,Emin,Emax',self.LiCaptureEnergy,min(E),max(E)
         for i in [-1.,0.,1.]:
             f = scipy_interpolate.interp1d(E,FOM+i*dFOM)
             Q[i] = float(f(self.LiCaptureEnergy))
