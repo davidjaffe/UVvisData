@@ -66,6 +66,9 @@ class cutsAndConstants():
         self.SampleMass['LiLS6'] = self.LiLS6mass = 9.99
         self.SampleMass['LiLS7'] = self.LiLS7mass = 9.981
         self.SampleMass['LiLS8'] = self.LiLS8mass =10.011
+        self.SampleMass['LiLS9'] = self.LiLS9mass = 0.41*(11.0-1.04)/11.0 #
+        sam = 'LiLS9'
+        print '\ncutsAndConstants',sam,'TEMPORARY SAMPLE MASS',self.SampleMass[sam],'WARNING\n'
 
         # materials 
         self.SampleMaterial = {'LiLS2':'Reference'}
@@ -75,6 +78,7 @@ class cutsAndConstants():
         self.SampleMaterial['LiLS6'] = 'PEEK'
         self.SampleMaterial['LiLS7'] = 'RG188'
         self.SampleMaterial['LiLS8'] = 'Viton'
+        self.SampleMaterial['LiLS9'] = 'P50ref'
 
         # sample mass divided by reference sample mass
         if self.SampleMaterial['LiLS2']!='Reference': sys.exit('cutsAndConstants.__init__ ERROR LiLS2 is not the Reference sample')

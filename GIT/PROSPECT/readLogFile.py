@@ -56,7 +56,8 @@ class readLogFile():
         f.close()
         
         if request is not None: runtime = request
-        if actual  is not None: runtime = actual
+        if actual  is not None:
+            if actual<1.e10: runtime = actual
 
         if timestamp is None: # get timestamp from filename
             bn = os.path.basename(fn)
@@ -128,9 +129,18 @@ if __name__ == '__main__' :
         gfp = get_filepaths.get_filepaths()
         file_paths = gfp.get_filepaths(fp)
 
+        
+        RunTimeByWeek = {}
+        for sn in range(0,10): RunTimeByWeek[sn] = []
+        weekNumbers = []
         for fn in sorted( file_paths ):
             ts,s,sam,rt = rLF.readFile(fn=fn)
+            timeStamp = ts
+            if ts>2490712523.:timeStamp= ts/1000.
+            weekNumber =  datetime.datetime.fromtimestamp(timeStamp).isocalendar()[1]
+            if weekNumber not in weekNumbers: weekNumbers.append(weekNumber)
             sn = rLF.getSampleNumber(sam)
+            if sn in RunTimeByWeek: RunTimeByWeek[sn].append( (weekNumber, rt) )
             #print fn,'timestamp,sources,sample,runtime,sample#',ts,s,sam,rt,sn
             Show = False
             Flag = 0
@@ -141,3 +151,14 @@ if __name__ == '__main__' :
             if sam<1 : Flag += 10000
             if Flag: print fn,'timestamp,sources,sample,runtime',ts,s,sam,rt,sn,'Flag',Flag
         print 'Flag: 1=any=None, 10=bad src, 100=bad sample, 1000=LiLS#2s, 10000=bad sample#'
+
+        weekNumbers.sort()
+        for week in weekNumbers:
+            print 'week#',week,'sample#,runTime(s)',
+            for sn in range(0,10):
+                runTime = 0.
+                for pair in RunTimeByWeek[sn]:
+                    if pair[0]==week: runTime += pair[1]
+                print sn,runTime,
+            print ''
+            

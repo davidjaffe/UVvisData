@@ -18,7 +18,7 @@ import os
 class patchpanel():
     def __init__(self):
         self.sep = 1.12  # separation between centers in inches
-        self.sep = 1.0
+        #self.sep = 1.0
         
         return
     def go(self):
@@ -26,13 +26,13 @@ class patchpanel():
         border = 2
         for pairs,close in zip([1,7],[10,20]):
         
-            rows = [6,7,8] # range(2,8)
+            rows = [5,6,7,8] # range(2,8)
             cols = range(2,100)
             ncol = 2*pairs
             cellpcol = 11
             pmtpcell = 2
             sphv     = 2
-            optical = 6 * pairs
+            optical = 0 #6 * pairs
             PMTconnectors = ncol * cellpcol * pmtpcell *sphv
             connectors = optical + PMTconnectors
             print '\n PAIRS',pairs,'Connectors total',connectors,'for PMTs',PMTconnectors,'for optical',optical,'border(in)',border/2.*sep

@@ -3,6 +3,9 @@
 use solution to Bateman equation to understand how breaking of secular
 equilibrium will affect adsorption studies.
 20161114
+
+add toy MC
+
 '''
 import math
 import sys
@@ -12,10 +15,16 @@ import scipy
 from scipy.stats.mstats import chisquare
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
+import pickle
+
+import cutsAndConstants
 
 class bateman():
     def __init__(self):
 
+        self.cAC = cutsAndConstants.cutsAndConstants()
+
+        
         self.h = 60.*60.
         self.d = 24.*self.h
         self.y = 365.25*self.d
@@ -25,7 +34,9 @@ class bateman():
         self.lifetimes= [math.log(2.)*t for t in self.halflives]
         self.initialAmounts = [100.*self.lifetimes[0], 0., 0., 0.]
 
-        self.figdir = 'Figures/'
+        self.draw = False
+        
+        self.figdir = 'Figures/bateman/'
         return
     def bateman(self,t,initialAmounts,lifetimes):
         '''
@@ -51,6 +62,115 @@ class bateman():
         S+= (l1*l2*l3*P0/(l1-l3)/(l2-l3)/(l4-l3) + l2*l3*Q0/(l2-l3)/(l4-l3) + l3*R0/(l4-l3))*math.exp(-l3*t)
         S+= (l1*l2*l3*P0/(l1-l4)/(l2-l4)/(l3-l4) + l2*l3*Q0/(l2-l4)/(l3-l4) + l3*R0/(l3-l4) + S0)*math.exp(-l4*t)
         return P,Q,R,S
+    def toyMC(self,startTime=None):
+        '''
+        simulate a bunch of decays given conditions at equilibrium
+        '''
+        if startTime is None: startTime = 2.*self.y
+        Amounts = self.bateman(startTime,self.initialAmounts,self.lifetimes)
+        Am = {}
+        Tot= 0.
+        i = 0
+        for iso,q in zip(self.isotopes,Amounts):
+            s = q/self.lifetimes[i]
+            Am[iso] =s
+            Tot += s
+            i += 1
+        Cum = {}
+        c = 0.
+        for iso in self.isotopes:
+            Am[iso] = Am[iso]/Tot
+            c += Am[iso]
+            Cum[iso] = c
+        print 'bateman.toyMC startTime(y)',startTime/self.y,'Total',Tot,'Fractions/isotope$cumulative',
+        for iso in self.isotopes:
+            print '{0} {1:.4f}${2:.4f}'.format(iso,Am[iso],Cum[iso]),
+        print ''
+
+        Ac227Rate = 100. # Hz
+        Results = {}
+        for Ac227Rate in [0.1, 0.5, 1., 2., 3., 4., 10., 20.]: # Hz
+            Results[Ac227Rate] = []
+            Ralpha = 4. * Ac227Rate
+
+            N = 25000*4
+            t = 0.
+            Events = []
+            Icount = {}
+            for iso in self.isotopes: Icount[iso] = 0
+            iso = '215Po'
+            Icount[iso] = 0
+            while N>0:
+                r = random.random()
+                for j,iso in enumerate(self.isotopes):
+                    if r<Cum[iso]:
+                        break
+                tdecay = random.expovariate(Ralpha)
+                t += tdecay
+                N -= 1
+                Events.append( (iso,t) )
+                Icount[iso] += 1
+                if iso=='219Rn': # generate 215Po decay
+                    iso = '215Po'
+                    Icount[iso] += 1
+                    tdecay = random.expovariate(1./self.cAC.Po215lifetime)
+                    Events.append( (iso,t+tdecay) )
+                    N -= 1
+            print '\nbateman.toyMC Produced',len(Events),'events. By isotope',Icount,'Sorting...'
+            Events = sorted(Events,key=lambda x: x[1]) # sort by time
+            print 'bateman.toyMC Events sorted. Look for disorder'
+
+            oldt = -1.
+            oldpair = None
+            for pair in Events:
+                iso,t = pair
+                disorder = ''
+                if t<oldt: disorder = 'EVENT OUT OF ORDER'
+                if disorder!='': print iso,t,disorder,'oldpair',oldpair
+                oldt = t
+                oldpair = pair
+
+            tLast = Events[-1][1]
+            alphaRate = float(len(Events))/tLast
+            print 'bateman.toyMC N(events)',len(Events),'Ac227Rate(Hz)',Ac227Rate,'alphaRate(Hz)',alphaRate,'tLast(s)',tLast,\
+              'Look for coincidences'
+
+            for life in [1,2,3,4,5]:
+                nLife = float(life)
+
+                signal,bkgd = 0,0
+
+
+                tWindow = nLife*self.cAC.Po215lifetime 
+                for ievt,pair in enumerate(Events):
+                    iP,tP = pair
+                    if tP+tWindow<=tLast:  # avoid end effect
+                        delayed = []
+                        if ievt+1<len(Events):
+                            for devt,dpair in enumerate(Events[ievt+1:]):
+                                if dpair[1]-tP<tWindow:
+                                    if devt==0 and dpair[0]=='215Po' and iP=='219Rn':
+                                        signal += 1
+                                    else:
+                                        bkgd += 1
+                                        delayed.append(dpair)
+                                else:
+                                    break
+                        if 0: print 'ievt',ievt,'iP,tP',iP,tP,'delayed',delayed
+
+
+                U = signal + 2.*bkgd
+                print 'bateman.toyMC nLife',nLife,'Nsignal',signal,'Nbkgd',bkgd,'U',U,'sqrt(U)/signal',math.sqrt(U)/signal
+                Results[Ac227Rate].append( {nLife: [signal,bkgd]} )
+
+        fn = 'pickled_bateman.pickle'
+        f = open(fn,'w')
+        pickle(Results,f)
+        f.close()
+        print 'bateman.toyMC wrote',fn
+                
+        return 
+        
     def main(self,amounts=None,name='bateman',Duration=None,specIsotope='All'):
         '''
         main routine
@@ -65,7 +185,10 @@ class bateman():
         if amounts is not None: initialAmounts = amounts
         #print 'bateman.main',name,'initialAmounts',initialAmounts
         if Duration is None: Duration = self.y/2.
-        T = numpy.linspace(0.,Duration)
+        if type(Duration) is list:
+            T = numpy.linspace(Duration[0],Duration[1])
+        else:
+            T = numpy.linspace(0.,Duration)
         Results = {}
         finalResults = None
         for A in self.isotopes:
@@ -92,10 +215,13 @@ class bateman():
         plt.title(name)
         plt.grid()
         plt.legend(bbox_to_anchor=(0.63, 1.02-.02, 1.-.6, .102), loc=3, ncol=2, mode="expand", borderaxespad=0., numpoints=1)
-
-        pdf = self.figdir +name.replace(' ','_')+'.pdf'
-        plt.savefig(pdf)
-        print 'bateman.main Wrote',pdf
+        if self.draw:
+            pdf = self.figdir +name.replace(' ','_')+'.pdf'
+            plt.savefig(pdf)
+            print 'bateman.main Wrote',pdf
+        else:
+            plt.show()
+        print 'bateman.main Complete'
         return finalResults, special
     def standard(self):
         '''
@@ -125,13 +251,21 @@ class bateman():
         plt.title('Single isotope disappearance',loc='left')
         plt.grid()
         plt.legend(bbox_to_anchor=(0.6,1.,1.-.6,.1), ncol=2, numpoints=1)
-        pdf = self.figdir + 'standard' + '.pdf'
-        plt.savefig(pdf)
-        print 'batemean.standard Wrote',pdf
+        if self.draw:
+            pdf = self.figdir + 'standard' + '.pdf'
+            plt.savefig(pdf)
+            print 'batemean.standard Wrote',pdf
+        else:
+            plt.show()
+        print 'bateman.standard Complete'
         return
 
     
   
 if __name__ == '__main__' :
     B = bateman()
-    B.standard()
+    B.toyMC()
+    if 0:
+        B.main(Duration=[00.*B.d,350.*B.d])
+    if 0: 
+        B.standard()
