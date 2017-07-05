@@ -19,7 +19,7 @@ class showLSQAResults():
         
         self.colors = {0:'k', 1:'b',2:'g',3:'r',4:'c',5:'m',6:'y'}
         self.points = {}
-        for i,p in enumerate(['s','o','v','^','<','>','X','p','D']):
+        for i,p in enumerate(['s','o','v','^','<','>','*','D','p','x','+']):
             self.points[i] = p
         self.lencolors = len(self.colors)
         self.lenpoints = len(self.points)
@@ -37,6 +37,7 @@ class showLSQAResults():
         j = i%(self.lenpoints*self.lencolors)
         ip = j/self.lencolors
         ic = j%self.lencolors
+        #print 'showLSQAResults.colorAndPoint i,j,ip,lenpoints,ic,lencolors',i,j,ip,self.lenpoints,ic,self.lencolor
         return ic,ip
     def reader(self):
         '''
