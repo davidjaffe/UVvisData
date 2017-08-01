@@ -264,8 +264,9 @@ class showLSQAResults():
                 if len(samples)>10: nrow +=1 
                 if len(samples)>25: nrow +=1
                 if len(samples)>40: nrow +=1
+#                if len(samples)>50: nrow +=1
                 ncol = len(samples)/nrow+1
-                ax.legend(bbox_to_anchor=(0.-.05, 1.0002, 1.+.05, .102+.01), loc=3,  prop={'size':9},
+                ax.legend(bbox_to_anchor=(0.-.05, 1.0002, 1.+.05, .102+.01), loc=3,  prop={'size':8}, #9
                           ncol=ncol, borderaxespad=0., numpoints=1,labelspacing=0.1,
                           columnspacing=0.1,handletextpad=0.1) #mode="expand"
                 

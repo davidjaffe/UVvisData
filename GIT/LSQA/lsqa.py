@@ -256,6 +256,7 @@ class lsqa():
         hists = []
         hfav  = None
         c1 = ROOT.TCanvas() # open, so it can be closed after fitting
+        oldxpeak = None
         for i,vv in enumerate(IntValues):
             ifast,itot = vv
             key = 't'+str(int(itot))
@@ -276,9 +277,16 @@ class lsqa():
                 ptr = h.Fit(G,fopt,"",xmi,4.*xpeak)
                 m,s = G.GetParameter(1),G.GetParameter(2)
                 if debug : print 'lsqa.gammaCalib m,s',m,s
+                if m<=0:  # 20170731 extra step added to deal with batch53,t600 which gave large negative mean
+                    if oldxpeak is not None: xpeak = oldxpeak
+                    G.SetParameters(peak,xpeak,2.0)
+                    ptr = h.Fit(G,fopt,"",xmi,2.5*xpeak)
+                    m,s = G.GetParameter(1),G.GetParameter(2)
+                    if debug : print 'lsqa.gammaCalib extra step m,s',m,s
                 ptr = h.Fit(G,fopt,"",xmi,m+2.5*s)
                 m,s = G.GetParameter(1),G.GetParameter(2)                
                 if debug : print 'lsqa.gammaCalib m,s',m,s
+                oldxpeak = m
                 HWHM = math.sqrt(2.*math.log(2.))*s
                 Qedge = m + HWHM
                 print 'lsqa.gammaCalib Compton edge at',Qedge,'for',name
