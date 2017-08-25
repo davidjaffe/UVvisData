@@ -214,49 +214,66 @@ class bateman():
         plt.ylabel('Amount (decays/day)')
         plt.title(name)
         plt.grid()
-        plt.legend(bbox_to_anchor=(0.63, 1.02-.02, 1.-.6, .102), loc=3, ncol=2, mode="expand", borderaxespad=0., numpoints=1)
+        plt.legend()#bbox_to_anchor=(0.63, 1.02-.02, 1.-.6, .102), loc=3, ncol=2, mode="expand", borderaxespad=0., numpoints=1)
         if self.draw:
             pdf = self.figdir +name.replace(' ','_')+'.pdf'
             plt.savefig(pdf)
             print 'bateman.main Wrote',pdf
         else:
             plt.show()
-        print 'bateman.main Complete'
+        print 'bateman.main Complete, special isotope',specIsotope
         return finalResults, special
-    def standard(self):
+    def standard(self,daysDuration=7.,fracAdsorbed=1.0):
         '''
         standard treatment, calculations and plots
+        show results over a duration in days of daysDuration
+        
         '''
+        cpctAdsorb = ' {0:.1f}% '.format(100.*fracAdsorbed)
+        print 'bateman.standard daysDuration',daysDuration,cpctAdsorb,'adsorption'
         A,specialTY = self.main(specIsotope='All')
         for specIso in ['All', '219Rn']:
             sI = '_'+specIso
             specialTY = {}
-            duration = 7.*self.d
+            duration = daysDuration*self.d
             results,specialTY['StartAtEquil'] = self.main(amounts=A,name='start at equilibrium'+sI,Duration=duration,specIsotope=specIso)
 
             for i,iso in enumerate(self.isotopes):
                 if iso != '219Rn':
-                    Z = numpy.array([float(j!=i) for j in range(len(self.isotopes))])
-                    name = 'At equilibrium then ' + iso + ' adsorbed' + sI
+                    Z = numpy.array([min(1.,float(j!=i)-fracAdsorbed+1.) for j in range(len(self.isotopes))])
+                    print 'iso,Z',iso,Z
+                    name = 'At equilibrium then ' + iso + cpctAdsorb + ' adsorbed' + sI
                     results,specialTY[iso] = self.main(amounts=A*Z, name=name, Duration=duration, specIsotope=specIso)
             #print specialTY
 
-        plt.clf()
-        for iso in specialTY:
-            if iso in self.isotopes:
-                t,y = specialTY[iso]
-                plt.plot(t,y,self.colors[iso],label=iso)
-        plt.xlabel('Time')
-        plt.ylabel('219Rn Rate (decays/day)')
-        plt.title('Single isotope disappearance',loc='left')
-        plt.grid()
-        plt.legend(bbox_to_anchor=(0.6,1.,1.-.6,.1), ncol=2, numpoints=1)
-        if self.draw:
-            pdf = self.figdir + 'standard' + '.pdf'
-            plt.savefig(pdf)
-            print 'batemean.standard Wrote',pdf
-        else:
-            plt.show()
+            if any( specialTY.values() ): # true if specIso!='All'
+                print 'bateman.standard specIso is',specIso
+                ymax = -1.
+                for mode in ['absolute','normed']:
+                    plt.clf()
+                    for iso in specialTY:
+                        if iso in self.isotopes:
+                            t,y = specialTY[iso]
+                            if mode=='absolute':
+                                ymax=max(max(y),ymax)
+                                print 'iso,ymax',iso,ymax
+                            if mode=='normed'  : y = y/ymax
+                            plt.plot(t,y,self.colors[iso],label=iso)
+                    plt.xlabel('Time (days)')
+                    if mode=='absolute':
+                        plt.ylabel('219Rn Rate (decays/day)')
+                    else:
+                        plt.ylabel('219Rn relative rate')
+                        plt.ylim( (0.,1.01) )
+                    plt.title('Single isotope'+cpctAdsorb+'adsorption',loc='left')
+                    plt.grid()
+                    plt.legend()#bbox_to_anchor=(0.6,1.,1.-.6,.1), ncol=2, numpoints=1)
+                    if self.draw:
+                        pdf = self.figdir +mode +  '_standard' + cpctAdsorb.replace(' ','_').replace('%','percent') + '.pdf'
+                        plt.savefig(pdf)
+                        print 'batemean.standard Wrote',pdf
+                    else:
+                        plt.show()
         print 'bateman.standard Complete'
         return
 
@@ -264,8 +281,15 @@ class bateman():
   
 if __name__ == '__main__' :
     B = bateman()
-    B.toyMC()
+    if 0: # failed attempt to optimize spike rate
+        B.toyMC()
     if 0:
         B.main(Duration=[00.*B.d,350.*B.d])
-    if 0: 
-        B.standard()
+    if 1:
+        daysDuration = 100.
+        obsF = 1.-72./93.
+        for fracAdsorbed in [obsF,0.1,0.2,0.3,1.]:
+            B = bateman()
+            B.draw = True
+        
+            B.standard(daysDuration=daysDuration,fracAdsorbed=fracAdsorbed)
