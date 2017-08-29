@@ -145,6 +145,10 @@ class showLSQAResults():
         cSN = self.compactSampleNames(samples)
 
         print 'showLSQAResults.main samples',samples
+
+        # identify lowest FOM, Z in P50 results (EperQ not used)
+        P50Lo = {'Z':1.e20, 'FOM':1.e2, 'EperQ':-1.e20}
+
         
         # plot Quantity, unc for all runs
 
@@ -211,6 +215,7 @@ class showLSQAResults():
                         y.append(z)
                         if s==cP50:
                             y50.append(z)
+                            P50Lo[Q] = min(z,P50Lo[Q])
                         else:
                             ybs.append(z)
                         dy.append(dz)
@@ -252,6 +257,11 @@ class showLSQAResults():
             t1 = self.cLT.convert(tmi-dt,fmt=None)
             t2 = self.cLT.convert(tma+dt,fmt=None)
             ax.set_xlim((t1,t2))
+            # draw dashed red line indicating P50 value
+            XLR = numpy.array( [t1, t2] )
+            YLR = numpy.array( [P50Lo[Q],P50Lo[Q]] )
+            axes[iQ].plot( XLR, YLR , 'r--')
+            #print 'Q,XLR,YLR',Q,XLR,YLR,'axes[iQ]',axes[iQ]
             hfmt = dates.DateFormatter('%y%m%d')
             ax.xaxis.set_major_formatter(hfmt)
             ax.xaxis.set_minor_locator(AutoMinorLocator())
@@ -266,7 +276,7 @@ class showLSQAResults():
                 if len(samples)>40: nrow +=1
 #                if len(samples)>50: nrow +=1
                 ncol = len(samples)/nrow+1
-                ax.legend(bbox_to_anchor=(0.-.05, 1.0002, 1.+.05, .102+.01), loc=3,  prop={'size':8}, #9
+                ax.legend(bbox_to_anchor=(0.-.05, 1.0002, 1.+.05, .102+.01), loc=3,  prop={'size':7.5}, #9
                           ncol=ncol, borderaxespad=0., numpoints=1,labelspacing=0.1,
                           columnspacing=0.1,handletextpad=0.1) #mode="expand"
                 
