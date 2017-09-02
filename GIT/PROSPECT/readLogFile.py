@@ -12,6 +12,7 @@ import datetime,os
 class readLogFile():
     def __init__(self):
         print 'readLogFile Initialized'
+        self.Comments = None
         return
     def readFile(self,fn=None):
         '''
@@ -20,6 +21,7 @@ class readLogFile():
         If timestamp not in log file, try to take timestamp from filename.
         If actual run time not in log file, try to use requested run time
         20170117 Add treatment for log files with known typos
+        20170829 pass comments in global
         '''
         if fn is None:
             sys.exit('readLogFile.readFile ERROR No input file specified')
@@ -43,6 +45,8 @@ class readLogFile():
                     print 'readLogFile.readFile in',fn,'No sources in line:',newl
             if 'Sample being measured' in l:
                 sample = l.split(':')[-1][:-1]
+            if 'Comments:' in l:
+                self.Comments = l.split(':')[1][:-1]
             if 'Request run time' in l:
                 try: 
                     request = float(l.split()[-1])
@@ -77,6 +81,9 @@ class readLogFile():
             else:
                 print ''
         if sample is not None:
+            slash = "\\"
+            if slash in sample: 
+                sample = sample.replace(slash,'')
             if bn=='run00158_ts1483996034.log' and sample=='LiLS#1': sample = 'LiLS#2'
             if bn=='run00224_ts1484615681.log' and (sample=='LiLS#2s' or 'LiLS#2s' in sample) :sample = 'LiLS#2'
             if  'LiLS#2 pedestal' in sample or 'LiLS#2 black' in sample: sample = 'LiLS#2'
@@ -112,8 +119,77 @@ class readLogFile():
         for c in line:
             if c not in bogus: newline += c
         return newline
+    def numberNine(self,Number=9,debug=False):
+        '''
+        return list of run_timestamp and list of timestamp read from file for good runs for sample==Number
+        
+
+        AVOID GIGANTIC RUN 1052
+        AVOID RUNS <1000
+        '''
+        fp = '/Users/djaffe/work/WaveDumpData/Copied_logfiles/'
+        print 'readLogFile Check all files in',fp
+        import get_filepaths
+        gfp = get_filepaths.get_filepaths()
+        file_paths = gfp.get_filepaths(fp)
+
+        RTlist,TSlist = [],[]
+        
+        for fn in sorted( file_paths ):
+            ts,s,sam,rt = self.readFile(fn=fn)
+            #print fn
+            bn = os.path.basename(fn)
+            bnNoLog = bn.replace('.log','')
+            samNum = self.getSampleNumber(sam)
+            if samNum==Number:
+                reject = ('BAD' in self.Comments) or ('short' in self.Comments) or ('~' in bn) or ('run01052' in bn) or ('run00' in bn)
+                if not reject:
+                    if debug: print sam,rt,bnNoLog,self.Comments
+                    RTlist.append( bnNoLog )
+                    TSlist.append( ts )
+        return RTlist,TSlist
+    def makeSCP(self):
+        '''
+        generate scp commands from Temple PC
+
+        assumes ssh tunnel opened with
+         ssh -L 1234:130.199.23.223:22 djaffe@gateway.phy.bnl.gov
+        '''
+        L = []
+        for Number in [9,1]:
+            LN,TS = self.numberNine(Number=Number)
+            print 'readLogFile.makeSCP Found',len(LN),'sample',Number,'files'
+            L.extend(LN)
+            
+        cnow = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')   #_%f')
+        scriptName = 'scp_'+cnow+'.sh'
+        fsn = open(scriptName,'w')
+        
+
+        origin = 'napolitanolab@localhost:~/BNL/RootTrees/'
+        dest   = '/Users/djaffe/work/WaveDumpData/rootfiles/'
+        suffix = '.root'
+        NCMD = 0
+        for rt in L:
+            df = dest + rt + suffix
+            if os.path.isfile(df):
+                print 'readLogFile.makeSCP File exists:',df
+            else:
+                NCMD += 1
+                cmd = 'scp -P 1234 '+ origin +rt+suffix+ ' '+ df + '\n'
+                #print cmd
+                fsn.write(cmd)
+        fsn.close()
+        print 'readLogFile.makeSCP Wrote',NCMD,'lines to',scriptName
+        
+        return
+            
 if __name__ == '__main__' :
     rLF = readLogFile()
+    rLF.makeSCP()
+    
+    sys.exit('too boring to continue')
+    
     simple = False
     if simple:
         fn = '/Users/djaffe/work/WaveDumpData/logfiles/run00078_ts1482161661.log'

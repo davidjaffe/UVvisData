@@ -231,40 +231,73 @@ class bateman():
         '''
         cpctAdsorb = ' {0:.1f}% '.format(100.*fracAdsorbed)
         print 'bateman.standard daysDuration',daysDuration,cpctAdsorb,'adsorption'
+        duration = daysDuration*self.d
         A,specialTY = self.main(specIsotope='All')
+        name = 'At equilibrium with no adsorption'
+        newA,NoAdsorptionTY = self.main(amounts=A,name=name,Duration=duration,specIsotope='219Rn')
+        #print 'newA',newA
+        #print 'NoAdsorptionTY',NoAdsorptionTY 
         for specIso in ['All', '219Rn']:
             sI = '_'+specIso
             specialTY = {}
-            duration = daysDuration*self.d
             results,specialTY['StartAtEquil'] = self.main(amounts=A,name='start at equilibrium'+sI,Duration=duration,specIsotope=specIso)
 
             for i,iso in enumerate(self.isotopes):
                 if iso != '219Rn':
                     Z = numpy.array([min(1.,float(j!=i)-fracAdsorbed+1.) for j in range(len(self.isotopes))])
-                    print 'iso,Z',iso,Z
                     name = 'At equilibrium then ' + iso + cpctAdsorb + ' adsorbed' + sI
+                    print 'iso,Z',iso,Z,name
                     results,specialTY[iso] = self.main(amounts=A*Z, name=name, Duration=duration, specIsotope=specIso)
+                elif 0:
+
+                    fby2 = fracAdsorbed/2.
+                    Z = numpy.array( [ 1.-fby2, 1.-fby2, 1., 1.] )
+                    c = ' {0:.1f}% '.format(100*fby2)
+                    name = 'At equilibrium then '+self.isotopes[0]+ c + 'adsorbed and '+self.isotopes[1]+c+'adsorbed'+sI
+                    print 'iso,Z',iso,Z,name
+                    R,S = self.main(amounts=A*Z, name=name, Duration=duration, specIsotope=specIso) # makes a plot, but returned data unused
             #print specialTY
 
             if any( specialTY.values() ): # true if specIso!='All'
+                tryFit = True # try to model rate relative to no adsorption as exponent?
+                
                 print 'bateman.standard specIso is',specIso
                 ymax = -1.
-                for mode in ['absolute','normed']:
+                for mode in ['absolute','normed','ratioToNo']:
+                    nymi = 1.
                     plt.clf()
+                    tNo,yNo = NoAdsorptionTY
                     for iso in specialTY:
                         if iso in self.isotopes:
                             t,y = specialTY[iso]
                             if mode=='absolute':
                                 ymax=max(max(y),ymax)
-                                print 'iso,ymax',iso,ymax
-                            if mode=='normed'  : y = y/ymax
+                                #print 'iso,ymax',iso,ymax
+                            if mode=='normed'  :
+                                y = y/ymax
+                            if mode=='ratioToNo':
+                                y = y/yNo
+                            nymi = min(min(y),nymi)
                             plt.plot(t,y,self.colors[iso],label=iso)
+                            if mode=='ratioToNo' and iso=='227Ac':
+                                A = max(y)-min(y)
+                                B = max(y)
+                                tau = 22.5
+                                for pw,sym in zip([1.5],['g']): #zip([1.4,1.5,1.6],['k','g','b']):
+                                    tp = numpy.power(t/tau,pw)
+                                    f = A*(numpy.exp(-tp)-1.)+B
+                                    plt.plot(t,f,sym+'-',label='exp(-(t/'+str(tau)+'days)^'+str(pw)+')')
+
+                            
                     plt.xlabel('Time (days)')
                     if mode=='absolute':
                         plt.ylabel('219Rn Rate (decays/day)')
-                    else:
+                    elif mode=='normed':
                         plt.ylabel('219Rn relative rate')
-                        plt.ylim( (0.,1.01) )
+                        plt.ylim( (max(0.,nymi-.01),1.01) )
+                    elif mode=='ratioToNo':
+                        plt.ylabel('219Rn relative to no adsorption')
+                        plt.ylim( (max(0.,nymi-.001),1.001) )
                     plt.title('Single isotope'+cpctAdsorb+'adsorption',loc='left')
                     plt.grid()
                     plt.legend()#bbox_to_anchor=(0.6,1.,1.-.6,.1), ncol=2, numpoints=1)
@@ -274,6 +307,9 @@ class bateman():
                         print 'batemean.standard Wrote',pdf
                     else:
                         plt.show()
+
+                
+                        
         print 'bateman.standard Complete'
         return
 
@@ -288,7 +324,7 @@ if __name__ == '__main__' :
     if 1:
         daysDuration = 100.
         obsF = 1.-72./93.
-        for fracAdsorbed in [obsF,0.1,0.2,0.3,1.]:
+        for fracAdsorbed in [obsF,0.,0.001,0.01,0.15,0.3,1.]:
             B = bateman()
             B.draw = True
         

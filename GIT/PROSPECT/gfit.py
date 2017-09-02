@@ -8,13 +8,15 @@ import ROOT
 from array import array
 import math
 import os
-import graphUtils
+import graphUtils,cutsAndConstants
+import numpy
 
 class gfit():
     def __init__(self):
         #ROOT.gROOT.ProcessLine('.L langaus.C++')
         #self.lgfun = ROOT.langaufun
         self.gU = graphUtils.graphUtils()
+        self.cAC= cutsAndConstants.cutsAndConstants()
         print 'gfit initialized'
         return
 
@@ -36,7 +38,178 @@ class gfit():
         i1 = max( 1,hname.GetBinLowEdge(xmi) )
         i2 = min(nbins, hname.GetBinLowEdge(xma)+1 )
         return hname.Integral(i1,i2)
+        
 
+    def empAds(self,t,p): # no self?
+        '''
+        example of external function for TF1 from /Users/djaffe/work/GIT/WATER/scint_time_dist.py
+
+        empirical function for 227Ac adsorption
+        t in seconds, t0=p[3]
+        f1 = A*(exp(- ((t-t0)/tauA)^1.5 ) -1.) + B
+        f = f1*exp(-(t-t0)/life)
+        tauA = 22.5days
+        life = 22.7/ln(2) years 
+        '''
+        #print 't',t,'p',p
+        oneday = 60.*60.*24.
+        t0 = self.T0
+        T = float(t[0])-t0
+        #print 'T',T,'t0',t0
+        T = max(T,0.)/oneday
+        A = float(p[0])
+        B = float(p[1])
+        tau = float(p[2])
+        Q = math.pow(T/(22.5),1.5)
+        f1 = A*(math.exp(-Q) - 1.) + B
+        f  = f1*math.exp(-T/tau)
+        return f
+    def expF(self,g,pspre=None):
+        
+        '''
+        exponential fit of form y = p0 * exp((x-x0)/p1)
+        where x0 is the first point
+        '''
+        x,y = self.gU.getPoints(g)
+        print 'min(y),max(y)',min(y),max(y)
+        oneday = 60.*60.*24.
+        x0 = min(x)
+        sx0=str(x0)
+        soneday = str(oneday)
+        sEXP = "[0]*exp(-(x-"+sx0+")/[1]/"+soneday+")"
+        sEXPA= "[0]*(exp(-(x-"+sx0+")/[1]/"+soneday+"))+[2]"
+
+        sP1  = "[1]*(x-"+sx0+")+[0]"
+        
+        npar = 2
+
+        c1 = self.gU.makeCanvas()
+
+        fEXP = ROOT.TF1('fEXP',sEXP)
+        fEXP.SetParName(0,'R0')
+        fEXP.SetParName(1,'TauDays')
+        fEXP.SetParameter(0,max(y))
+        tau = self.cAC.Ac227lifetime * 365.
+        fEXP.SetParameter(1,tau)
+        print '227Ac lifetime',tau,'days'
+
+        fEXPA = ROOT.TF1('fEXPA',sEXPA)
+        fEXPA.SetParName(0,'R0')
+        fEXPA.SetParName(1,'TauDays')
+        fEXPA.SetParName(2,'Asymptote')
+        fEXPA.SetParameter(0,max(y)-min(y))
+        fEXPA.SetParameter(1,100.)
+        fEXPA.SetParameter(2,min(y))
+
+        self.T0 = x0
+        fEMA = ROOT.TF1("empAds",self.empAds,min(x),max(x),3)
+        fEMA.SetParName(0,'R0')
+        fEMA.SetParName(1,'Asymptote')
+        fEMA.SetParName(2,'TauDays')
+        fEMA.SetParameter(0,max(y)-min(y))
+        fEMA.SetParameter(1,min(y))
+        fEMA.SetParameter(2,self.cAC.Ac227lifetime*365.)
+
+
+        
+        
+        fP1 = ROOT.TF1('fP1',sP1)
+        fP1.SetParName(0,'R0')
+        fP1.SetParName(1,'Slope')
+        fP1.SetParameter(0,max(y))
+        fP1.SetParameter(1,-1./1000.)
+
+        fEXP.FixParameter(1,tau)
+        g.Draw("AP")
+        g.Fit(fEXP)
+        c1.Update()
+        if pspre is not None:
+            PS = pspre+'Exp_FixTau.ps'
+            pdf = PS.replace('.ps','.pdf')
+            self.gU.finishDraw(c1,PS,pdf,ctitle=pdf)
+        else:    
+            raw_input('CR to continue')
+
+        fEXP.ReleaseParameter(1)
+        c1 = self.gU.makeCanvas()
+        g.Draw("AP")
+        g.Fit(fEXP)
+        c1.Update()
+        if pspre is not None:
+            PS = pspre+'Exp.ps'
+            pdf = PS.replace('.ps','.pdf')
+            self.gU.finishDraw(c1,PS,pdf,ctitle=pdf)
+        else:
+            raw_input('CR to continue')
+
+        fEMA.FixParameter(2, self.cAC.Ac227lifetime*365.)
+        c1 = self.gU.makeCanvas()
+        g.Draw("AP")
+        g.Fit(fEMA)
+        g.Fit(fEMA,"M")
+        g.Fit(fEMA,"ME")
+        c1.Update()
+        if pspre is not None:
+            PS = pspre+'EmpiricalAdsorption_FixTau.ps'
+            pdf = PS.replace('.ps','.pdf')
+            self.gU.finishDraw(c1,PS,pdf,ctitle=pdf)
+        else:
+            raw_input('CR to continue')
+
+        fEMA.ReleaseParameter(2)
+        c1 = self.gU.makeCanvas()
+        g.Draw("AP")
+        g.Fit(fEMA)
+        g.Fit(fEMA,"M")
+        g.Fit(fEMA,"ME")
+        c1.Update()
+        if pspre is not None:
+            PS = pspre+'EmpiricalAdsorption.ps'
+            pdf = PS.replace('.ps','.pdf')
+            self.gU.finishDraw(c1,PS,pdf,ctitle=pdf)
+        else:
+            raw_input('CR to continue')
+
+        
+
+        c1 = self.gU.makeCanvas()
+        g.Draw("AP")
+        g.Fit(fEXPA)
+        g.Fit(fEXPA,"M")
+        g.Fit(fEXPA,"ME")
+        c1.Update()
+        if pspre is not None:
+            PS = pspre+'ExpA.ps'
+            pdf = PS.replace('.ps','.pdf')
+            self.gU.finishDraw(c1,PS,pdf,ctitle=pdf)
+        else:
+            raw_input('CR to continue')
+
+        c1 = self.gU.makeCanvas()
+        g.Draw("AP")
+        g.Fit("pol0","F")
+        c1.Update()
+        if pspre is not None:
+            PS = pspre+'Constant.ps'
+            pdf = PS.replace('.ps','.pdf')
+            self.gU.finishDraw(c1,PS,pdf,ctitle=pdf)
+        else:
+            raw_input('CR to continue')
+        
+        c1 = self.gU.makeCanvas()
+        g.Draw("AP")
+        g.Fit(fP1,"F")
+        #g.Fit(fP1,"F")
+        c1.Update()
+        if pspre is not None:
+            PS = pspre+'Linear.ps'
+            pdf = PS.replace('.ps','.pdf')
+            self.gU.finishDraw(c1,PS,pdf,ctitle=pdf)
+        else:
+            raw_input('CR to continue')
+        
+        return
+        
     def fourG(self,h,WAIT=False,quietly=True,debug=False,PS=None):
         '''
         Return area, unc of nuclear recoil peak in PSD distribution in input hist h
@@ -53,6 +226,7 @@ class gfit():
         if quietly and PS is not None:
             qopt2 = 'Q'
 
+        if debug: print 'gfit.fourG h',h
 
         w = h.GetXaxis().GetBinWidth(1) # assume equal size bins
         sw = '*'+str(w)
@@ -73,6 +247,8 @@ class gfit():
         ROOT.gStyle.SetOptStat(0)
         ROOT.gStyle.SetOptFit(1111)
         ROOT.gStyle.SetTitleX(0.8)
+        ROOT.gStyle.SetStatW(0.5) # size of stats box (and text?)
+        ROOT.gStyle.SetStatH(0.5)
         c1.SetGrid(1)
         c1.SetTicks(1)
 
@@ -109,6 +285,7 @@ class gfit():
         # 3par fit: amplitudes only
         h.Fit(G4,fitopt,"",xlo,xhi)
         c1.Update()
+        c1.SetLogy() ###########
         ps = h.GetListOfFunctions().FindObject("stats")
         if ps:
             ps.SetX1NDC(0.11)
@@ -446,6 +623,98 @@ class gfit():
         '''
         main routine for analyzing PSD distributions using 4gaussian fit
         '''
+
+
+        fn = 'Figures/nine20170829/nine_20170901_111848.root'
+        fn = 'Figures/nine20170829/nine_20170901_113548.root'
+        fn = 'Figures/nine20170829/nine_20170901_144900.root'
+        fn = 'Figures/nine20170829/nine_20170901_155149.root'
+        files = [fn]
+        figdir = 'Figures/nine20170829/'
+        bhn = 'PSD_runXXXXXN'
+        r1,r2 = 1000,2000
+
+        Y,dY,T,dT = [],[],[],[]
+        
+        for fn in files:
+            f = ROOT.TFile(fn)
+            print 'gfit.analyzePSD Opened',fn
+            for r in range(r1,r2):
+                hn = bhn.replace('XXXXX','{0:05d}'.format(r))
+                h = f.Get(hn)
+                if h:
+                    t = h.GetTitle()
+                    s = t.split(' ')
+                    Tstart = float((s[-2]).replace('Tstart=',''))/1000. # convert to seconds from milliseconds
+                    Tend   = float((s[-1]).replace('Tend=',''))+Tstart # absolute time
+                    ps = figdir + hn + '.ps'
+                    N,dN = self.fourG(h,PS=ps) #None,debug=True,WAIT=True)
+                    if N is not None:
+                        print '{0} Nalpha {1:.2f}({2:.2f}) dN/Nalpha {3:.4f}  sqrt(1./N) {4:.4f}'.format(hn,N,dN,dN/N,math.sqrt(1./N))
+                        Y.append(N)
+                        dY.append(dN)
+                        T.append((Tstart+Tend)/2.)
+                        dT.append((Tend-Tstart)/2.)
+            f.Close()
+
+        graphs = []
+        Y,dY,T,dT = numpy.array(Y),numpy.array(dY),numpy.array(T),numpy.array(dT)
+        g = self.gU.makeTGraph(T,Y,'AlphaRate9','AlphaRate9',ex=dT,ey=dY)
+        graphs.append(g)
+        self.gU.color(g,2,2,setMarkerColor=True)
+        self.gU.drawGraph(g,figdir,abscissaIsTime=True,option='AP',yLimits=[16.0,19.0])
+        
+        g = self.gU.makeTGraph(T,Y,'AlphaRate9z','AlphaRate9z',ex=dT,ey=dY)
+        graphs.append(g)
+        self.gU.color(g,2,2,setMarkerColor=True)
+        self.gU.drawGraph(g,figdir,abscissaIsTime=True,option='AP',yLimits=[16.5,17.5])
+
+        g = self.gU.makeTGraph(T,Y,'AlphaRate1','AlphaRate1',ex=dT,ey=dY)
+        graphs.append(g)
+        self.gU.color(g,2,2,setMarkerColor=True)
+        self.gU.drawGraph(g,figdir,abscissaIsTime=True,option='AP',yLimits=[-0.1,0.2])
+
+        rateCut = 3. # Hz
+        aY,adY,aT,adT = [],[],[],[]
+        bY,bdY,bT,bdT = [],[],[],[]
+        for i,y in enumerate(Y):
+            if y>rateCut:
+                aY.append(y)
+                adY.append(dY[i])
+                aT.append(T[i])
+                adT.append(dT[i])
+            else:
+                bY.append(y)
+                bdY.append(dY[i])
+                bT.append(T[i])
+                bdT.append(dT[i])
+        aY,adY,aT,adT = numpy.array(aY),numpy.array(adY),numpy.array(aT),numpy.array(adT)
+        g = self.gU.makeTGraph(aT,aY,'AlphaRateHigh','AlphaRateHigh',ex=adT,ey=adY)
+        graphs.append(g)
+        self.gU.color(g,2,2,setMarkerColor=True)
+        self.gU.drawGraph(g,figdir,abscissaIsTime=True,option='AP')
+        
+        bY,bdY,bT,bdT = numpy.array(bY),numpy.array(bdY),numpy.array(bT),numpy.array(bdT)
+        g = self.gU.makeTGraph(bT,bY,'AlphaRateLow','AlphaRateLow',ex=bdT,ey=bdY)
+        graphs.append(g)
+        self.gU.color(g,2,2,setMarkerColor=True)
+        self.gU.drawGraph(g,figdir,abscissaIsTime=True,option='AP')
+        
+                
+        
+
+        gfn = fn.replace('.','_graphs.')
+        f = ROOT.TFile(gfn,'RECREATE')
+        for g in graphs: f.WriteTObject(g)
+        f.Close()
+        print 'gfit.analyzePSD Wrote',len(graphs),'graphs to',gfn
+        
+                        
+        return
+    def OLDanalyzePSD(self):
+        '''
+        main routine for analyzing PSD distributions using 4gaussian fit
+        '''
         fn = 'Danielle/Histograms_RootTrees/run00701_ts1490121118_Hists.root'
 
 
@@ -471,8 +740,21 @@ class gfit():
             if N is not None:
                 print '{0} Nalpha {1:.2f}({2:.2f}) dN/Nalpha {3:.4f}  sqrt(1./N) {4:.4f}'.format(rn,N,dN,dN/N,math.sqrt(1./N))
         return
+    def fitRates(self):
+        '''
+        fits of rate vs time
+        '''
+        fn = 'Figures/nine20170829/nine_20170901_155149_graphs.root'
+        pspre = 'Figures/nine20170829/nine_20170901_155149_graphs_fit_'
+        f = ROOT.TFile(fn)
+        g = f.Get('AlphaRateHigh')
+        self.expF(g,pspre=pspre)
+        return
 if __name__ == '__main__' :
     T = gfit()
-    #T.analyzePSD()
-    T.analyze2D()
+    analyzePSD = False
+    fitRates   = True
+    if fitRates:   T.fitRates()
+    if analyzePSD: T.analyzePSD()
+    #T.analyze2D() # for Danielle's plots
     
