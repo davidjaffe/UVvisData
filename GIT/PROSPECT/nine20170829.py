@@ -247,7 +247,39 @@ class nine20170829():
         if debug : print 'h1.values()',h1.values(),  ' [ h1.values() ]',[ h1.values() ]
         
         return
+    def overlay(self,Number=9,Hname='PSD_runXXXXXN'):
+        '''
+        overlay all distributions consistent with histogram name Hname from vial LiLS#N N = Number
+        '''
+        rfn = 'Figures/nine20170829/nine_20170901_155149.root'
+        figdir = 'Figures/nine20170829/'
+        rf = ROOT.TFile(rfn,'r')
+        print 'nine20170829.overlay Opened',rfn
+        
+        basenames, timestamps = self.rLF.numberNine(Number=Number)
+        runnums = []
+        for bn in basenames:
+            runnums.append( bn.split('_')[0] )
+
+        hists = []
+
+        for runnum in runnums:
+            name = Hname.replace('runXXXXX',runnum)
+            h = rf.Get(name)
+            if h:
+                hists.append(h)
+        if len(hists)==0: return # nothing to plot
+        legendX = 0.1
+        if Number==1: legendX = 0.5
+        for setLogy in [True,False]:
+            self.gU.drawMultiObjects( [hists] ,figdir=figdir,fname=Hname+str(Number),statOpt=0,setLogy=setLogy,Grid=True,changeColors=True,addLegend=not setLogy,legendColumns=1,legendX=legendX,legendY=0.45,legendDY=0.5,biggerLabels=False)
+        return
 if __name__ == '__main__' :
     OP = nine20170829()
-    OP.main()                
+    if sys.argv>1:
+        Number = int(sys.argv[1])
+        print 'Number',Number
+        OP.overlay(Number=Number)
+    else:
+        OP.main()                
     

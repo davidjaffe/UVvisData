@@ -67,7 +67,8 @@ class gfit():
     def expF(self,g,pspre=None):
         
         '''
-        exponential fit of form y = p0 * exp((x-x0)/p1)
+        bunch of fits to time series.
+        At least one is an exponential fit of form y = p0 * exp((x-x0)/p1)
         where x0 is the first point
         '''
         x,y = self.gU.getPoints(g)
@@ -210,7 +211,7 @@ class gfit():
         
         return
         
-    def fourG(self,h,WAIT=False,quietly=True,debug=False,PS=None):
+    def fourG(self,h,WAIT=False,quietly=True,debug=False,PS=None,DrawFitBox=True):
         '''
         Return area, unc of nuclear recoil peak in PSD distribution in input hist h
         Four gaussian fit to PSD distribution.
@@ -245,10 +246,13 @@ class gfit():
         c1 = ROOT.TCanvas('c1')
         G4 = ROOT.TF1('G4',sGG)
         ROOT.gStyle.SetOptStat(0)
-        ROOT.gStyle.SetOptFit(1111)
-        ROOT.gStyle.SetTitleX(0.8)
-        ROOT.gStyle.SetStatW(0.5) # size of stats box (and text?)
-        ROOT.gStyle.SetStatH(0.5)
+        if DrawFitBox:
+            ROOT.gStyle.SetOptFit(1111)
+            ROOT.gStyle.SetTitleX(0.8)
+            ROOT.gStyle.SetStatW(0.5) # size of stats box (and text?)
+            ROOT.gStyle.SetStatH(0.5)
+        else:
+            ROOT.gStyle.SetOptFit(0)
         c1.SetGrid(1)
         c1.SetTicks(1)
 
@@ -648,7 +652,7 @@ class gfit():
                     Tstart = float((s[-2]).replace('Tstart=',''))/1000. # convert to seconds from milliseconds
                     Tend   = float((s[-1]).replace('Tend=',''))+Tstart # absolute time
                     ps = figdir + hn + '.ps'
-                    N,dN = self.fourG(h,PS=ps) #None,debug=True,WAIT=True)
+                    N,dN = self.fourG(h,PS=ps,DrawFitBox=False) #None,debug=True,WAIT=True)
                     if N is not None:
                         print '{0} Nalpha {1:.2f}({2:.2f}) dN/Nalpha {3:.4f}  sqrt(1./N) {4:.4f}'.format(hn,N,dN,dN/N,math.sqrt(1./N))
                         Y.append(N)
@@ -747,8 +751,14 @@ class gfit():
         fn = 'Figures/nine20170829/nine_20170901_155149_graphs.root'
         pspre = 'Figures/nine20170829/nine_20170901_155149_graphs_fit_'
         f = ROOT.TFile(fn)
-        g = f.Get('AlphaRateHigh')
-        self.expF(g,pspre=pspre)
+        for name in ['AlphaRateHigh', 'AlphaRateLow']:
+            g = f.Get(name)
+            if name=='AlphaRateLow':
+                g.GetYaxis().SetLimits(-0.005,0.085)
+                g.GetYaxis().SetRangeUser(-0.005,0.085)
+            self.expF(g,pspre=pspre + name + '_')
+
+        
         return
 if __name__ == '__main__' :
     T = gfit()
