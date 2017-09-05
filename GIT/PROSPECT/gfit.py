@@ -40,29 +40,35 @@ class gfit():
         return hname.Integral(i1,i2)
         
 
-    def empAds(self,t,p): # no self?
+    def empAds(self,t,p): 
         '''
         example of external function for TF1 from /Users/djaffe/work/GIT/WATER/scint_time_dist.py
 
         empirical function for 227Ac adsorption
-        t in seconds, t0=p[3]
+        t in seconds, t0=time of first measurement, dt=p[3] = days after first measurement
         f1 = A*(exp(- ((t-t0)/tauA)^1.5 ) -1.) + B
+
+        f2 = B * ( A*(exp(- ((t-t0)/tauA)^1.5)-1) + 1.)
+        
         f = f1*exp(-(t-t0)/life)
         tauA = 22.5days
         life = 22.7/ln(2) years 
         '''
         #print 't',t,'p',p
         oneday = 60.*60.*24.
-        t0 = self.T0
-        T = float(t[0])-t0
-        #print 'T',T,'t0',t0
-        T = max(T,0.)/oneday
+        dt = float(p[3]) # self.T0
+        T = float(t[0])/oneday-dt-self.T0/oneday
+        T = max(0.,T)
         A = float(p[0])
         B = float(p[1])
         tau = float(p[2])
+        #print 'T(days)',T,'t0',t0,'A',A,'B',B,'tau',tau
         Q = math.pow(T/(22.5),1.5)
-        f1 = A*(math.exp(-Q) - 1.) + B
-        f  = f1*math.exp(-T/tau)
+#        f1 = A*(math.exp(-Q) - 1.) + B
+        f2 = B*( A*(math.exp(-Q) - 1.) + 1. )
+        T = (float(t[0])-self.T0)/oneday
+#        f  = f1*math.exp(-T/tau)
+        f  = f2*math.exp(-T/tau)
         return f
     def expF(self,g,pspre=None):
         
@@ -103,14 +109,15 @@ class gfit():
         fEXPA.SetParameter(2,min(y))
 
         self.T0 = x0
-        fEMA = ROOT.TF1("empAds",self.empAds,min(x),max(x),3)
-        fEMA.SetParName(0,'R0')
-        fEMA.SetParName(1,'Asymptote')
+        fEMA = ROOT.TF1("empAds",self.empAds,min(x),max(x),4)
+        fEMA.SetParName(0,'AdsorpFrac')#'R0')
+        fEMA.SetParName(1,'InitialRate') #Asymptote')
         fEMA.SetParName(2,'TauDays')
-        fEMA.SetParameter(0,max(y)-min(y))
-        fEMA.SetParameter(1,min(y))
+        fEMA.SetParName(3,'dt') # days from first measurement where incident occured
+        fEMA.SetParameter(0,0.)###max(y)-min(y))
+        fEMA.SetParameter(1,max(y))#min(y)
         fEMA.SetParameter(2,self.cAC.Ac227lifetime*365.)
-
+        fEMA.FixParameter(3,0.)
 
         
         
@@ -143,7 +150,13 @@ class gfit():
         else:
             raw_input('CR to continue')
 
-        fEMA.FixParameter(2, self.cAC.Ac227lifetime*365.)
+        print ' empirical adsoprtion, lifetime fixed to Ac227 lifetime, dt fixed to 0'
+        fEMA.SetParameter(0,0.)###max(y)-min(y))
+        fEMA.SetParameter(1,max(y))#min(y)
+        fEMA.SetParameter(2,self.cAC.Ac227lifetime*365.)
+        fEMA.FixParameter(2,self.cAC.Ac227lifetime*365.)
+        fEMA.SetParameter(3,0.)
+        fEMA.FixParameter(3,0.)
         c1 = self.gU.makeCanvas()
         g.Draw("AP")
         g.Fit(fEMA)
@@ -157,6 +170,34 @@ class gfit():
         else:
             raw_input('CR to continue')
 
+        print ' empirical adsoprtion, lifetime fixed to Ac227 lifetime, dt free'
+        fEMA.SetParameter(0,0.)
+#        fEMA.SetParLimits(0,0.,1.)
+        fEMA.SetParameter(1,max(y))
+        fEMA.FixParameter(2, self.cAC.Ac227lifetime*365.)
+        fEMA.ReleaseParameter(3)
+        fEMA.SetParameter(3,3.)
+        fEMA.SetParLimits(3,0,(max(x)-min(x))/oneday)
+        print 'dt limits 0,',(max(x)-min(x))/oneday,'days'
+        c1 = self.gU.makeCanvas()
+        g.Draw("AP")
+        g.Fit(fEMA,"B")
+        g.Fit(fEMA,"BM")
+        g.Fit(fEMA,"BME")
+        c1.Update()
+        if pspre is not None:
+            PS = pspre+'EmpiricalAdsorption_FreeT0.ps'
+            pdf = PS.replace('.ps','.pdf')
+            self.gU.finishDraw(c1,PS,pdf,ctitle=pdf)
+        else:
+            raw_input('CR to continue')
+
+        print ' empirical adsorption, lifetime free, dt fixed to 0'
+        fEMA.SetParameter(0,0.)
+        fEMA.SetParameter(1,max(y))
+        fEMA.FixParameter(3,0.)
+        fEMA.SetParameter(3,0.)
+        fEMA.SetParameter(2, self.cAC.Ac227lifetime*365.)
         fEMA.ReleaseParameter(2)
         c1 = self.gU.makeCanvas()
         g.Draw("AP")
