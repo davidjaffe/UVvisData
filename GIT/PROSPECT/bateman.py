@@ -29,6 +29,7 @@ class bateman():
         self.d = 24.*self.h
         self.y = 365.25*self.d
         self.isotopes = ['227Ac','227Th','223Ra','219Rn']
+        self.nAlpha   = {'227Ac':0.,'227Th':1.,'223Ra':1.,'219Rn':3.} # this is an approximation
         self.colors   = {'227Ac':'ro','227Th':'bo','223Ra':'gD','219Rn':'co'}
         self.halflives= [21.772*self.y, 18.68*self.d, 11.43*self.d, 3.96]
         self.lifetimes= [math.log(2.)*t for t in self.halflives]
@@ -199,22 +200,31 @@ class bateman():
             for A,r in zip(self.isotopes,results):
                 Results[A].append(r)
                 
-
+        doTotal = True
         t = T/self.d
         plt.clf() # clear figure needed
         special = None
+        if doTotal: total = None
         for A,color in zip(self.isotopes,['ro','bo','gD','co']):
             b = self.lifetimes[self.isotopes.index(A)]/self.d
             y = numpy.array([a/b for a in Results[A] ])
+            if doTotal:
+                nAlpha = self.nAlpha[A]
+                if total is None:
+                    total = numpy.array(y)*nAlpha
+                else:
+                    total += y*nAlpha
             if specIsotope=='All' or specIsotope==A:
                 #print A,t/self.d,y
                 plt.plot(t,y,color,label=A)
                 if specIsotope==A: special = [t,y]
+        if doTotal:
+            plt.plot(t,total/5.,'k-',label='Total/5')
         plt.xlabel('Time (days)')
         plt.ylabel('Amount (decays/day)')
         plt.title(name)
         plt.grid()
-        plt.legend()#bbox_to_anchor=(0.63, 1.02-.02, 1.-.6, .102), loc=3, ncol=2, mode="expand", borderaxespad=0., numpoints=1)
+        plt.legend(loc='lower center')#bbox_to_anchor=(0.63, 1.02-.02, 1.-.6, .102), loc=3, ncol=2, mode="expand", borderaxespad=0., numpoints=1)
         if self.draw:
             pdf = self.figdir +name.replace(' ','_')+'.pdf'
             plt.savefig(pdf)
@@ -324,7 +334,7 @@ if __name__ == '__main__' :
     if 1:
         daysDuration = 100.
         obsF = 1.-72./93.
-        for fracAdsorbed in [obsF,0.,0.001,0.01,0.15,0.3,1.]:
+        for fracAdsorbed in [obsF]:#,0.,0.001,0.01,0.15,0.3,1.]:
             B = bateman()
             B.draw = True
         
