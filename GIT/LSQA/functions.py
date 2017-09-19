@@ -35,6 +35,8 @@ class functions():
         self.cGwEN.SetParLimits(5,0.,1.)
         self.cGwEN.SetParName(6,'Lifetime2')
 
+        
+
         return
     def convGwEN(self,v,par):
         '''
@@ -333,6 +335,73 @@ class functions():
             self.drawAndWait(c,SetLogy=False)
                 
         return
+    def test7(self,Quiet=False):
+        '''
+        20170919
+        fit compton edge ratio vs time(minutes) for vials 1-7 given canvases
+        fit function is A1*exp(-t/tau1) + A2*exp(-t/tau2)
+        '''
+        
+        for K in range(7):
+            fn = '../../PROCESSED_LSQA_data/ComptonEdgeRatio_vs_Time_P'+str(K+1)+'.root'
+            bn = os.path.basename(fn)
+            print '\n Start fit of',bn
+
+            f = ROOT.TFile(fn,'r')
+            c1 = f.Get("c1");
+            c1.Draw()
+            if not Quiet: raw_input("original " + str(K+1))
+                
+            g =  c1.GetPrimitive("gComptonEdgeRatio")
+            F = None
+            for f in g.GetListOfFunctions():
+                #print f,f.GetName()
+                if f.GetName()!='stats': F = f
+
+            Initial = {}
+            for J in range(4):
+                #print J,F.GetParameter(J)
+                Initial[J] = [F.GetParameter(J), F.GetParError(J)]
+            g.Draw()
+            c2E = ROOT.TF1("c2E","[0]*exp(-x/[1])+[2]*exp(-x/([3]))")
+            c2E.SetParameter(0,.1)
+            c2E.SetParameter(1,500.)
+            c2E.SetParameter(2,1.)
+            c2E.SetParameter(3,1000.*60.*24.)
+            ParName = {}
+            for i,name in zip([0,1,2,3],['A1new','tau1new','A2new','tau2new']):
+                c2E.SetParName(i,name)
+                ParName[i] = name
+            basic = ""
+            if Quiet: basic = "Q"
+            for opt in [basic,basic]:
+                g.Fit(c2E,opt)
+                if 0: raw_input("fit option is "+opt)
+                
+            c1.Draw()
+            c1.Update()
+            self.gU.drawMultiObjects([g],fname=str(K+1),figdir='TwoExp/',statOpt=0,fitOpt=1111,gopt='PA',biggerLabels=False)
+            Final = {}
+            for J in range(4):
+                #print J,c2E.GetParameter(J)
+                Final[J] = [c2E.GetParameter(J), c2E.GetParError(J)]
+            print 'Compare initial and final fit parameters'
+            print 'Parameter {0:>20} {1:>30} {2:>30}'.format('Initial','Final','Final-Initial')
+            fmt = '{0} {1:>20.3e}({2:.3e}) {3:>20.3e}({4:.3e})  {5:>20.3e}({6:.3e})'
+            for J in range(4):
+                A,dA = Initial[J]
+                B,dB = Final[J]
+                print fmt.format(ParName[J],A,dA,B,dB,B-A,math.sqrt(dA*dA+dB*dB))
+            A = Initial[0][0]+Initial[2][0]
+            dA= math.sqrt(math.pow(Initial[0][1],2)+math.pow(Initial[2][1],2))
+            B = Final[0][0]+Final[2][0]
+            dB= math.sqrt(math.pow(Final[0][1],2)+math.pow(Final[2][1],2))
+            Both = ParName[0]+'+'+ParName[2]
+            print fmt.format(Both,A,dA,B,dB,B-A,math.sqrt(dA*dA+dB*dB))
+
+            
+            if not Quiet: raw_input("done for "+bn)
+        return
         
 if __name__ == '__main__':
     F = functions()
@@ -340,5 +409,6 @@ if __name__ == '__main__':
     #F.test4()
     #F.test2()
     #F.test3()
-    F.test5()
+    #F.test5()
     #F.test6()
+    F.test7(len(sys.argv)>1)
