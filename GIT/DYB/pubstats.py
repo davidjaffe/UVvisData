@@ -2,6 +2,7 @@
 '''
 daya bay publication stats
 20161207
+20171110 update
 '''
 import math
 import sys
@@ -17,26 +18,32 @@ class pubstats():
 
         self.durNames = ['IntlRev', '1stCollRev', '2ndCollRev', 'Accepted', 'Published','Rejected']
         # name :  [2wk-IR, 1wk-2wk, sub-1wk, acc-sub, pub-acc]
-        self.pubs   = {'LongReac'     : [54, 46, 20, 94, 0,0],
-                       'LongOsc'      : [24, 29,125,  0, 0,0],
+        self.pubs   = {'LongReac'     : [54, 46, 20, 94, 67,0],
+                       'LongOsc'      : [24, 29,125,  105, 53,0],
                        '68ADSter'     : [31, 32, 40, 43,51,0],
                        'DYBMINSteril' : [ 0, 43, 19, 54,40,0],
-                       'Decoh'        : [29, 17, 30, 0,0,24+95], # not accepted
-                       'FuelEvol'     : [84,  0,  0,  0,  0,0]
+                       'Decoh'        : [29, 17, 30, 301,105,0], # not accepted at PLB, acc by EJPC
+                       'FuelEvol'     : [84,  138, 51,  24,  52,0],
+                       'MuonMod'      : [132, 85, 175, 0, 0, 0],
+                       'NeutProd'     : [82,  62,  39, 0, 0, 0]
                        }
         self.order = ['LongReac', 
                        'LongOsc', 
                        '68ADSter', 
                        'DYBMINSteril', 
                        'Decoh', 
-                       'FuelEvol'
+                       'FuelEvol',
+                       'MuonMod',
+                       'NeutProd'                       
                        ]
-        self.orderLong = {'LongReac' : 'Long Reactor\nCPC',
-                        'LongOsc'    : 'Long Osc.\nPRD', 
+        self.orderLong = {'LongReac' : 'Long\nReac\nCPC',
+                        'LongOsc'    : 'Long\nOsc.\nPRD', 
                        '68ADSter'    : '6+8AD\nsterile\nPRL', 
-                       'DYBMINSteril': 'DYB/MINOS\nsterile\nPRL', 
-                       'Decoh'      : 'Wave\n packet\n $PLB\!\!\!\!\!///$',
-                       'FuelEvol'     : 'Fuel\nevolution\nPRL'
+                       'DYBMINSteril': 'DYB/MIN\nsterile\nPRL', 
+                       'Decoh'      : 'Wave\n packet\n EJPC',
+                       'FuelEvol'     : 'Fuel\nevolution\nPRL',
+                       'MuonMod'      : 'Muon\nMod\nJCAP',
+                       'NeutProd'    :  'Neut\nProd\nPRD'
                        }
         
         return
@@ -67,7 +74,7 @@ class pubstats():
         plt.xlabel('Paper')
         plt.grid()
         plt.title('Publication history and status since March 2016')
-        plt.legend(p, self.durNames, bbox_to_anchor=(1.1, 1.05-.1))
+        plt.legend(p, self.durNames, bbox_to_anchor=(1.15,1.05-.1))#(1.1, 1.05-.1))
         pdf = self.figdir + 'test.pdf'
         plt.savefig(pdf)
         print 'pubstats.plot Wrote',pdf
