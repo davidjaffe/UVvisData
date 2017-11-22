@@ -51,9 +51,10 @@ class spike():
         permille = u"\u2030"
         
         Cjune2017 = 9.356 # activity concentration of B2 in Bq/g in June 2017
+        C7dec2017 = 9.112 # activity concentration of B2 in Bq/g on 7 Dec 2017
         Ac227tau = self.cAC.Ac227lifetime # in years
-        dt = 0.5 # activity concentration in Dec 2017
-        C = Cjune2017*math.exp(-0.5/Ac227tau)
+        #dt = 0.5 # activity concentration in Dec 2017
+        C = C7dec2017# Cjune2017*math.exp(-0.5/Ac227tau)
         print 'Activity concentration in stock spiked LiLS',C,'Bq/g'
         mgmi = 500
         dmg  =  50/2
@@ -177,7 +178,7 @@ class spike():
   
 if __name__ == '__main__' :
     pdf = False
-    goalUnc = 0.005
+    goalUnc = -0.005 # negative goal uncertainty will optimize to minimum uncertainty
     rateUnc = 0.05 
     if len(sys.argv)>1:
         w = sys.argv[1].lower()
