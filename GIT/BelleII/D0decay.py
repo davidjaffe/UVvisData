@@ -7,6 +7,7 @@ calculate r_b, etc. from P.K.Resmi et al, JHEP01(2018)082
 import sys
 import math
 import numpy
+import matplotlib.pyplot as plt
 
 
 class D0decay():
@@ -15,7 +16,7 @@ class D0decay():
         
         b = self.binKK = {} # contents of table 6
         b[1] = [ [0.2224, 0.0187], [0.1768, 0.0168] ] # bin1, [Ki,dKi], [Kbari,dKbari]
-        b[2] = [ [0.3933, 0.9219], [0.1905, 0.0173] ]
+        b[2] = [ [0.3933, 0.0219], [0.1905, 0.0173] ]
         b[3] = [ [0.0886, 0.0128], [0.3176, 0.0205] ]
         b[4] = [ [0.0769, 0.0119], [0.0469, 0.0093] ]
         b[5] = [ [0.0576, 0.0105], [0.0659, 0.0109] ]
@@ -43,8 +44,9 @@ class D0decay():
         dr = r*math.sqrt( da*da/a/a + db*db/b/b)
         return r,dr
     def main(self):
-        print '{0:5} {1:5} {2:5} {3:5} {4:5}'.format('r_b','c_b','s_b','xpre','ypre')
+        print 'bin   {0:5}   {1:5} {2:5} {3:5} {4:5}'.format('r_b','c_b','s_b','xpre','ypre')
         sumK,sumaK = 0.,0.
+        rcs = {}
         for b in self.bins:
             KK = self.binKK[b]
             sumK += KK[0][0]
@@ -53,11 +55,81 @@ class D0decay():
             cs = self.bincs[b]
             c = cs[0][0]
             s = cs[1][0]
+            rcs[b] = [r,c,s]
             ypre = (1.-r)*c*math.sqrt(r)
             xpre = (1.+r)*s*math.sqrt(r)
-            print '{0:5.2f} {1:5.2f} {2:5.2f} {3:5.2f} {4:5.2f}'.format(r,c,s,xpre,ypre)
+            print '{6:} {0:4.2f}({5:4.2f}) {1:5.2f} {2:5.2f} {3:5.2f} {4:5.2f}'.format(r,c,s,xpre,ypre,dr,b)
         print 'sumK',sumK,'sumaK',sumaK
-        return 
+        self.drawIt(rcs)
+        return
+    def drawIt(self,rcs,figDir='Figures/'): 
+        '''
+        Bin flip ratio for each bin vs decay time (follows 1811.01032 figure 4, but using eqn  33 
+
+        '''
+        plt.clf()
+        plt.grid()
+        title = r'Bin-flip ratio $D^0\rightarrow K_s\pi^+\pi^-\pi^0$, JHEP01 (2018) 082 binning'
+        plt.title(title)
+        figpdf = 'FIG_'+title.replace(' ','_') + '.pdf'
+
+        lw = 2.0
+        
+        tmi,tma = 0.,15. # units of D0 lifetime
+        x = [tmi,tma]
+        X = numpy.array(x)
+        colors = ['black', 'blue', 'red', 'green', 'yellow', 'magenta', 'cyan', 'olive', 'orange', 'pink']
+
+        ymix,xmix = 0.007,0.003 # example values of mixing parameters
+        mixtext = ['$x=y=0$','$x='+str(100*xmix)+'\%$\n$y='+str(100*ymix)+'\%$']
+        
+        ymi,yma = 0.,-10.
+        for i,b in enumerate(self.bins):
+            r,c,s = rcs[b]
+            y00,y11 = [],[]
+            
+            for t in x:
+                y00.append(r)
+                y11.append(r - t*math.sqrt(r)*((1.-r)*c*ymix - (1.+r)*s*xmix) )
+            Y = numpy.array(y00)
+            plt.plot(X,Y,linestyle='solid',color=colors[i],linewidth=lw)
+            Y = numpy.array(y11)
+            plt.plot(X,Y,linestyle='dashed',color=colors[i],linewidth=lw)
+            
+            ymi = min(ymi,min(y11),min(y00))
+            yma = max(yma,max(y11),max(y00))
+
+            
+        plt.xlabel('t(D0 lifetimes)',size='large')
+        plt.ylabel('$R_b(t)$ eqn33 approximation',size='large')
+
+        plt.xlim(x)
+        yma = yma + 0.05*(yma-ymi)
+        plt.ylim([ymi,yma])
+
+        # legend and labels
+        dx = 0.1*tma
+        dy = 0.02*(yma-ymi)
+        j = 0
+        for x1,ls in zip([0.1*tma,0.7*tma],['solid','dashed']):
+            y1 = 0.77*(yma-ymi)+ymi
+            for i,b in enumerate(self.bins):
+                X = numpy.array([x1,x1+dx])
+                Y = numpy.array([y1,y1])
+                plt.plot(X,Y,linestyle=ls,color=colors[i],linewidth=lw)
+                y1 -= dy
+            y1 = 0.8*(yma-ymi)-len(self.bins)/1.5*dy
+            plt.text(x1+1.10*dx,y1,mixtext[j],size='large')
+            j += 1
+                
+        if figDir is not None:
+            figpdf = figDir + figpdf
+            plt.savefig(figpdf)
+            print 'D0decay.drawIt wrote',figpdf
+        else:
+            plt.show()
+        return
+        
         
 if __name__ == '__main__':
     D0d = D0decay()
