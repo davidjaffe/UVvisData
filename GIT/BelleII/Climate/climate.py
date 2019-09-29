@@ -309,7 +309,7 @@ class climate():
         GAD = self.getGAD()
         AirFares = self.readAirFares()
         cityIATA = {}
-        Nfare,avcpkm,mincpkm,maxcpkm = 0, 0., 1.e20, -1.e20
+        Nfare,avcpkm,mincpkm,maxcpkm,rms = 0, 0., 1.e20, -1.e20, 0.
         for city1 in AirFares:
             fare = AirFares[city1][0]
             city2= AirFares[city1][2]
@@ -335,11 +335,13 @@ class climate():
             if distance>0:cpkm = fare/distance
             Nfare += 1
             avcpkm += cpkm
+            rms += cpkm*cpkm
             maxcpkm = max(maxcpkm,cpkm)
             mincpkm = min(mincpkm,cpkm)
             print 'self.mainAirFares',city1,city2,'Fare(USD)',fare,'distance(km)',distance,'USD/km',cpkm
         avcpkm = avcpkm/float(Nfare)
-        print 'self.mainAirFares #',Nfare,'average,min,max(USD/km)',avcpkm,mincpkm,maxcpkm
+        rms = math.sqrt( float(Nfare)/float(Nfare-1) * (rms/float(Nfare) - avcpkm*avcpkm) )
+        print 'self.mainAirFares #',Nfare,'average,sigma,min,max(USD/km)',avcpkm,rms,mincpkm,maxcpkm
         return
 if __name__ == '__main__' :
    
