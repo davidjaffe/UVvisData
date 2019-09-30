@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 '''
-simulation of the 1ton prototype
-units mm, MeV, nm
-20140521
+climate and airfare related calculations
+201909xx
 '''
 import math
 import sys
@@ -12,6 +11,8 @@ import datetime
 import numpy
 import copy
 
+import matplotlib.pyplot as plt
+
 class climate():
     def __init__(self):
 
@@ -19,6 +20,7 @@ class climate():
 
         self.GADfile = 'CDATA/GlobalAirportDatabase/GlobalAirportDatabase.txt'
         self.Airfarefile = 'CDATA/Airfares_CityPairs_20190929.csv'
+        self.figdir = 'FIGURES/'
 
         self.originalTeamList = ['Arizona Diamondbacks',
                           'Atlanta Braves',
@@ -299,6 +301,152 @@ class climate():
             distance = self.haversine(london_coord, coord)
             print(city, distance)
         return
+    def readB2I(self):
+        '''
+        read Belle II institutions lists to get inst names, country, city
+        return dict[short name] = [city,country,long name]
+        '''
+        self.B2InstitutionsFile = 'CDATA/BelleII_institutions_20190929.csv'
+        f = open(self.B2InstitutionsFile,'r')
+        B2Inst = {}
+        for line in f:
+            if 'Postal' not in line: # avoids header
+                s = line[:-1].split(',')
+                sname = s[0]
+                lname = s[1]
+                country = s[4]
+                city = s[5]
+                B2Inst[sname] = [city,country,lname]
+        f.close()
+        print 'climate.readB2I Processed',len(B2Inst),'institutions in',self.B2InstitutionsFile
+        return B2Inst
+    def readB2M(self):
+        '''
+        read Belle II members to get Belle II ID, name and institution name
+        return dict[B2id,firstname,middlename,lastname,lastnameprefix,inst]
+        '''
+        self.B2MembersFile = 'CDATA/BelleII_members_20190929.csv'
+        f = open(self.B2MembersFile,'r')
+        B2Members = {}
+        for line in f:
+            if 'B2id' not in line: # avoids header
+                s = line[:-1].split(',')
+                for i,x in enumerate(s):
+                    y = x.replace('"','')
+                    if y=='-': y = ''
+                    s[i] = y
+                B2id = s[0]
+                firstn = s[1]
+                lastn  = s[2]
+                middlen= s[3]
+                lastnpre=s[4]
+                sname  = s[11] # institution short name
+                B2Members[B2id] = [firstn,middlen,lastn,lastnpre,sname]
+        f.close()
+        print 'climate.ReadB2M Processed',len(B2Members),'members in',self.B2MembersFile
+        return B2Members
+    def readB2GM(self):
+        '''
+        return list of name1,name2 of cut/paste of B2GM participants https://indico.belle2.org/event/971/registrations/participants 
+        as of 20190929
+        Try to take into account that name1 or name2 can be the family name or given name
+        '''
+        self.B2GMfile = 'CDATA/B2GM_Oct2019_20190929.txt'
+        debug = False
+        f = open(self.B2GMfile,'r')
+        B2GMfolks = []
+        for line in f:
+            if 'Participant' not in line: # avoid header
+                j = line.find('\t')
+                name1 = line[:j].replace('\t',' ').strip()
+                name2 = line[j+1:-1].replace('\t',' ').strip()
+                B2GMfolks.append( [name1,name2] )
+        f.close()
+        print 'climate.readB2GM Processed',len(B2GMfolks),'participants in',self.B2GMfile
+        if debug: print B2GMfolks
+        return B2GMfolks
+    def drawIt(self,x,y,xtitle,ytitle,title,figDir=None,ylog=True,xlims=[200.,800.],ylims=[1.e-5,1.e-1]):
+        '''
+        draw graph defined by x,y
+
+        '''
+        debug = False
+        if debug: print 'climate.drawIt len(x),len(y)',len(x),len(y),xtitle,ytitle,title,'xlimits',xlims,'ylimits',ylims
+        if debug: print 'climate.drawIt x',x,'\ny',y
+        plt.clf()
+        plt.grid()
+        plt.title(title)
+        figpdf = 'FIG_'+title.replace(' ','_') + '.pdf'
+        if debug: print 'climate.drawIt figpdf',figpdf
+
+        X = numpy.array(x)
+        Y = numpy.array(y)
+        if debug: print 'climate.drawit X',X,'\nY',Y
+        plt.plot(X,Y,'o')
+        plt.xlabel(xtitle)
+        plt.ylabel(ytitle)
+        if ylog : plt.yscale('log')
+        if debug: print 'climate.drawit ylog',ylog
+        plt.xlim(xlims)
+        plt.ylim(ylims)
+
+        if debug: print 'climate.drawit figDir',figDir
+        
+        if figDir is not None:
+            figpdf = figDir + figpdf
+            plt.savefig(figpdf)
+            print 'climate.drawIt wrote',figpdf
+        else:
+            if debug: print 'climate.drawit show',title
+            plt.show()
+        return
+    def goodMatch(self,a,b):
+        return a.strip().lower()==b.strip().lower()
+    def matchMtoI(self,Insts,Members,Parps):
+        '''
+        try to match participants Parps to Members and determine their institutions
+        Result should be list of participants with their institutions including city, country
+        '''
+        debug = 1
+        TooFew,TooMany,JustRight = 0,0,0
+        for P in Parps:
+            name1,name2 = P
+            if debug>1: print 'Search for name1',name1,'name2',name2
+            Matches = [] # list of B2id of potential matches
+            for B2id in Members:
+                firstn,middlen,lastn,lastnpre,sname = Members[B2id]
+                if debug>1: print 'first,middle,last,pre',firstn,middlen,lastn,lastnpre
+                if self.goodMatch(name1,lastn):
+                    Matches.append(B2id)
+                if self.goodMatch(name2,lastn):
+                    if B2id not in Matches: Matches.append(B2id)
+
+            if len(Matches)>1: # see if we can get a name1=firstn and name2=lastn or vice-versa
+                newMatch = []
+                for B2id in Matches:
+                    firstn,middlen,lastn,lastnpre,sname = Members[B2id]
+                    if self.goodMatch(name1,firstn) and self.goodMatch(name2,lastn): newMatch.append(B2id)
+                    if self.goodMatch(name2,firstn) and self.goodMatch(name1,lastn) and B2id not in newMatch: newMatch.append(B2id)
+                if len(newMatch)>0: Matches = newMatch
+            L = len(Matches)
+            
+            if L==0:
+                if debug>0: print name1,name2,'*** NO MATCHES *** '
+                TooFew += 1
+            elif L==1:
+                JustRight += 1
+            else:
+                if debug>0:
+                    print name1,name2,L,'matches',Matches
+                    self.printMatches(Matches,Members)
+                TooMany += 1
+        print 'climate.matchMtoI',len(Parps),'participants',JustRight,'single matches',TooMany,'multi-matches',TooFew,'No matches'
+        return
+    def printMatches(self,idList,Members):
+        for i,B2id in enumerate(idList):
+            firstn,middlen,lastn,lastnpre,sname = Members[B2id]
+            print ' match#',i,firstn,middlen,lastn,lastnpre
+        return
     def mainAirFares(self):
         '''
         main routine to figure out total of airfares for B2GM
@@ -310,6 +458,7 @@ class climate():
         AirFares = self.readAirFares()
         cityIATA = {}
         Nfare,avcpkm,mincpkm,maxcpkm,rms = 0, 0., 1.e20, -1.e20, 0.
+        distances,fares = [],[]
         for city1 in AirFares:
             fare = AirFares[city1][0]
             city2= AirFares[city1][2]
@@ -331,6 +480,8 @@ class climate():
             p1 = cityIATA[city1][1:]
             p2 = cityIATA[city2][1:]
             distance = self.haversine(p1,p2)
+            fares.append(fare)
+            distances.append(distance)
             cpkm = None
             if distance>0:cpkm = fare/distance
             Nfare += 1
@@ -341,7 +492,17 @@ class climate():
             print 'self.mainAirFares',city1,city2,'Fare(USD)',fare,'distance(km)',distance,'USD/km',cpkm
         avcpkm = avcpkm/float(Nfare)
         rms = math.sqrt( float(Nfare)/float(Nfare-1) * (rms/float(Nfare) - avcpkm*avcpkm) )
-        print 'self.mainAirFares #',Nfare,'average,sigma,min,max(USD/km)',avcpkm,rms,mincpkm,maxcpkm
+        print 'climate.mainAirFares #',Nfare,'average,sigma,min,max(USD/km)',avcpkm,rms,mincpkm,maxcpkm
+
+        B2Inst = self.readB2I()
+        B2Members = self.readB2M()
+        B2GMfolks = self.readB2GM()
+        self.matchMtoI(B2Inst,B2Members,B2GMfolks)
+        
+        
+        if 0: 
+            self.drawIt(distances,fares,'Distance between city and Tokyo in km','Fare(USD)','Cost per km',figDir=None,ylog=False,xlims=[0.,14000.],ylims=[0.,2400.])
+        
         return
 if __name__ == '__main__' :
    
