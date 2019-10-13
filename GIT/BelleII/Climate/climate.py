@@ -183,6 +183,7 @@ class climate():
         '''
         Return dict[city1] = [fare,city1,city2] of airfares for city1,city2 pairs where city2==Tokyo 
         from airfare file
+        column contents in airfare file are
         0 = city1
         1 = city2
         3 = alternate name for city1 (eg., Bombay for Mumbai)
@@ -198,11 +199,12 @@ class climate():
                 city2 = s[1]
                 acity1= s[3]
                 fare  = float(s[2])
+                comments = s[4]
                 if city1 in AirFares:
                     print 'climate.readAirFares ERROR line',line[:-1]
                     sys.exit('climate.readAirFares ERROR Duplicate city1 '+city1)
                 else:
-                    AirFares[city1] = [fare,city1,city2,acity1]
+                    AirFares[city1] = [fare,city1,city2,acity1,comments]
         f.close()
         print 'self.readAirFares Processed',self.Airfarefile
         return AirFares
@@ -304,8 +306,9 @@ class climate():
     def readB2I(self):
         '''
         read Belle II institutions lists to get inst names, country, city
-        return dict[short name] = [city,country,long name]
+        return dict[short name] = [city,country,long name, short name]
         '''
+        debug = 0
         self.B2InstitutionsFile = 'CDATA/BelleII_institutions_20190929.csv'
         f = open(self.B2InstitutionsFile,'r')
         B2Inst = {}
@@ -316,7 +319,8 @@ class climate():
                 lname = s[1]
                 country = s[4]
                 city = s[5]
-                B2Inst[sname] = [city,country,lname]
+                B2Inst[sname] = [city,country,lname,sname]
+                if debug>0: print 'climate.readB2I sname',sname,'B2Inst[sname]',B2Inst[sname]
         f.close()
         print 'climate.readB2I Processed',len(B2Inst),'institutions in',self.B2InstitutionsFile
         return B2Inst
@@ -325,9 +329,11 @@ class climate():
         read Belle II members to get Belle II ID, name and institution name
         return dict[B2id,firstname,middlename,lastname,lastnameprefix,inst]
         '''
+        debug = 0
         self.B2MembersFile = 'CDATA/BelleII_members_20190929.csv'
         f = open(self.B2MembersFile,'r')
         B2Members = {}
+        qqq = '"""' # 3 double quote surrounds short name of institution
         for line in f:
             if 'B2id' not in line: # avoids header
                 s = line[:-1].split(',')
@@ -340,8 +346,12 @@ class climate():
                 lastn  = s[2]
                 middlen= s[3]
                 lastnpre=s[4]
-                sname  = s[11] # institution short name
+                sname  = s[11] # institution short name (this does not always work because some fields have ',' in them)
+                j1 = line.find(qqq)
+                j2 = j1+1 + line[j1+1:].find(qqq)
+                sname = line[j1+len(qqq):j2]
                 B2Members[B2id] = [firstn,middlen,lastn,lastnpre,sname]
+                if debug>0: print 'climate.ReadB2M B2id',B2id,'B2Members[B2id]',B2Members[B2id]
         f.close()
         print 'climate.ReadB2M Processed',len(B2Members),'members in',self.B2MembersFile
         return B2Members
@@ -400,74 +410,193 @@ class climate():
             if debug: print 'climate.drawit show',title
             plt.show()
         return
-    def goodMatch(self,a,b):
-        return a.strip().lower()==b.strip().lower()
+    def goodMatch(self,a,b,ch=''):
+        return a.strip().replace(ch,'').lower()==b.strip().replace(ch,'').lower()
     def matchMtoI(self,Insts,Members,Parps):
         '''
         try to match participants Parps to Members and determine their institutions
         Result should be list of participants with their institutions including city, country
+
+        Matching attempts:
+        1. one of the names of the participants matches the first or last name of a member
+        2. both of the names of the participants matches both names (first and last) of a member
+        3. same as 2, but remove all dashes from names
+
         '''
-        debug = 1
+        debug = 0
         TooFew,TooMany,JustRight = 0,0,0
+        ParpToInst = [] # list of pairs (Participant, B2id)
         for P in Parps:
             name1,name2 = P
             if debug>1: print 'Search for name1',name1,'name2',name2
             Matches = [] # list of B2id of potential matches
             for B2id in Members:
                 firstn,middlen,lastn,lastnpre,sname = Members[B2id]
-                if debug>1: print 'first,middle,last,pre',firstn,middlen,lastn,lastnpre
+                if debug>2: print 'first/middle/last/pre/sname',firstn,'/',middlen,'/',lastn,'/',lastnpre,'/',sname
                 if self.goodMatch(name1,lastn):
                     Matches.append(B2id)
                 if self.goodMatch(name2,lastn):
                     if B2id not in Matches: Matches.append(B2id)
 
             if len(Matches)>1: # see if we can get a name1=firstn and name2=lastn or vice-versa
-                newMatch = []
-                for B2id in Matches:
-                    firstn,middlen,lastn,lastnpre,sname = Members[B2id]
-                    if self.goodMatch(name1,firstn) and self.goodMatch(name2,lastn): newMatch.append(B2id)
-                    if self.goodMatch(name2,firstn) and self.goodMatch(name1,lastn) and B2id not in newMatch: newMatch.append(B2id)
-                if len(newMatch)>0: Matches = newMatch
+                for ch in ['','-']:
+                    newMatch = []
+                    for B2id in Matches:
+                        firstn,middlen,lastn,lastnpre,sname = Members[B2id]
+                        if self.goodMatch(name1,firstn,ch=ch) and self.goodMatch(name2,lastn,ch=ch): newMatch.append(B2id)
+                        if self.goodMatch(name2,firstn,ch=ch) and self.goodMatch(name1,lastn,ch=ch) and B2id not in newMatch: newMatch.append(B2id)
+                    if len(newMatch)>0: Matches = newMatch
+                    if len(Matches)==1: break
+
             L = len(Matches)
             
             if L==0:
-                if debug>0: print name1,name2,'*** NO MATCHES *** '
+                if debug>-1: print 'climate.matchMtoI',name1,name2,'*** NO MATCHES *** '
                 TooFew += 1
+                ParpToInst.append( [P, None] ) # no match
             elif L==1:
                 JustRight += 1
+                B2id = Matches[0]
+                sname = Members[B2id][-1]
+                if debug>1: print 'climate.matchMtoI B2id',B2id,'sname',sname,'Members[B2id]',Members[B2id]
+                ParpToInst.append( [P, Insts[sname]] )  # participant and Institution (city,country,longname,shortname)
             else:
-                if debug>0:
-                    print name1,name2,L,'matches',Matches
-                    self.printMatches(Matches,Members)
+                if debug>-1:
+                    print 'climate.matchMtoI',name1,name2,L,'matches',Matches
+                    self.printMatches(Matches,Members) 
                 TooMany += 1
-        print 'climate.matchMtoI',len(Parps),'participants',JustRight,'single matches',TooMany,'multi-matches',TooFew,'No matches'
-        return
+                ParpToInst.append( [P, None] ) # too many matches
+        print 'climate.matchMtoI',len(Parps),'participants,',JustRight,'single matches,',TooMany,'multi-matches,',TooFew,'No matches'
+        
+        if debug>1: # report participants and their institutions
+            for pair in ParpToInst:
+                P,Home = pair
+                name1,name2 = P
+                print 'climate.matchMtoI',name1,name2,
+                if Home is not None:
+                    city,country,lname,sname = Home
+                    print 'is from',sname,'(',lname,') in ',city,',',country
+                else:
+                    print 'has no identified home institution'
+                
+        return ParpToInst
     def printMatches(self,idList,Members):
         for i,B2id in enumerate(idList):
             firstn,middlen,lastn,lastnpre,sname = Members[B2id]
             print ' match#',i,firstn,middlen,lastn,lastnpre
         return
+    def costB2GM(self,cityInfo,P2I):
+        '''
+        calculate total cost of B2GM airfares
+        cityInfo[city] = [fare, distance, comments, alternate city name] where comments = nonstop or one-stop
+        P2I is list of pairs [Participant, InstInfo] 
+        where Participant = name in B2GM list and InstInfo = [city,country,longname,shortname] 
+        if no institution was identified, then InstInfo = None
+        '''
+        debug = 0
+        good,bad,unk,japan = 0,0,0,0
+        totFares = 0
+        for P,I in P2I:
+            if I is None:
+                bad += 1
+            else:
+                name1,name2 = P
+                city,country,lname,sname = I
+                if debug>0: print 'climate.costB2GM city/country/sname',city,'/',country,'/',sname
+                if 'Japan' in country or 'Japan' in city:
+                    japan += 1
+                    if debug>0: print 'climate.costB2GM -----> no airfare for Japanese city'
+                else:
+                    found = False
+                    if city in cityInfo:
+                        totFares += cityInfo[city][0]
+                        found = True
+                    else:
+                        nearby = self.nearbyCity(city,country,sname)
+                        if nearby is None:
+                            for c1 in cityInfo:
+                                acity = cityInfo[c1][3]
+                                if self.goodMatch(city,acity):
+                                    totFares += cityInfo[c1][0]
+                                    found = True
+                                    break
+                        else:
+                            if nearby in cityInfo:
+                                totFares += cityInfo[nearby][0]
+                                found = True
+                    if not found:
+                        unk += 1
+                        print 'climate.costB2GM Could not find',city,'/',country,'/',sname,'in cityInfo'
+                    else:
+                        good += 1
+        print 'climate.costB2GM',len(P2I),'participants, cost of',good,'participants is',totFares,'USD. Japanese/no city/inst for',japan,'/',unk,'/',bad,'participants'
+        # estimate cost of participants with no home from average of good participants
+        c = totFares + float(bad)/float(good)*totFares
+        print 'climate.costB2GM Estimated total cost of {0:.2f} USD'.format(c)
+        
+        return
+    def nearbyCity(self,city,country,sname):
+        '''
+        figure out nearby cities
+        '''
+        if self.goodMatch(city,'Italy'): return 'Rome'
+        if self.goodMatch(country,'Italy'): return 'Rome'
+        if self.goodMatch(country,'Germany'): return 'Frankfurt'
+        if self.goodMatch(sname,'BNL') : return 'New York'
+        if self.goodMatch(sname,'VPI') : return 'Washington'
+        if self.goodMatch(sname,'Mississippi') : return 'Memphis'
+        if self.goodMatch(city,'Austria') : return 'Vienna'
+        if self.goodMatch(country,'Austria') : return 'Vienna'
+        if self.goodMatch(sname,'Pittsburgh') : return 'Pittsburgh'
+        if self.goodMatch(sname,'McGill') : return 'Montreal'
+        if self.goodMatch(sname,'Victoria') : return 'Vancouver'
+        if self.goodMatch(country,'France') : return 'Paris'
+        if self.goodMatch(sname,'Luther') : return 'Chicago'
+        if self.goodMatch(city,'Mexico') or self.goodMatch(country,'Mexico') : return 'Mexico City'
+        if self.goodMatch(country,'South Korea') : return 'Seoul'
+        if 'Taipei' in city: return 'Taipei'
+        if self.goodMatch(sname,'Fudan') : return 'Shanghai'
+        if self.goodMatch(country,'Spain') : return 'Madrid'
+        if self.goodMatch(sname,'Duke') : return 'Charlotte'
+        return None
     def mainAirFares(self):
         '''
         main routine to figure out total of airfares for B2GM
 
         First get airport data, then airfares between city pairs (2d city is always Tokyo),
         then compute distances and fare/km
+
+        produce dicts
+        cityIATA[city1] = [IATA, Latitude, Longitude]
+        cityInfo[city1] = [fare,distance,comments,alternate name of city1]
+
         '''
         GAD = self.getGAD()
         AirFares = self.readAirFares()
         cityIATA = {}
+        cityInfo = {}
         Nfare,avcpkm,mincpkm,maxcpkm,rms = 0, 0., 1.e20, -1.e20, 0.
         distances,fares = [],[]
+        debug = 0
         for city1 in AirFares:
             fare = AirFares[city1][0]
             city2= AirFares[city1][2]
             acity1= AirFares[city1][3] # alternate name of city1
+            comments= AirFares[city1][4] # comments (nonstop or onestop)
             debug,country = 0,None
             IATA = ct.findIATA(GAD,city1,country=country,debug=debug)
             if IATA is None: IATA = ct.findIATA(GAD,acity1,country=country,debug=debug)
             if IATA is None:
-                sys.exit('climate.mainAirFares ERROR No IATA for '+city1)
+                if self.goodMatch(city1,'Novosibirsk') :
+                    IATA = 'OVB'
+                    if IATA=='OVB': latitude, longitude = 55.0411111, 82.9344444 # Novosibirsk from travel math.com
+                    cityIATA[city1] = [IATA,latitude,longitude]
+                elif self.goodMatch(city1,'Jinan'):
+                    IATA = 'TNA'
+                    latitude, longitude = 36.66833, 116.99722
+                    cityIATA[city1] = [IATA, latitude,longitude] # Jinan from latitudelongitude.org
+                else:
+                    sys.exit('climate.mainAirFares ERROR No IATA for '+city1)
             else:
                 cityIATA[city1] = [IATA,float(GAD[IATA][14]),float(GAD[IATA][15])] # IATA, Latitude, Longitude
                 
@@ -480,6 +609,7 @@ class climate():
             p1 = cityIATA[city1][1:]
             p2 = cityIATA[city2][1:]
             distance = self.haversine(p1,p2)
+            cityInfo[city1] = [fare,distance,comments,acity1]
             fares.append(fare)
             distances.append(distance)
             cpkm = None
@@ -489,15 +619,19 @@ class climate():
             rms += cpkm*cpkm
             maxcpkm = max(maxcpkm,cpkm)
             mincpkm = min(mincpkm,cpkm)
-            print 'self.mainAirFares',city1,city2,'Fare(USD)',fare,'distance(km)',distance,'USD/km',cpkm
+            if debug>0: print 'self.mainAirFares',city1,city2,'Fare(USD)',fare,'distance(km)',distance,'USD/km',cpkm
         avcpkm = avcpkm/float(Nfare)
         rms = math.sqrt( float(Nfare)/float(Nfare-1) * (rms/float(Nfare) - avcpkm*avcpkm) )
-        print 'climate.mainAirFares #',Nfare,'average,sigma,min,max(USD/km)',avcpkm,rms,mincpkm,maxcpkm
+        print 'climate.mainAirFares # {0} fares with average {1:.3f}({2:.3f}) minimum {3:.3f} maximum {4:.3f} in USD/km'.format(Nfare,avcpkm,rms,mincpkm,maxcpkm)
 
         B2Inst = self.readB2I()
         B2Members = self.readB2M()
         B2GMfolks = self.readB2GM()
-        self.matchMtoI(B2Inst,B2Members,B2GMfolks)
+        P2I = self.matchMtoI(B2Inst,B2Members,B2GMfolks)
+
+        self.costB2GM(cityInfo,P2I)
+
+
         
         
         if 0: 
