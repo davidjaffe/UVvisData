@@ -11,6 +11,8 @@ import datetime
 import numpy
 import copy
 
+import re
+
 import matplotlib.pyplot as plt
 
 class climate():
@@ -22,6 +24,13 @@ class climate():
         self.Airfarefile = 'CDATA/Airfares_CityPairs_20190929.csv'
         self.figdir = 'FIGURES/'
 
+        self.Legs = {}
+        self.Legs[1] = ['nonstop','non-stop','non stop']
+        self.Legs[2] = ['onestop','one-stop','one stop']
+
+        self.earthRadius = 6371. # km according to duck-duck-go
+        self.earthToMoon = float(385000.6) # time-average earth-moon distance according to https://en.wikipedia.org/wiki/Lunar_distance_(astronomy)
+        
         self.originalTeamList = ['Arizona Diamondbacks',
                           'Atlanta Braves',
                           'Baltimore Orioles',
@@ -195,6 +204,8 @@ class climate():
         for line in f:
             if 'Origin' not in line:
                 s = line[:-1].split(',')
+                s = re.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", line[:-1])
+                #print 'climate.readAirFares line[:-1]',line[:-1],'s',s
                 city1 = s[0]
                 city2 = s[1]
                 acity1= s[3]
@@ -384,6 +395,8 @@ class climate():
         col 3 = distance in km between origin and destination
         col 4 = kg of C02 for round trip
         col 5 = kg / km from columns 4, 3
+
+        return slope,intercept for linear fits to CO2(kg) vs r/t distance(km) as a function of the number of legs
         '''
         self.CO2file = 'CDATA/CO2_between_airports_20191013.csv'
         f = open(self.CO2file,'r')
@@ -404,6 +417,7 @@ class climate():
         f.close()
         print 'climate.readCO2 Read',len(CO2data),'lines from',self.CO2file
         # plot kg of C02 vs r/t distance in km for 1,2 legs
+        fitResults = {}
         xmi,xma = 0.,1.05*maxkm
         ymi,yma = 0.,1.05*maxkg
         Xall,Yall = [],[]
@@ -414,14 +428,14 @@ class climate():
                     X.append(d[1]) # r/t distance
                     Y.append(d[2]) # 
             if len(X)>0:
-                self.drawIt(X,Y,'r/t distance (km)','kg of C02',str(L)+' legs',figDir=self.figdir,ylog=False,xlims=[xmi,xma],ylims=[ymi,yma])
+                fitResults[L] = self.drawIt(X,Y,'r/t distance (km)','kg of C02',str(L)+' legs',figDir=self.figdir,ylog=False,xlims=[xmi,xma],ylims=[ymi,yma],linfit=True)
             Xall.extend(X)
             Yall.extend(Y)
         if len(Xall)>0:
-            self.drawIt(Xall,Yall,'r/t distance (km)','kg of C02','All legs',figDir=self.figdir,ylog=False,xlims=[xmi,xma],ylims=[ymi,yma])
+            self.drawIt(Xall,Yall,'r/t distance (km)','kg of C02','All legs',figDir=self.figdir,ylog=False,xlims=[xmi,xma],ylims=[ymi,yma],linfit=True)
         
-        return
-    def drawIt(self,x,y,xtitle,ytitle,title,figDir=None,ylog=True,xlims=[200.,800.],ylims=[1.e-5,1.e-1]):
+        return fitResults
+    def drawIt(self,x,y,xtitle,ytitle,title,figDir=None,ylog=True,xlims=[200.,800.],ylims=[1.e-5,1.e-1],linfit=False):
         '''
         draw graph defined by x,y
 
@@ -438,13 +452,23 @@ class climate():
         X = numpy.array(x)
         Y = numpy.array(y)
         if debug: print 'climate.drawit X',X,'\nY',Y
-        plt.plot(X,Y,'o')
+        if linfit:
+            slope,intercept = fit = numpy.polyfit(x,y,1)
+            fit_fn = numpy.poly1d(fit)
+            plt.plot(X,Y,'o',x,fit_fn(x),'--k')
+            words = ' Fit slope {0:.3f} intercept {1:.3f}'.format(slope,intercept)
+            plt.title(title + words)
+        else:
+            plt.plot(X,Y,'o')
+            slope,intercept = None,None
         plt.xlabel(xtitle)
         plt.ylabel(ytitle)
         if ylog : plt.yscale('log')
         if debug: print 'climate.drawit ylog',ylog
         plt.xlim(xlims)
         plt.ylim(ylims)
+
+            
 
         if debug: print 'climate.drawit figDir',figDir
         
@@ -455,7 +479,7 @@ class climate():
         else:
             if debug: print 'climate.drawit show',title
             plt.show()
-        return
+        return slope,intercept
     def goodMatch(self,a,b,ch=''):
         return a.strip().replace(ch,'').lower()==b.strip().replace(ch,'').lower()
     def matchMtoI(self,Insts,Members,Parps):
@@ -531,18 +555,20 @@ class climate():
             firstn,middlen,lastn,lastnpre,sname = Members[B2id]
             print ' match#',i,firstn,middlen,lastn,lastnpre
         return
-    def costB2GM(self,cityInfo,P2I):
+    def costB2GM(self,cityInfo,P2I,fitCO2):
         '''
-        calculate total cost of B2GM airfares
+        calculate total cost of B2GM in airfares and carbon dioxide
         cityInfo[city] = [fare, distance, comments, alternate city name] where comments = nonstop or one-stop
         P2I is list of pairs [Participant, InstInfo] 
         where Participant = name in B2GM list and InstInfo = [city,country,longname,shortname] 
         if no institution was identified, then InstInfo = None
+        fitCO2[leg] = [slope,intercept] for kg of CO2 vs r/t km 
         '''
         debug = 0
         good,bad,unk,japan = 0,0,0,0
-        totFares = 0
+        totFares,totCarbon,totkm = 0,0,0
         for P,I in P2I:
+            info = None
             if I is None:
                 bad += 1
             else:
@@ -555,7 +581,7 @@ class climate():
                 else:
                     found = False
                     if city in cityInfo:
-                        totFares += cityInfo[city][0]
+                        info = cityInfo[city]
                         found = True
                     else:
                         nearby = self.nearbyCity(city,country,sname)
@@ -563,22 +589,36 @@ class climate():
                             for c1 in cityInfo:
                                 acity = cityInfo[c1][3]
                                 if self.goodMatch(city,acity):
-                                    totFares += cityInfo[c1][0]
+                                    info = cityInfo[c1]
                                     found = True
                                     break
                         else:
                             if nearby in cityInfo:
-                                totFares += cityInfo[nearby][0]
+                                info = cityInfo[nearby]
                                 found = True
                     if not found:
                         unk += 1
                         print 'climate.costB2GM Could not find',city,'/',country,'/',sname,'in cityInfo'
                     else:
                         good += 1
-        print 'climate.costB2GM',len(P2I),'participants, cost of',good,'participants is',totFares,'USD. Japanese/no city/inst for',japan,'/',unk,'/',bad,'participants'
+                        totFares += info[0]
+                        distance = info[1]
+                        legs = self.getLegs(info[2])
+                        if debug>1: print 'climate.costB2GM P',P,'I',I,'info',info,'legs',legs
+                        slope,intercept = fitCO2[legs]
+                        carbon = slope*2.*distance + intercept
+                        totCarbon += carbon
+                        totkm += 2.*distance # round-trip distance
+        print 'climate.costB2GM',len(P2I),'participants, cost of',good,'participants is',totFares,'USD',\
+          totCarbon,'kg CO2 for',totkm,'km flown. Japanese/no city/inst for',japan,'/',unk,'/',bad,'participants'
         # estimate cost of participants with no home from average of good participants
-        c = totFares + float(bad)/float(good)*totFares
-        print 'climate.costB2GM Estimated total cost of {0:.2f} USD'.format(c)
+        sf = 1.+float(bad)/float(good)
+        c = sf*totFares 
+        c2= sf*totCarbon
+        km= sf*totkm
+        gl = km/(2.*math.pi*self.earthRadius)
+        em = km/(2.*self.earthToMoon)
+        print 'climate.costB2GM Estimated total cost of {0:.2f} USD and {1:.2f} kg CO2 for {2:.1f} km flown ({3:.1f} trips around earth or {4:.1f} r/t to moon)'.format(c,c2,km,gl,em)
         
         return
     def nearbyCity(self,city,country,sname):
@@ -604,6 +644,18 @@ class climate():
         if self.goodMatch(sname,'Fudan') : return 'Shanghai'
         if self.goodMatch(country,'Spain') : return 'Madrid'
         if self.goodMatch(sname,'Duke') : return 'Charlotte'
+        return None
+    def getLegs(self,comments):
+        '''
+        determine number of legs of journey
+        nonstop = 1 leg
+        one stop= 2 legs
+        '''
+        cl = comments.lower()
+        Legs = self.Legs
+        for L in Legs:
+            for w in Legs[L]:
+                if w in cl: return L
         return None
     def mainAirFares(self):
         '''
@@ -675,9 +727,9 @@ class climate():
         B2GMfolks = self.readB2GM()
         P2I = self.matchMtoI(B2Inst,B2Members,B2GMfolks)
 
-        self.costB2GM(cityInfo,P2I)
+        fitCO2 = self.readCO2()
+        self.costB2GM(cityInfo,P2I,fitCO2)
 
-        self.readCO2()
 
 
         
