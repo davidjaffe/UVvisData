@@ -375,6 +375,52 @@ class climate():
         print 'climate.readB2GM Processed',len(B2GMfolks),'participants in',self.B2GMfile
         if debug: print B2GMfolks
         return B2GMfolks
+    def readCO2(self):
+        '''
+        read CO2 data on r/t flights between airports from https://www.icao.int/environmental-protection/CarbonOffset/Pages/default.aspx
+        col 0 = Origin airport
+        col 1 = Destination
+        col 2 = number of legs (1=nonstop, 2=onestop, etc.)
+        col 3 = distance in km between origin and destination
+        col 4 = kg of C02 for round trip
+        col 5 = kg / km from columns 4, 3
+        '''
+        self.CO2file = 'CDATA/CO2_between_airports_20191013.csv'
+        f = open(self.CO2file,'r')
+        CO2data = []
+        maxkm,maxkg = 0.,0.
+        for line in f:
+            if 'http' not in line: # skip header
+                s = line.split(',')
+                origin = s[0]
+                if origin!='':
+                    dest   = s[1]
+                    legs   = int(s[2])
+                    distkm = 2.*float(s[3]) # convert to r/t distance
+                    CO2kg  = float(s[4])
+                    maxkm = max(maxkm,distkm)
+                    maxkg = max(maxkg,CO2kg)
+                    CO2data.append([legs,distkm,CO2kg,origin,dest])
+        f.close()
+        print 'climate.readCO2 Read',len(CO2data),'lines from',self.CO2file
+        # plot kg of C02 vs r/t distance in km for 1,2 legs
+        xmi,xma = 0.,1.05*maxkm
+        ymi,yma = 0.,1.05*maxkg
+        Xall,Yall = [],[]
+        for L in [1,2]:
+            X,Y = [],[]
+            for d in CO2data:
+                if d[0]==L:
+                    X.append(d[1]) # r/t distance
+                    Y.append(d[2]) # 
+            if len(X)>0:
+                self.drawIt(X,Y,'r/t distance (km)','kg of C02',str(L)+' legs',figDir=self.figdir,ylog=False,xlims=[xmi,xma],ylims=[ymi,yma])
+            Xall.extend(X)
+            Yall.extend(Y)
+        if len(Xall)>0:
+            self.drawIt(Xall,Yall,'r/t distance (km)','kg of C02','All legs',figDir=self.figdir,ylog=False,xlims=[xmi,xma],ylims=[ymi,yma])
+        
+        return
     def drawIt(self,x,y,xtitle,ytitle,title,figDir=None,ylog=True,xlims=[200.,800.],ylims=[1.e-5,1.e-1]):
         '''
         draw graph defined by x,y
@@ -630,6 +676,8 @@ class climate():
         P2I = self.matchMtoI(B2Inst,B2Members,B2GMfolks)
 
         self.costB2GM(cityInfo,P2I)
+
+        self.readCO2()
 
 
         
