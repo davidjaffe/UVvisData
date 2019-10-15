@@ -12,6 +12,9 @@ import numpy
 import copy
 
 import re
+import glob # used in __init__
+
+from lxml.html import parse  # used by readB2GM
 
 import matplotlib.pyplot as plt
 
@@ -23,6 +26,14 @@ class climate():
         self.GADfile = 'CDATA/GlobalAirportDatabase/GlobalAirportDatabase.txt'
         self.Airfarefile = 'CDATA/Airfares_CityPairs_20190929.csv'
         self.figdir = 'FIGURES/'
+
+        self.B2GMfiles = glob.glob("CDATA/*B2GM*")
+        self.B2GMfiles.sort()
+        print 'climate.__init__ will process the following B2GM attendance files '
+        for a in self.B2GMfiles:
+            print a
+        print '\n'
+            
 
         self.Legs = {}
         self.Legs[1] = ['nonstop','non-stop','non stop']
@@ -206,7 +217,7 @@ class climate():
                 s = line[:-1].split(',')
                 s = re.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", line[:-1])
                 #print 'climate.readAirFares line[:-1]',line[:-1],'s',s
-                city1 = s[0]
+                city1 = s[0].strip()
                 city2 = s[1]
                 acity1= s[3]
                 fare  = float(s[2])
@@ -217,7 +228,7 @@ class climate():
                 else:
                     AirFares[city1] = [fare,city1,city2,acity1,comments]
         f.close()
-        print 'self.readAirFares Processed',self.Airfarefile
+        print 'climate.readAirFares',len(AirFares),'airfares processed from',self.Airfarefile
         return AirFares
                     
     def mlbTeam(self,city,country):
@@ -366,24 +377,49 @@ class climate():
         f.close()
         print 'climate.ReadB2M Processed',len(B2Members),'members in',self.B2MembersFile
         return B2Members
-    def readB2GM(self):
+    def readB2GM(self,B2GMfile):
         '''
-        return list of name1,name2 of cut/paste of B2GM participants https://indico.belle2.org/event/971/registrations/participants 
-        as of 20190929
+        return list of [name1,name2,institution] of B2GM participants taken from various files. Institution may be missing from some files.
+
+        for Oct 2019 B2GM: 
+             return list of name1,name2 of cut/paste of B2GM participants 
+             https://indico.belle2.org/event/971/registrations/participants, as of 20190929
+        for June 2019 B2GM and earlier:
+             parse .htm file from 'Save page as' 'Webpage, HTML only' as of 20191015
+             return list of name1,name2,institution
+
         Try to take into account that name1 or name2 can be the family name or given name
+
+        str and unicode : https://stackoverflow.com/questions/10288016/usage-of-unicode-and-encode-functions-in-python
         '''
-        self.B2GMfile = 'CDATA/B2GM_Oct2019_20190929.txt'
         debug = False
-        f = open(self.B2GMfile,'r')
+
         B2GMfolks = []
-        for line in f:
-            if 'Participant' not in line: # avoid header
-                j = line.find('\t')
-                name1 = line[:j].replace('\t',' ').strip()
-                name2 = line[j+1:-1].replace('\t',' ').strip()
-                B2GMfolks.append( [name1,name2] )
-        f.close()
-        print 'climate.readB2GM Processed',len(B2GMfolks),'participants in',self.B2GMfile
+        typesSeen = []
+        if '.txt' in B2GMfile:
+            f = open(B2GMfile,'r')
+            for line in f:
+                if 'Participant' not in line: # avoid header
+                    j = line.find('\t')
+                    name1 = line[:j].replace('\t',' ').strip()
+                    name2 = line[j+1:-1].replace('\t',' ').strip()
+                    B2GMfolks.append( [name1,name2] )
+            f.close()
+        else:
+            page = parse(B2GMfile)
+            buff = []
+            for i,a in  enumerate( page.xpath('//tr/td//text()') ):
+                b = a.replace('\n','').strip()
+                t = type(b)
+                if t not in typesSeen: typesSeen.append(t)
+                if type(b) is str: b = b.decode('utf-8') # make str unicode
+                j = i%3
+                if j<=2: buff.append(b)
+                if j==2:
+                    B2GMfolks.append(buff)
+                    buff = []
+
+        print 'climate.readB2GM Processed',len(B2GMfolks),'participants in',B2GMfile,'with',len(typesSeen),'types of characters',typesSeen
         if debug: print B2GMfolks
         return B2GMfolks
     def readCO2(self):
@@ -481,7 +517,14 @@ class climate():
             plt.show()
         return slope,intercept
     def goodMatch(self,a,b,ch=''):
-        return a.strip().replace(ch,'').lower()==b.strip().replace(ch,'').lower()
+        A = a.strip().replace(ch,'').lower()
+        B = b.strip().replace(ch,'').lower()
+        if False and type(a)!=type(b):
+            print 'climate.goodMatch type-mismatch a',a
+            print 'climate.goodMatch type-mismatch type(a)',type(a)
+            print 'climate.goodMatch type-mismatch b',b
+            print 'climate.goodMatch type-mismatch type(b)',type(b)
+        return A==B
     def matchMtoI(self,Insts,Members,Parps):
         '''
         try to match participants Parps to Members and determine their institutions
@@ -495,44 +538,67 @@ class climate():
         '''
         debug = 0
         TooFew,TooMany,JustRight = 0,0,0
+        spacers = ['','-',' '] # single character spacers between names
         ParpToInst = [] # list of pairs (Participant, B2id)
         for P in Parps:
-            name1,name2 = P
+            name1,name2,inst = self.unpackParticipants(P)
             if debug>1: print 'Search for name1',name1,'name2',name2
             Matches = [] # list of B2id of potential matches
             for B2id in Members:
                 firstn,middlen,lastn,lastnpre,sname = Members[B2id]
-                if debug>2: print 'first/middle/last/pre/sname',firstn,'/',middlen,'/',lastn,'/',lastnpre,'/',sname
+                if debug>2: print 'climate.matchMtoI first/middle/last/pre/sname',firstn,'/',middlen,'/',lastn,'/',lastnpre,'/',sname
                 if self.goodMatch(name1,lastn):
                     Matches.append(B2id)
                 if self.goodMatch(name2,lastn):
                     if B2id not in Matches: Matches.append(B2id)
 
             if len(Matches)>1: # see if we can get a name1=firstn and name2=lastn or vice-versa
-                for ch in ['','-']:
-                    newMatch = []
+                newMatch = []
+                for ch in spacers:
                     for B2id in Matches:
                         firstn,middlen,lastn,lastnpre,sname = Members[B2id]
-                        if self.goodMatch(name1,firstn,ch=ch) and self.goodMatch(name2,lastn,ch=ch): newMatch.append(B2id)
-                        if self.goodMatch(name2,firstn,ch=ch) and self.goodMatch(name1,lastn,ch=ch) and B2id not in newMatch: newMatch.append(B2id)
+                        for initial,final in [ [firstn,lastn], [firstn+middlen,lastn], [firstn,middlen+lastn] ]:
+                            if self.goodMatch(name1,initial,ch=ch) and self.goodMatch(name2,final,ch=ch) and B2id not in newMatch: newMatch.append(B2id)
+                            if self.goodMatch(name2,initial,ch=ch) and self.goodMatch(name1,final,ch=ch) and B2id not in newMatch: newMatch.append(B2id)
                     if len(newMatch)>0: Matches = newMatch
                     if len(Matches)==1: break
 
+            if len(Matches)>1 and inst!=None: # try to match one name and institution
+                for ch in spacers:
+                    newMatch = []
+                    if debug>1: print 'climate.matchMtoI name1/name2/inst',name1,'/',name2,'/',inst,'try to match one name and institution to resolve multi-match'.upper()
+                    for B2id in Matches:
+                        firstn,middlen,lastn,lastnpre,sname = Members[B2id]
+                        for name in [firstn,lastn,firstn]:
+                            if debug>1: print 'climate.matchMtoI B2id,name/sname',B2id,name,'/',sname
+                            if self.goodMatch(name1,name,ch=ch) and (sname in inst): newMatch.append(B2id)
+                            if self.goodMatch(name2,name,ch=ch) and (sname in inst): newMatch.append(B2id)
+                    if len(newMatch)>0: Matches = newMatch
+                    if len(Matches)==1: break
+                        
+            if len(Matches)==0 and inst!=None: # no matches, desperation time
+                Matches = []
+                if debug>1: print 'climate.matchMtoI name1/name2/inst',name1,'/',name2,'/',inst,'try to match one name and institution to resolve 0 match'.upper()
+                for B2id in Members:
+                    if self.desperateMatch(Members[B2id],P):
+                        Matches.append(B2id)
+                        if debug>1: print 'climate.matchMtoI potential match B2id,name/sname',B2id,Members[B2id]
+                        
             L = len(Matches)
             
-            if L==0:
-                if debug>-1: print 'climate.matchMtoI',name1,name2,'*** NO MATCHES *** '
+            if L==0:   # --------------> NO MATCH
+                if debug>-1: print 'climate.matchMtoI name1/name2/inst',name1,'/',name2,'/',inst,'*** NO MATCHES *** '
                 TooFew += 1
                 ParpToInst.append( [P, None] ) # no match
-            elif L==1:
+            elif L==1: # --------------> One match
                 JustRight += 1
                 B2id = Matches[0]
                 sname = Members[B2id][-1]
                 if debug>1: print 'climate.matchMtoI B2id',B2id,'sname',sname,'Members[B2id]',Members[B2id]
                 ParpToInst.append( [P, Insts[sname]] )  # participant and Institution (city,country,longname,shortname)
-            else:
+            else:  # --------------> TOO MANY MATCHES
                 if debug>-1:
-                    print 'climate.matchMtoI',name1,name2,L,'matches',Matches
+                    print 'climate.matchMtoI',name1,'/',name2,'/',inst,L,'matches',Matches
                     self.printMatches(Matches,Members) 
                 TooMany += 1
                 ParpToInst.append( [P, None] ) # too many matches
@@ -541,7 +607,7 @@ class climate():
         if debug>1: # report participants and their institutions
             for pair in ParpToInst:
                 P,Home = pair
-                name1,name2 = P
+                name1,name2,inst = self.unpackParticipants(P)
                 print 'climate.matchMtoI',name1,name2,
                 if Home is not None:
                     city,country,lname,sname = Home
@@ -553,8 +619,39 @@ class climate():
     def printMatches(self,idList,Members):
         for i,B2id in enumerate(idList):
             firstn,middlen,lastn,lastnpre,sname = Members[B2id]
-            print ' match#',i,firstn,middlen,lastn,lastnpre
+            print ' match#',i,B2id,firstn,'/',middlen,'/',lastn,'/',lastnpre,'/',sname
         return
+    def desperateMatch(self,Member,P):
+        '''
+        try some desperate matching. One name of participant and one name in B2MMS iff instition somehow matches.
+        Member is from B2MMS
+        P is participant at a B2GM
+        return True is deperate match is possible
+        '''
+        name1,name2,inst = self.unpackParticipants(P)
+        if inst is None: return False 
+        spacers = ['',' ','-']
+        firstn,middlen,lastn,lastnpre,sname = Member
+        for mname in Member:
+            if mname!=sname and len(mname)>0:
+                OK = False
+                for ch in spacers:
+                    for name in [name1,name2]:
+                        if self.goodMatch(name1,mname,ch=ch) : OK = True
+                    if OK: 
+                        ilz = inst.lower().replace(' ','')
+                        slz = sname.lower().replace(' ','')
+                        if ilz in slz or slz in ilz: return True
+        return False
+    def unpackParticipants(self,P):
+        '''
+        return name1,name2,inst from B2GM row in P
+        when inst is missing, make it None
+        '''
+        inst = None
+        if len(P)==2: name1,name2 = P
+        if len(P)==3: name1,name2,inst = P
+        return name1,name2,inst
     def costB2GM(self,cityInfo,P2I,fitCO2):
         '''
         calculate total cost of B2GM in airfares and carbon dioxide
@@ -572,7 +669,7 @@ class climate():
             if I is None:
                 bad += 1
             else:
-                name1,name2 = P
+                name1,name2,inst = self.unpackParticipants(P)
                 city,country,lname,sname = I
                 if debug>0: print 'climate.costB2GM city/country/sname',city,'/',country,'/',sname
                 if 'Japan' in country or 'Japan' in city:
@@ -625,6 +722,7 @@ class climate():
         '''
         figure out nearby cities
         '''
+        # based on Oct 2019 B2GM
         if self.goodMatch(city,'Italy'): return 'Rome'
         if self.goodMatch(country,'Italy'): return 'Rome'
         if self.goodMatch(country,'Germany'): return 'Frankfurt'
@@ -644,6 +742,18 @@ class climate():
         if self.goodMatch(sname,'Fudan') : return 'Shanghai'
         if self.goodMatch(country,'Spain') : return 'Madrid'
         if self.goodMatch(sname,'Duke') : return 'Charlotte'
+
+        # based on June 2019 B2GM
+        if self.goodMatch(sname,'MIPT') : return 'Moscow'
+        if self.goodMatch(sname,'CPPM') : return 'Marseille'
+        if self.goodMatch(city,'Taiwan'): return 'Taipei'
+        if self.goodMatch(country,'Thailand') : return 'Bangkok'
+        if self.goodMatch(sname,'Soochow') : return 'Shanghai'
+        if self.goodMatch(sname,'Florida') : return 'Jacksonville'
+        if self.goodMatch(sname,'IISER') : return 'Punjab'
+
+        # based on Oct 2018 B2GM
+        if self.goodMatch(sname,'Peking') : return 'Beijing'
         return None
     def getLegs(self,comments):
         '''
@@ -656,6 +766,7 @@ class climate():
         for L in Legs:
             for w in Legs[L]:
                 if w in cl: return L
+        sys.exit('climate.getLegs ERROR '+comments)
         return None
     def mainAirFares(self):
         '''
@@ -693,6 +804,18 @@ class climate():
                     IATA = 'TNA'
                     latitude, longitude = 36.66833, 116.99722
                     cityIATA[city1] = [IATA, latitude,longitude] # Jinan from latitudelongitude.org
+                elif self.goodMatch(city1,'Punjab'):
+                    IATA = 'AIP'
+                    latitude, longitude = 31.379999, 75.379997
+                    cityIATA[city1] = [IATA, latitude,longitude] # Punjab from https://www.latlong.net/place/kapurthala-punjab-india-11411.html
+                elif self.goodMatch(city1,'Guwahati'):
+                    IATA = 'GAU'
+                    latitude,longitude = 26.183333, 91.733333
+                    cityIATA[city1] = [IATA, latitude,longitude] # from https://www.travelmath.com/cities/Guwahati,+India
+                elif self.goodMatch(city1,'Shenyang') or self.goodMatch(acity1,'Shenyang'):
+                    IATA = 'SHE'
+                    latitude,longitude = 41.835441, 123.42944 # https://www.findlatitudeandlongitude.com/?loc=Liaoning
+                    cityIATA[city1] = [IATA, latitude,longitude]
                 else:
                     sys.exit('climate.mainAirFares ERROR No IATA for '+city1)
             else:
@@ -722,13 +845,22 @@ class climate():
         rms = math.sqrt( float(Nfare)/float(Nfare-1) * (rms/float(Nfare) - avcpkm*avcpkm) )
         print 'climate.mainAirFares # {0} fares with average {1:.3f}({2:.3f}) minimum {3:.3f} maximum {4:.3f} in USD/km'.format(Nfare,avcpkm,rms,mincpkm,maxcpkm)
 
+        if debug>1:
+            print '\ncityInfo: city1/fare/distance/comments/acity1'
+            for city1 in sorted(cityInfo):
+                fare,distance,comments,acity1 = cityInfo[city1]
+                print '{0}/{1:.0f}/{2:.0f}/{3}/{4}'.format(city1,fare,distance,comments,acity1) 
+            print '\n'
+
         B2Inst = self.readB2I()
         B2Members = self.readB2M()
-        B2GMfolks = self.readB2GM()
-        P2I = self.matchMtoI(B2Inst,B2Members,B2GMfolks)
-
         fitCO2 = self.readCO2()
-        self.costB2GM(cityInfo,P2I,fitCO2)
+        print '\n -------------------------'
+        for B2GMfile in self.B2GMfiles:
+            B2GMfolks = self.readB2GM(B2GMfile)
+            P2I = self.matchMtoI(B2Inst,B2Members,B2GMfolks)
+
+            self.costB2GM(cityInfo,P2I,fitCO2)
 
 
 
