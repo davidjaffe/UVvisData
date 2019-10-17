@@ -741,7 +741,7 @@ class climate():
         if no institution was identified, then InstInfo = None
         fitCO2[leg] = [slope,intercept] for kg of CO2 vs r/t km 
         '''
-        print '\n'
+        #print '\n'
         debug = 0
         good,bad,unk,japan = 0,0,0,0
         totFares,totCarbon,totkm = 0,0,0
@@ -877,6 +877,87 @@ class climate():
         shiftTable = [tot, japan, unk, bad, totFare[0], totCarbon[0], totDist[0], totFare[1], totCarbon[1], totDist[1]]
                     
         return shiftTable
+    def drawResults(self,Table,kind='B2GM',column_labels=None,group=True):
+        '''
+        example from https://matplotlib.org/examples/ticks_and_spines/ticklabels_demo_rotation.html
+
+        group = True = group data by Collection keys
+        group = False = plot each x,y pair by itself
+        '''
+        
+        extra = ['CDATA/Shiftmanagement_', '.htm',  'igator', 'tain']
+
+        plt.clf()
+        plt.cla()
+        
+        ix= 0
+        x = [] # file
+        xlabel = [] # terse name
+        Y = {} # key is column number
+        Collections = {}
+        keys = ['Participants','Shifters','Fares','CO2','r/t']
+        for key in keys: Collections[key] = []
+        
+        for fn in sorted(Table):
+            tn = fn
+            if kind=='B2GM'   : tn = fn[:9]
+            if kind=='Shifts' :
+                for g in extra: tn = tn.replace(g,'')
+            ix += 1
+            x.append(ix)
+            xlabel.append(tn)
+            columns = Table[fn]
+            for icol,c in enumerate(columns):
+                if icol not in Y:
+                    Y[icol] = []
+                if type(c) is not str:
+                    Y[icol].append(c)
+        #print 'climate.drawResults',        [[a,b] for a,b in zip(x,xlabel)]
+        
+        for icol in sorted(Y):
+            y = Y[icol]
+            if len(x)==len(y):
+                if column_labels is not None:
+                    cl = column_labels[icol]
+                    for key in keys:
+                        if key in cl : Collections[key].append( [x,y,cl] ) # x,y,legend
+                if not group:
+                    plt.plot(x, y, 'ro')
+                    plt.grid()
+                    dx = abs(x[1]-x[0])
+                    plt.gca().set_xlim([min(x)-dx,max(x)+dx])
+                    plt.gca().set_ylim([0., max(0.1,1.05*max(y))])
+                    if column_labels is None:
+                        plt.title('Column #'+str(icol))
+                    else:
+                        plt.title(column_labels[icol])
+                    plt.xticks(x, xlabel, rotation=45,ha='right') #'vertical')
+                    plt.margins(0.2) #pad margins so markers don't get clipped by axes
+                    plt.subplots_adjust(bottom=0.15) # tweak to prevent clipping of tick-labels
+                    plt.show()
+
+        
+        symbol = ['bo','gv','r^','cs','mX','yD','k<','b>']
+        if group:
+            for key in keys:
+                plt.clf()
+                plt.cla()
+                if len(Collections[key])>0:
+                    for i,trip in enumerate(Collections[key]):
+                        x,y,cl = trip
+                        plt.plot(x,y,symbol[i],label=cl)
+                    plt.legend(loc='best')
+                    plt.xticks(x,xlabel,rotation=45,ha='right')
+                    plt.margins(0.2)
+                    plt.subplots_adjust(bottom=0.15)
+                    figpdf = kind + '_' + key.replace('/','-') + '.pdf'
+                    figpdf = self.figdir + figpdf
+                    plt.savefig(figpdf)
+                    print 'climate.drawResults wrote',figpdf
+
+ #                   plt.show()
+
+        return
     def printResults(self,Table,kind='B2GM'):
         '''
         print results contained in Table
@@ -888,7 +969,16 @@ class climate():
             print '\n{0:^19} {1:^31} {2:^31}'.format('Participants','Actual totals','Estimated totals')
         if kind=='Shifts':
             print '\n{0:^19} {1:^31} {2:^31}'.format('Participants','Est. minimum totals','Est. maximum totals')
-            
+        column_labels = {}
+        column_labels['B2GM'] = ['Participants\ Total','Participants\  from Japan','Participants\ Unknown inst','Participants\ Bad entry',\
+                                'Actual total\ Fares(USD)','Actual total\ CO2(kg)','Actual total\ r/t (km)',\
+                                'Estimated total\ Fares(USD)','Estimated total\ CO2(kg)','Estimated total\ r/t (km)'
+                                ]
+        column_labels['Shifts'] = ['Shifters\ Total','Shifters\  from Japan','Shifters\ Unknown inst','Shifters\ Bad entry',\
+                                'Minimum total\ Fares(USD)','Minimum total\ CO2(kg)','Minimum total\ r/t (km)',\
+                                'Maximum total\ Fares(USD)','Maximum total\ CO2(kg)','Maximum total\ r/t (km)'
+                                ]
+                             
         print tfmt.format('#att','japn','unk','bad', 'fares(USD)','CO2(kg)','r/t (km)', 'Fare(USD)','CO2(kg)','r/t (km)','Event')
         s = []
         for B2GMfn in sorted(Table):
@@ -910,7 +1000,7 @@ class climate():
         if kind=='Shifts':
             print '#att = Number of shifters, japn = Number of shifters from Japan, unk = could not associate institution with shifter, bad = shifter with unknown institution'
             
-        return
+        return column_labels
     def nearbyCity(self,city,country,sname):
         '''
         figure out nearby cities
@@ -1065,7 +1155,8 @@ class climate():
                 Results = self.costB2GM(cityInfo,P2I,fitCO2)
                 fn = os.path.basename(B2GMfile).split('.')[0]
                 Table[fn] = Results
-            self.printResults(Table)
+            column_labels = self.printResults(Table)
+            self.drawResults(Table,kind='B2GM',column_labels=column_labels['B2GM'])
 
         if processShifts: #### PROCESS SHIFT INFORMATION
             pairs = []
@@ -1078,7 +1169,8 @@ class climate():
             for pair in pairs:
                 fn,shiftInfo = pair
                 shiftTable[fn] = ShiftResults = self.costShifts(cityInfo,fitCO2, B2Inst,shiftInfo)
-            self.printResults(shiftTable,kind='Shifts')
+            column_labels = self.printResults(shiftTable,kind='Shifts')
+            self.drawResults(shiftTable,kind='Shifts',column_labels=column_labels['Shifts'])
         
         if 0: 
             self.drawIt(distances,fares,'Distance between city and Tokyo in km','Fare(USD)','Cost per km',figDir=None,ylog=False,xlims=[0.,14000.],ylims=[0.,2400.])
