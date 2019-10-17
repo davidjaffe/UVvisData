@@ -29,35 +29,34 @@ class b2parser():
         print 'b2parser.__init__ will process the following shift files '
         for a in self.B2shiftfiles: print a
         print '\n'
+        self.lastFileIndex = -1
             
         
         return
-    def OLDreadShift(self,fn):
+    def getNextShiftFile(self):
         '''
-        read shift file and return shifter names (and any other info that can be determined)
+        return name of the next shift file or None if there is no next file
         '''
-        print 'b2parser.readShift Process',fn
-        page = parse(fn)
-        buff = []
-#        for i,a in  enumerate( page.xpath('//div[@class="shift_assigned"]//text()') ):
-        for i,a in  enumerate( page.xpath('//div[@class="shift_assigned"]') ):
-            print a
-#            b = a.replace('\n','').replace('\t','').strip()
-#            if len(b)>0: print b
-        return
-    def readShift(self,fn):
+        self.lastFileIndex += 1
+        if self.lastFileIndex < len(self.B2shiftfiles):
+            return self.B2shiftfiles[ self.lastFileIndex ]
+        return None
+    def readShift(self,fn,debug=0):
         '''
         use empirical method of parsing htm file with shifter information
         Extract string between 'Mail address' and 'return', clean the string and then append a string with date information,
         render the resulting string to get the email, institution, collaborator name and date
 
+        returns dict shiftInfo[email] 
+        shiftInfo[email] = [ inst, name, contiguous_shift_ranges]
+        where contiguous_shift_ranges = [ [firstday1,lastday1], [firstday2,lastday2], ...]
+
         '''
-        print 'b2parser.readShift -------------------------> Process',fn
+        if debug>0: print 'b2parser.readShift -------------------------> Process',fn
         fnl = fn.split('.')
         fntemp = fnl[0].replace(' ','') + '.temporary'
         os.system("grep -E 'book_month|Mail address|workday|holiday' " + fn + " > " + fntemp)
 
-        debug = 0
         
         Shifters = []
         Date,Month = None,None
@@ -92,22 +91,24 @@ class b2parser():
                 dobj = info[-1] + ' ' + Month
                 info[-1] = datetime.datetime.strptime(dobj,rfmt).strftime(wfmt) 
                 Shifters.append( info )
-                if debug>0: print '%s' % ', '.join(map(str,info))
+                if debug>0: print 'b2parser.readShift','%s' % ', '.join(map(str,info))
             else:
                 pass
         f.close()
         print 'b2parser.readShift Processed ================> Data on',len(Shifters),' shifts from',fntemp,'made from',fn
-        self.compressor(Shifters)
-        return
-    def compressor(self,Shifters):
+        shiftInfo = self.compressor(Shifters)
+        return shiftInfo
+    def compressor(self,Shifters,debug=0):
         '''
-        produce dicts of per-person contiguous shifts given list of day-by-day shift information
+        produce dict of per-person contiguous shifts given list of day-by-day shift information
         item in Shifters is [email, inst, name, date] with date=  'yyyy-mm-dd'
-        dicts :
+        temporary dicts :
         shiftID[email] =  [inst, name]
         shiftDates[email] = [date1, date2, date3 ..., daten] 
+        output dict :
+        shiftInfo[email] = [ inst, name, contiguous_shift_ranges]
+        where contiguous_shift_ranges = [ [firstday1,lastday1], [firstday2,lastday2], ...]
         '''
-        debug = 1
         
         shiftID = {}
         shiftDates = {}
@@ -119,17 +120,19 @@ class b2parser():
             else:
                 shiftDates[email].append(date)
                 if shiftID[email][0]!=inst or shiftID[email][1]!=name:
-                    print 'b2parser.compressor ERROR Original inst,name',shiftID[email][0],shiftID[email][1],'does not match',inst,name
+                    print 'b2parser.compressor ERROR Original inst/name',shiftID[email][0]+'/'+shiftID[email][1],'does not match',inst+'/'+name
                     sys.exit('b2parser.compressor ERROR This should not happen')
-                    
+
+        shiftInfo = {}
         for email in sorted(shiftID):
             inst,name = shiftID[email]
             days = shiftDates[email]
             contig = self.daterange(days)
             if debug>1: print email,inst,'%s' % ', '.join(map(str,days)),contig
             if debug>0: print email,inst,contig
+            shiftInfo[email] = [inst, name, contig]
         
-        return
+        return shiftInfo
     def daterange(self,dates):
         '''
         given list of dates, produce list of contiguous dates
@@ -169,6 +172,8 @@ class b2parser():
         given line extracted from shift.htm file, return email address, institution short name, collaborator name, date
         date may be missing
         '''
+        show = False
+        
         ma = 'Mail address:'
         i1 = line.find(ma)+len(ma)
         line[i1:]
@@ -176,8 +181,15 @@ class b2parser():
         i2 = line.find(fi)
         email = line[i1:i2].strip()
         email = email.replace(';','').strip()
+        
         i2 += len(fi)
         i3 = line[i2:].lstrip().find(' ')
+        for special in ['Roma Tre','HEPHY Vienna']:
+            if special in line[i2:]:
+                i3 = len(special)
+                #print 'b2parser.render special',special,'line[:-1]',line[:-1],'line[i2:].lstrip()[:i3]',line[i2:].lstrip()[:i3]
+                #show = True
+                    
         inst = line[i2:].lstrip()[:i3]
         inst = inst.replace(';','').strip()
         dt = 'date:'
@@ -189,7 +201,7 @@ class b2parser():
             date = None
             cname= line[i2:].replace(inst,'').strip()
 
-        
+        if show: print 'b2parser.render result',[email,inst,cname,date]
         return [email, inst, cname, date]
     def mainShift(self):
         '''

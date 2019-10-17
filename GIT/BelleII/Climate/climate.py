@@ -18,10 +18,14 @@ from lxml.html import parse  # used by readB2GM
 
 import matplotlib.pyplot as plt
 
+import b2parser
+
 class climate():
     def __init__(self):
 
         self.debug = 1
+
+        self.b2parser = b2parser.b2parser()
 
         self.GADfile = 'CDATA/GlobalAirportDatabase/GlobalAirportDatabase.txt'
         self.Airfarefile = 'CDATA/Airfares_CityPairs_20190929.csv'
@@ -328,12 +332,12 @@ class climate():
             distance = self.haversine(london_coord, coord)
             print(city, distance)
         return
-    def readB2I(self):
+    def readB2I(self,debug=0):
         '''
         read Belle II institutions lists to get inst names, country, city
         return dict[short name] = [city,country,long name, short name]
         '''
-        debug = 0
+
         self.B2InstitutionsFile = 'CDATA/BelleII_institutions_20190929.csv'
         f = open(self.B2InstitutionsFile,'r')
         B2Inst = {}
@@ -352,12 +356,15 @@ class climate():
     def readB2M(self):
         '''
         read Belle II members to get Belle II ID, name and institution name
-        return dict[B2id,firstname,middlename,lastname,lastnameprefix,inst]
+        return dicts
+        B2Members[B2id] =[firstname,middlename,lastname,lastnameprefix,inst]
+        B2MemberEmail[B2id] = email
         '''
         debug = 0
         self.B2MembersFile = 'CDATA/BelleII_members_20190929.csv'
         f = open(self.B2MembersFile,'r')
         B2Members = {}
+        B2MemberEmail = {}
         qqq = '"""' # 3 double quote surrounds short name of institution
         for line in f:
             if 'B2id' not in line: # avoids header
@@ -371,15 +378,17 @@ class climate():
                 lastn  = s[2]
                 middlen= s[3]
                 lastnpre=s[4]
+                email  = s[5]
                 sname  = s[11] # institution short name (this does not always work because some fields have ',' in them)
                 j1 = line.find(qqq)
                 j2 = j1+1 + line[j1+1:].find(qqq)
                 sname = line[j1+len(qqq):j2]
                 B2Members[B2id] = [firstn,middlen,lastn,lastnpre,sname]
-                if debug>0: print 'climate.ReadB2M B2id',B2id,'B2Members[B2id]',B2Members[B2id]
+                B2MemberEmail[B2id] = email
+                if debug>0: print 'climate.ReadB2M B2id',B2id,'B2Members[B2id]',B2Members[B2id],'B2MemberEmail',B2MemberEmail
         f.close()
         print 'climate.ReadB2M Processed',len(B2Members),'members in',self.B2MembersFile
-        return B2Members
+        return B2Members, B2MemberEmail
     def readB2GM(self,B2GMfile):
         '''
         return list of [name1,name2,institution] of B2GM participants taken from various files. Institution may be missing from some files.
@@ -592,7 +601,7 @@ class climate():
             L = len(Matches)
             
             if L==0:   # --------------> NO MATCH
-                if debug>-1:
+                if debug>0:
                     self.printAsUnicode([ 'climate.matchMtoI name1/name2/inst',name1,'/',name2,'/',inst,'*** NO MATCHES *** '])
                 TooFew += 1
                 ParpToInst.append( [P, None] ) # no match
@@ -655,7 +664,9 @@ class climate():
         P = name1,name2,inst
         '''
         spacers = ['','-',' ']
-        debug = 1
+        
+        debug = 0
+        
         name1,name2,inst = P
         inIt = {}
         newMatch = []
@@ -798,14 +809,86 @@ class climate():
         Results = [totalPs, japanPs, unkPs, badPs,  totFares,totCarbon,totkm, estTotFares,estTotCarbon,estTotkm]
         
         return Results
-    def printResults(self,Table):
+    def getCityInfo(self,inst,city,country,cityInfo):
+        '''
+        return info for inst,city,country if possible, otherwise return None
+        given city name and dict cityInfo 
+        cityInfo is cityInfo[city1] = [fare,distance,comments,alternate name of city1]
+        '''
+        if city in cityInfo:
+            return cityInfo[city]
+        else:
+            nearby = self.nearbyCity(city,country,inst)
+            if nearby is None:
+                for c1 in cityInfo:
+                    acity = cityInfo[c1][3]
+                    if self.goodMatch(city,acity):
+                        return cityInfo[c1]
+            else:
+                if nearby in cityInfo:
+                    return cityInfo[nearby]
+        return None
+            
+    def costShifts(self,cityInfo, fitCO2, B2Inst,shiftInfo):
+        '''
+        estimate cost (USD), CO2 (kg), r/t distance (km) for shifters
+        Inputs: 
+        cityInfo is cityInfo[city1] = [fare,distance,comments,alternate name of city1]
+        fitCO2[legs] = [slope,intercept]
+        B2inst is dict[short name] = [city,country,long name, short name]
+        shiftInfo[email] = [ inst, name, contiguous_shift_ranges]
+        where contiguous_shift_ranges = [ [firstday1,lastday1], [firstday2,lastday2], ...]
+
+        return shiftTable = [total#, japan#, unk#, bad#, minUSD, minkg, minkm, maxUSD, maxkg, maxkm]
+
+        '''
+        debug = 1
+        
+        tot = len(shiftInfo)
+        japan,unk,bad = 0,0,0
+        totFare,totCarbon,totDist = [0,0], [0,0], [0,0] #= [min,max]
+        for email in shiftInfo:
+            inst,name,contig = shiftInfo[email]
+
+
+            if inst in B2Inst:
+                city,country,lname,sname = B2Inst[inst]
+                if self.goodMatch(country,'Japan') or self.goodMatch(city,'Japan'):
+                    japan += 1
+                else:
+                    stuff = self.getCityInfo(inst,city,country,cityInfo)
+                    if stuff is None:
+                        if debug>0: print 'climate.costShifts Unknown inst/city/country',inst+'/'+city+'/'+country,'for email/name',email+'/'+name
+                        unk += 1
+                    else:
+                        fare,distance,comments,acity = stuff
+                        legs = self.getLegs(comments)
+                        slope,intercept = fitCO2[legs]
+                        carbon = slope*2.*distance + intercept
+                        shiftBlocks = len(contig) 
+                        for i in [0,1]:
+                            sf = 1 + float(i)*float(shiftBlocks)
+                            totCarbon[i] += carbon*sf
+                            totDist[i] += 2.*distance*sf # round-trip distance
+                            totFare[i] += fare*sf
+            else:
+                bad += 1
+                if debug>0: print 'climate.costShifts Bad inst/name/email',inst+'/'+name+'/'+email,'inst not in Belle II institutions',"inst.replace(' ','')",inst.replace(' ','')
+        shiftTable = [tot, japan, unk, bad, totFare[0], totCarbon[0], totDist[0], totFare[1], totCarbon[1], totDist[1]]
+                    
+        return shiftTable
+    def printResults(self,Table,kind='B2GM'):
         '''
         print results contained in Table
         Table[B2GM filename prefix] = Results (list defined in costB2GM)
         '''
         fmt = '{0:>4} {1:>4} {2:>4} {3:>4} {4:>10.0f} {5:>10.0f} {6:>10.0f} {7:>10.0f} {8:>10.0f} {9:>10.0f} {10}'
         tfmt = fmt.replace('.0f','')
-        print '\n{0:^19} {1:^31} {2:^31}'.format('Participants','Actual totals','Estimated totals')
+        if kind=='B2GM':
+            print '\n{0:^19} {1:^31} {2:^31}'.format('Participants','Actual totals','Estimated totals')
+        if kind=='Shifts':
+            print '\n{0:^19} {1:^31} {2:^31}'.format('Participants','Est. minimum totals','Est. maximum totals')
+            
         print tfmt.format('#att','japn','unk','bad', 'fares(USD)','CO2(kg)','r/t (km)', 'Fare(USD)','CO2(kg)','r/t (km)','Event')
         s = []
         for B2GMfn in sorted(Table):
@@ -822,7 +905,11 @@ class climate():
         u = [int(x/float(l)+0.5) for x in s[:-1]]
         u.append('AVERAGE')
         print fmt.format(*u)
-        print '#att = Number of attendees, japn = Number of attendees from Japan, unk = could not associate institution with attendee, bad = attendee not in B2MMS'
+        if kind=='B2GM':
+            print '#att = Number of attendees, japn = Number of attendees from Japan, unk = could not associate institution with attendee, bad = attendee not in B2MMS'
+        if kind=='Shifts':
+            print '#att = Number of shifters, japn = Number of shifters from Japan, unk = could not associate institution with shifter, bad = shifter with unknown institution'
+            
         return
     def nearbyCity(self,city,country,sname):
         '''
@@ -962,23 +1049,36 @@ class climate():
 
         
         B2Inst = self.readB2I()
-        B2Members = self.readB2M()
+        B2Members,B2MemberEmail = self.readB2M()
         fitCO2 = self.readCO2()
         print '\n -------------------------'
 
-        Table = {}
-        for B2GMfile in self.B2GMfiles:
-            B2GMfolks = self.readB2GM(B2GMfile)
-            P2I = self.matchMtoI(B2Inst,B2Members,B2GMfolks)
+        processB2GM  = True
+        processShifts= True
 
-            Results = self.costB2GM(cityInfo,P2I,fitCO2)
-            fn = os.path.basename(B2GMfile).split('.')[0]
-            Table[fn] = Results
-        self.printResults(Table)
+        if processB2GM: 
+            Table = {}
+            for B2GMfile in self.B2GMfiles:
+                B2GMfolks = self.readB2GM(B2GMfile)
+                P2I = self.matchMtoI(B2Inst,B2Members,B2GMfolks)
 
+                Results = self.costB2GM(cityInfo,P2I,fitCO2)
+                fn = os.path.basename(B2GMfile).split('.')[0]
+                Table[fn] = Results
+            self.printResults(Table)
 
-
-        
+        if processShifts: #### PROCESS SHIFT INFORMATION
+            pairs = []
+            fn = self.b2parser.getNextShiftFile()
+            while (fn is not None):
+                shiftInfo = self.b2parser.readShift(fn)
+                pairs.append( [fn, shiftInfo] )
+                fn = self.b2parser.getNextShiftFile()
+            shiftTable = {}
+            for pair in pairs:
+                fn,shiftInfo = pair
+                shiftTable[fn] = ShiftResults = self.costShifts(cityInfo,fitCO2, B2Inst,shiftInfo)
+            self.printResults(shiftTable,kind='Shifts')
         
         if 0: 
             self.drawIt(distances,fares,'Distance between city and Tokyo in km','Fare(USD)','Cost per km',figDir=None,ylog=False,xlims=[0.,14000.],ylims=[0.,2400.])
