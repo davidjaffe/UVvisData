@@ -1,0 +1,13 @@
+# reproduce quantitative info from table VIII in PRD79, 092004 (2009)
+# s/b assumes Br(K+=>pi+,nu,nubar) = 1.73e-10
+# table has tab separated columns
+# Cell	      Definition			b		 s/b
+1 	      KINT.TDT.DCT.PVT			0.152	 0.84
+2	      KINT.TDR.DCT.PVT		 0.038	 0.78
+3	      KINT.TDT.DCR.PVT		 0.019	 0.66
+4 	      KINT.TDR.DCR.PVT		 0.005	 0.57
+5	      KINT.TDT.DCT.PVR		 0.243	 0.47
+6	      KINT.TDR.DCT.PVR		 0.059	 0.45
+7	      KINT.TDT.DCR.PVR		 0.027	 0.42
+8	      KINT.TDR.DCR.PVR		 0.007	 0.35
+9	      KINR.TDS.DCS.PVS		 0.379	 0.20
