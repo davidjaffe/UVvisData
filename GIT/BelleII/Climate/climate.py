@@ -469,6 +469,7 @@ class climate():
         xmi,xma = 0.,1.05*maxkm
         ymi,yma = 0.,1.05*maxkg
         Xall,Yall = [],[]
+        dataAndFit = {}
         for L in [1,2]:
             X,Y = [],[]
             for d in CO2data:
@@ -476,13 +477,52 @@ class climate():
                     X.append(d[1]) # r/t distance
                     Y.append(d[2]) # 
             if len(X)>0:
-                fitResults[L] = self.drawIt(X,Y,'r/t distance (km)','kg of C02',str(L)+' legs',figDir=self.figdir,ylog=False,xlims=[xmi,xma],ylims=[ymi,yma],linfit=True)
+                fitResults[L] = self.drawIt(X,Y,'r/t distance (km)','kg of CO2',str(L)+' legs',figDir=self.figdir,ylog=False,xlims=[xmi,xma],ylims=[ymi,yma],linfit=True)
+                dataAndFit[L] = [X,Y,fitResults[L]]
+
             Xall.extend(X)
             Yall.extend(Y)
         if len(Xall)>0:
-            self.drawIt(Xall,Yall,'r/t distance (km)','kg of C02','All legs',figDir=self.figdir,ylog=False,xlims=[xmi,xma],ylims=[ymi,yma],linfit=True)
-        
+            self.drawIt(Xall,Yall,'r/t distance (km)','kg of CO2','All legs',figDir=self.figdir,ylog=False,xlims=[xmi,xma],ylims=[ymi,yma],linfit=True)
+
+        X1,Y1,fR1 = dataAndFit[1]
+        X2,Y2,fR2 = dataAndFit[2]
+        self.drawBoth(X1,Y1,fR1,'1 leg', X2,Y2,fR2,'2 legs','r/t distance (km)','kg of CO2','CO2 vs round-trip distance')
+            
         return fitResults
+    def drawBoth(self,X1,Y1,fR1,Label1, X2,Y2,fR2,Label2, xtitle,ytitle,title, xlims=None, ylims=None ):
+        '''
+        draw 2 sets of data with linear fits
+        '''
+        plt.clf()
+        plt.grid()
+        plt.title(title)
+
+        fit_fn = numpy.poly1d(fR1)
+        x = [v for v in X1]
+        x.extend( [v for v in X2] )
+        w1 = ' slope {0:.3f} intercept {1:.1f}'.format(*fit_fn)
+        plt.plot(X1,Y1,'ob',x,fit_fn(x),'-b',label=Label1+w1)
+
+        fit_fn = numpy.poly1d(fR2)
+        w2 = ' slope {0:.3f} intercept {1:.1f}'.format(*fit_fn)
+        plt.plot(X2,Y2,'sr',x,fit_fn(x),'-r',label=Label2+w2)
+        plt.xlabel(xtitle)
+        plt.ylabel(ytitle)
+
+        if xlims is None: xlims = [0., max(max(X1),max(X2))*1.05]
+        if ylims is None: ylims = [0., max(max(Y1),max(Y2))*1.05]
+        plt.xlim(xlims)
+        plt.ylim(ylims)
+        
+        plt.legend(loc='best')
+        pdf = self.figdir + 'all_legs.pdf'
+        if pdf is not None:
+            plt.savefig(pdf)
+            print 'climate.drawBoth Wrote',pdf
+        else:
+            plt.show()
+        return
     def drawIt(self,x,y,xtitle,ytitle,title,figDir=None,ylog=True,xlims=[200.,800.],ylims=[1.e-5,1.e-1],linfit=False):
         '''
         draw graph defined by x,y
@@ -932,7 +972,8 @@ class climate():
                     else:
                         plt.title(column_labels[icol])
                     plt.xticks(x, xlabel, rotation=45,ha='right') #'vertical')
-                    plt.margins(0.2) #pad margins so markers don't get clipped by axes
+                    plt.grid()
+                    plt.margins(0.1) #pad margins so markers don't get clipped by axes
                     plt.subplots_adjust(bottom=0.15) # tweak to prevent clipping of tick-labels
                     plt.show()
 
@@ -943,12 +984,16 @@ class climate():
                 plt.clf()
                 plt.cla()
                 if len(Collections[key])>0:
+                    yma = -1.
                     for i,trip in enumerate(Collections[key]):
                         x,y,cl = trip
                         plt.plot(x,y,symbol[i],label=cl)
+                        yma = max(yma,max(y))
                     plt.legend(loc='best')
+                    plt.gca().set_ylim([0.,yma*1.05])
                     plt.xticks(x,xlabel,rotation=45,ha='right')
-                    plt.margins(0.2)
+                    plt.margins(0.1)
+                    plt.grid()
                     plt.subplots_adjust(bottom=0.15)
                     figpdf = kind + '_' + key.replace('/','-') + '.pdf'
                     figpdf = self.figdir + figpdf
@@ -963,12 +1008,39 @@ class climate():
         print results contained in Table
         Table[B2GM filename prefix] = Results (list defined in costB2GM)
         '''
+        latexFile = self.figdir + kind + '_table.tex'
+        latex = open(latexFile,'w')
+
+        ds = ' \\\\ \n' # print ds =>   ' \\'
+
+        comment,latexComment = {},{}
+        comment['B2GM'] = '#att = Number of attendees, japn = Number of attendees from Japan, unk = could not associate institution with attendee, bad = attendee not in B2MMS'
+        comment['Shifts'] = '#att = Number of shifters, japn = Number of shifters from Japan, unk = could not associate institution with shifter, bad = shifter with unknown institution'
+        latexComment['B2GM'] = 'att = Number of attendees, japn = Number of attendees from Japan, unk = could not associate institution with attendee, bad = attendee not in B2MMS. Latter case can arise if name of individual could not be unambiguously or easily matched to a B2MMS entry.'
+        latexComment['Shifts'] = 'att = Number of shifters, japn = Number of shifters from Japan, unk = could not associate institution with shifter, bad = shifter with unknown institution. Latter cases can arise if individual is not in B2MMS or name of individual could not be unambiguously or easily matched to a B2MMS entry.'
+
+        
+
+        label = 'tab:'+kind
+        caption = kind + ' statistics. ' + latexComment[kind]
+        latex.write('\\begin{table}[htp] \n')
+        latex.write( '\\setlength{\\tabcolsep}{2pt} \n')
+        latex.write('\\begin{center} \n')
+        latex.write('\\begin{tabular}{|rrrr| rrr| rrr| c|} \n' )
+        
         fmt = '{0:>4} {1:>4} {2:>4} {3:>4} {4:>10.0f} {5:>10.0f} {6:>10.0f} {7:>10.0f} {8:>10.0f} {9:>10.0f} {10}'
+        fmtLatex = fmt.replace('} {','}&{') + ds
         tfmt = fmt.replace('.0f','')
+        tfmtLatex = tfmt.replace('} {','}&{') + ds
+        hfmt = '\n{0:^19} {1:^31} {2:^31}'
+        hfmtLatex = '\multicolumn(4)(|c|)({0}) & \multicolumn(3)(c|)({1}) & \multicolumn(3)(c|)({2}) &'
+        latex.write( '\\hline \n' )
         if kind=='B2GM':
-            print '\n{0:^19} {1:^31} {2:^31}'.format('Participants','Actual totals','Estimated totals')
+            print hfmt.format('Participants','Actual totals','Estimated totals')
+            latex.write( hfmtLatex.format('Participants','Actual totals','Estimated totals').replace('(','{').replace(')','}') + ds )
         if kind=='Shifts':
-            print '\n{0:^19} {1:^31} {2:^31}'.format('Participants','Est. minimum totals','Est. maximum totals')
+            print hfmt.format('Participants','Est. minimum totals','Est. maximum totals')
+            latex.write( hfmtLatex.format('Participants','Est. minimum totals','Est. maximum totals').replace('(','{').replace(')','}') +ds )
         column_labels = {}
         column_labels['B2GM'] = ['Participants\ Total','Participants\  from Japan','Participants\ Unknown inst','Participants\ Bad entry',\
                                 'Actual total\ Fares(USD)','Actual total\ CO2(kg)','Actual total\ r/t (km)',\
@@ -980,6 +1052,8 @@ class climate():
                                 ]
                              
         print tfmt.format('#att','japn','unk','bad', 'fares(USD)','CO2(kg)','r/t (km)', 'Fare(USD)','CO2(kg)','r/t (km)','Event')
+        latex.write( tfmtLatex.format('att','japn','unk','bad', 'fares(USD)','CO2(kg)','r/t (km)', 'Fare(USD)','CO2(kg)','r/t (km)','Event') )
+        latex.write( '\\hline \n' )
         s = []
         for B2GMfn in sorted(Table):
             r = Table[B2GMfn]
@@ -987,19 +1061,31 @@ class climate():
                 s = [x for x in r]
             else:
                 s = [x+y for x,y in zip(r,s)]
-            r.append(B2GMfn)
+            if kind=='Shifts':
+                tB2GM = B2GMfn.replace('CDATA/Shiftmanagement_','').replace('_',' ').replace('.htm','')
+            elif kind=='B2GM':
+                tB2GM = B2GMfn[:B2GMfn.index('B2GM')+4].replace('_',' ')
+            r.append(tB2GM)
             print fmt.format(*r)
+            latex.write( fmtLatex.format(*r) )
         s.append('SUMMED')
         print fmt.format(*s)
         l = len(Table)
         u = [int(x/float(l)+0.5) for x in s[:-1]]
         u.append('AVERAGE')
         print fmt.format(*u)
-        if kind=='B2GM':
-            print '#att = Number of attendees, japn = Number of attendees from Japan, unk = could not associate institution with attendee, bad = attendee not in B2MMS'
-        if kind=='Shifts':
-            print '#att = Number of shifters, japn = Number of shifters from Japan, unk = could not associate institution with shifter, bad = shifter with unknown institution'
+        print comment[kind]
+        
+        latex.write( '\\hline \n' )
+        latex.write('\\end{tabular} \n')
+        latex.write('\\label{'+label+'} \n')
+        latex.write('\\caption{'+caption+'} \n')
+        latex.write('\\end{center} \n')
+        latex.write('\\end{table} \n') 
+
             
+        latex.close()
+        print 'climate.printResults Wrote',latexFile
         return column_labels
     def nearbyCity(self,city,country,sname):
         '''
@@ -1143,7 +1229,7 @@ class climate():
         fitCO2 = self.readCO2()
         print '\n -------------------------'
 
-        processB2GM  = True
+        processB2GM  = False
         processShifts= True
 
         if processB2GM: 

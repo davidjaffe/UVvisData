@@ -77,6 +77,12 @@ class b2parser():
                 if i<0: i = line.find('holiday')
                 i += len('holiday')
                 newDate = line[i:i+12].replace("'>","").replace('\n','').replace('\t','')
+                if 0:
+                    j = line.find('Weekly')
+                    if j>0 :
+                        i = j + len('Weekly')
+                        k = i + line[i:].find('<')
+                        newDate = line[i:k]
                 if len(newDate)>0 : Date = 'date:' + newDate
                 if debug>1: print 'Date',Date
             elif 'Mail address' in line:
@@ -96,6 +102,10 @@ class b2parser():
                 pass
         f.close()
         print 'b2parser.readShift Processed ================> Data on',len(Shifters),' shifts from',fntemp,'made from',fn
+        if os.path.isfile(fntemp):
+            os.remove(fntemp)
+        else:
+            print 'b2parser.readShift WARNING Failed to delete temporary file',fntemp
         shiftInfo = self.compressor(Shifters)
         return shiftInfo
     def compressor(self,Shifters,debug=0):
