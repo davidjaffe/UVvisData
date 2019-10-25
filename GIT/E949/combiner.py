@@ -55,20 +55,51 @@ class combiner():
         for cell in sorted(E949cells):
             print '{0:>6} {1:>18} {2:>6.3f} {3:>6.2f} {4:>10.4f}'.format(cell,E949cells[cell][0],E949cells[cell][1],E949cells[cell][2],Acc[cell])
 
+        useE949 = False
+        if useE949:
+            title = 'E949 combined result'
+        else:
+            title = 'E949 pnn1 only'
+        
+            
         x,y = [],[]
         for iratio in range(0,210,10):
             ratio = float(iratio)/100.
-            like = self.likeE949(ratio,E949cells)
+            if useE949:
+                like = self.likeE949(ratio,E949cells)
+            else:
+                like = self.likepnn1(ratio)
             x.append(ratio)
             y.append(like)
         ymi = min(y)
         y = [z-ymi for z in y]
-
-        print 'combiner.reproE949 SES={0:.2e} AssumedBR/SES={1:.2e}'.format(self.SES,self.AssumedBR/self.SES)
         
-        self.drawIt(x,y,'Br scale factor','-2loglike','whats the frequency kenneth?')
+        if useE949:
+            print 'combiner.reproE949 SES={0:.2e} AssumedBR/SES={1:.2e}'.format(self.SES,self.AssumedBR/self.SES)
+
+        xtitle = 'Branching fraction/'+str(self.AssumedBR)
+            
+        self.drawIt(x,y,xtitle,'-2loglike',title)
             
         return
+    def likepnn1(self,ratio):
+        '''
+        calculate -2 * log likelihood for the single pnn1 event 
+        from Section IV.B of PRD77 052003
+        
+        '''
+        NK   = 1.77e12
+        Atot = 1.694e-3
+        Ai   = 1.21e-4 #  acceptance of cell with signal relative to Atot
+
+        b    = 5.75e-5
+        B    = ratio*self.AssumedBR
+        s    = NK*Atot*Ai*B
+        likeA = 2.*NK*Atot*B
+        likeB = -2.*math.log(1. + s/b)
+        print 'combiner.likepnn1 ratio,likeA,likeB',ratio,likeA,likeB
+        like = likeA+likeB
+        return like
     def likeE949(self,ratio,cells):
         '''
         calculate -2 * log likelihood from s/b in cells for ratio = BR/self.AssumedBR
