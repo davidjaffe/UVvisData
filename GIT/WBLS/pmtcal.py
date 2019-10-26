@@ -4,12 +4,14 @@ investigate chi2 behavior for pmt calibration algorithm
 20191026
 '''
 import math
-import sys,os
+import sys,os,shutil
 
 import datetime
 import numpy
 from scipy.stats import poisson,norm,relfreq
 #import copy
+
+import random
 
 import re
 import glob # used in __init__
@@ -29,11 +31,9 @@ class pmtcal():
             print 'pmtcal.__init__ will create new sub-directories in',self.figdir
             for dirpath, dirnames, filenames in os.walk(self.figdir):
                 if dirpath!=self.figdir:
-                    try:
-                        os.rmdir(dirpath)
-                        print 'pmtcal.__init__ Deleted',dirpath
-                    except OSError as ex:
-                        print ex
+                    shutil.rmtree(dirpath)
+                    print 'pmtcal.__init__ Deleted',dirpath
+
             
 
         # enables use of latex 
@@ -76,6 +76,7 @@ class pmtcal():
         analogous definitions for MC
         text = text defining the configuration
         '''
+        onlyOne = False #True
         ic = 0
         config = {}
         nData = 10000
@@ -86,12 +87,13 @@ class pmtcal():
         tailFrac = 0.
         text = '\n{6}: nD={0}, nM={1}, $\mu_D=${2:0.2f}, $\mu_M=${3:0.2f}, tailF={4:0.2f}, $\mu_t={5:0.2f}'.format(nData,nMC,muData,muMC,tailFrac,tailMu,ic)
         config[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
-        print 'pmtcal.makeConfigs STOP WITH',ic+1,'CONFIGURATIONS'
-        return config
+        if onlyOne:
+            print 'pmtcal.makeConfigs STOP WITH',ic+1,'CONFIGURATIONS'
+            return config
 
     
         for tailFrac in [0., 0.01, 0.05]:
-            for muMC in [6.0, 10.0]:
+            for muMC in [6.0, 7., 8., 9., 10.0]:
                 ic += 1
                 text = '\n{6}: nD={0}, nM={1}, $\mu_D=${2:0.2f}, $\mu_M=${3:0.2f}, tailF={4:0.2f}, $\mu_t$={5:0.2f}'.format(nData,nMC,muData,muMC,tailFrac,tailMu,ic)
                 config[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
@@ -114,6 +116,7 @@ class pmtcal():
         muMC   = 8.3
 
         configs = self.makeConfigs()
+        results = {}
 
         for ic in sorted(configs):
             self.currentConfig = ic
@@ -144,7 +147,8 @@ class pmtcal():
             nf = 11
             fmi,fma = 0.5,1.5
             df = (fma-fmi)/float(nf-1)
-            while df>0.001:
+            dfmin = 0.0001 # 0.0001
+            while df>dfmin:
                 fcalValues = numpy.linspace(fmi,fma,nf)
                 minChi,fatmin = 1.e20, fmi
                 for fcal in fcalValues:
@@ -159,11 +163,14 @@ class pmtcal():
                 df = (fma-fmi)/float(nf-1)           
 
             fcal = fatmin
+            results[ic] = [fcal, Chi2[fcal], nbins]
             title = 'Best fit at calibration factor of {0:.3f}'.format(fcal)+words
             self.drawComp(nbins,limits,histData,MChists[fcal],bChi[fcal],'NPE','Events',title,label1='Data',label2='Scaled MC')
                 
             x = sorted(Chi2)
-            for fcal in [ x[3],x[-3] ]:
+            
+            rx = random.sample(x,2) # select and draw a couple results at random
+            for fcal in rx:
                 title = 'Fit result for calibration factor of {0:.3f}'.format(fcal)+words
                 self.drawComp(nbins,limits,histData,MChists[fcal],bChi[fcal],'NPE','Events',title,label1='Data',label2='Scaled MC')
             
@@ -171,14 +178,74 @@ class pmtcal():
             for fcal in x: y.append( Chi2[fcal] )
             self.drawIt(x,y,'calibration factor','Chi2','Chi2 vs calib factor'+words)
             ix = y.index(min(y))
-            xmi = x[ix]-0.1
-            xma = x[ix]+0.1
             ymi = min(y)-1.
             yma = ymi + 11.
+            xmi,xma = None,None
+            for j,u in enumerate( y[ix:]):
+                if u>yma :
+                    xma = x[j+ix]
+                    xmi = x[max(ix-j,0)]
+                    break
+            for j,u in enumerate(y[:ix]):
+                if u<yma :
+                    xmi = x[j]
+                    break
+            if xmi is None: xmi = x[ix]-0.05
+            if xma is None: xma = x[ix]+0.05
             self.drawIt(x,y,'calibration factor','Chi2','Chi2 vs calib factor Zoom on chi2min'+words,ylims=[ymi,yma],xlims=[xmi,xma])
 
-        
+
+        self.makeSummary(configs, results)
+            
         return
+    def makeSummary(self,configs, results):
+        '''
+        for configuration ic
+        configs[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
+        results[ic] = [fcal, Chi2[fcal], nbins]
+        '''
+        latexFile = self.figdir + 'results' + '_table.tex'
+        latex = open(latexFile,'w')
+        
+        label = 'tab:' + 'results'
+        caption = 'Different configurations and results. '
+        caption += '$\mu_d = $ mean PE in data, $\mu_M =$ mean PE in MC, $\mu_t = $ mean PE in the tail, '
+        caption += 'tailF = tail fraction, $f_{exp}=$ expected calibration factor, $f_{best} =$ best fit calibration factor, '
+        caption += '$\chi^2_{min} = $ value of $\chi^2$ at minimum and nBin = number of bins in histogram.'
+
+        ds = ' \\\\ \n' 
+        
+        latex.write('\\begin{table}[htp] \n')
+        #latex.write( '\\setlength{\\tabcolsep}{2pt} \n')
+        latex.write('\\begin{center} \n')
+        latex.write('\\begin{tabular}{|r|rr| rr| rr| rr| rr|} \n' )
+        fmt = '{0:>6} {1:>6} {2:>6} {3:>6} {4:>6} {5:>6} {6:>6} {7:>6} {8:>6} {9:>6} {10:>6}'
+        fmt = fmt.replace('} {','}&{')
+        latex.write( '\\hline \n' )
+        latex.write(fmt.format('config','nData','nMC','$\mu_d$','$\mu_M$','$\mu_t$','tailF', '$f_{exp}$', '$f_{best}$', '$\chi^2_{min}$','nBin')+ds)
+        latex.write( '\\hline \n' )
+        fmt = '{9:>6} {0:>6} {1:>6} {2:>6.2f} {3:>6.2f} {4:>6.2f} {5:>6.2f} {6:>6.2f} {7:>6.2f} {8:>6.2f} {10:>6}'
+        fmt = fmt.replace('} {','}&{')
+        oldTF = None
+        for ic in sorted(configs):
+            nData,nMC, muData,muMC, tailMu,tailFrac, text = configs[ic]
+            if oldTF is not None and oldTF!=tailFrac: latex.write( '\\hline \n' )
+            fexp = muData/muMC
+            fcal, chi2min, nbins = results[ic]
+            latex.write(fmt.format(nData,nMC, muData,muMC, tailMu,tailFrac, fexp,fcal, chi2min, ic, nbins) + ds )
+            oldTF = tailFrac
+
+        latex.write( '\\hline \n' )
+        latex.write('\\end{tabular} \n')
+        latex.write('\\label{'+label+'} \n')
+        latex.write('\\caption{'+caption+'} \n')
+        latex.write('\\end{center} \n')
+        latex.write('\\end{table} \n') 
+
+            
+        latex.close()
+        return
+        
     def binnedChi(self,fcal, histData, MC, nbins, limits):
         '''
         return array of (data - MC)/sigma for each bin and MC hist
@@ -226,6 +293,7 @@ class pmtcal():
         hist *= len(data)
 
         joverflow = numpy.where(hist-nThres<0.)[0][0]
+        if joverflow<2: joverflow = numpy.where(hist-nThres<0.)[0][1]
         if debug>1: print 'pmtcal.binData joverflow',joverflow
         
         ioverflow = joverflow+1
