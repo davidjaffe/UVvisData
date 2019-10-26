@@ -27,7 +27,19 @@ class pmtcal():
         self.makeFigures = makeFigures
         if self.makeFigures:
             print 'pmtcal.__init__ will create new sub-directories in',self.figdir
-        
+            for dirpath, dirnames, filenames in os.walk(self.figdir):
+                if dirpath!=self.figdir:
+                    try:
+                        os.rmdir(dirpath)
+                        print 'pmtcal.__init__ Deleted',dirpath
+                    except OSError as ex:
+                        print ex
+            
+
+        # enables use of latex 
+        from matplotlib import rc
+        rc('text', usetex=True)
+            
         print 'pmtcal.__init__ Done'
         return
     def takeData(self,mu,nData,smear=0.5,tailFrac=0.01,tailMu=100.,debug=0):
@@ -74,10 +86,14 @@ class pmtcal():
         tailFrac = 0.
         text = '\n{6}: nD={0}, nM={1}, $\mu_D=${2:0.2f}, $\mu_M=${3:0.2f}, tailF={4:0.2f}, $\mu_t={5:0.2f}'.format(nData,nMC,muData,muMC,tailFrac,tailMu,ic)
         config[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
+        print 'pmtcal.makeConfigs STOP WITH',ic+1,'CONFIGURATIONS'
+        return config
+
+    
         for tailFrac in [0., 0.01, 0.05]:
             for muMC in [6.0, 10.0]:
                 ic += 1
-                text = '\n{6}: nD={0}, nM={1}, $\mu_D=${2:0.2f}, $\mu_M=${3:0.2f}, tailF={4:0.2f}, $\mu_t={5:0.2f}'.format(nData,nMC,muData,muMC,tailFrac,tailMu,ic)
+                text = '\n{6}: nD={0}, nM={1}, $\mu_D=${2:0.2f}, $\mu_M=${3:0.2f}, tailF={4:0.2f}, $\mu_t$={5:0.2f}'.format(nData,nMC,muData,muMC,tailFrac,tailMu,ic)
                 config[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
         return config
             
@@ -102,6 +118,7 @@ class pmtcal():
         for ic in sorted(configs):
             self.currentConfig = ic
             nData,nMC, muData,muMC, tailMu,tailFrac, text = configs[ic]
+            print 'pmtcal.main Configuration#',ic,text
 
             words = text
             data = self.takeData(muData,nData,tailFrac=tailFrac,tailMu=tailMu)
@@ -254,7 +271,7 @@ class pmtcal():
         '''
         plt.clf()
         plt.grid()
-        plt.title(title)
+        plt.title(r''+title)
         figpdf = 'FIG_'+title.replace(' ','_') + '.pdf'
 
         X = numpy.array(x)
@@ -266,12 +283,7 @@ class pmtcal():
         if xlims is not None: plt.xlim(xlims)
         if ylims is not None: plt.ylim(ylims)
 
-        if figDir is not None:
-            figpdf = figDir + figpdf
-            plt.savefig(figpdf)
-            print 'abslen_model.drawIt wrote',figpdf
-        else:
-            plt.show()
+        self.showOrPrint(plt,title)
         return    
     def drawHist(self,nbins,limits,histData,xtitle,ytitle,title,debug=0):
         '''
@@ -291,7 +303,7 @@ class pmtcal():
         plt.xlabel(xtitle)
         plt.ylabel(ytitle)
         #plt.show()
-        self.showOrPrint(plt,figpdf)
+        self.showOrPrint(plt,title)
         return
     def draw2Hist(self,nbins,limits,hist1,hist2,xtitle,ytitle,title,label1='hist1',label2='hist2',debug=0):
         '''
@@ -306,7 +318,7 @@ class pmtcal():
             
         plt.clf()
         plt.grid() # doesn't work?
-        plt.title(title)
+        plt.title(r''+title)
         figpdf = 'FIG_'+title.replace(' ','_') + '.pdf'
 
         dx = (limits[1]-limits[0])/float(nbins)
@@ -320,7 +332,8 @@ class pmtcal():
         plt.ylabel(ytitle)
 #        plt.ylim( [0., yma] )
         plt.legend(loc='best')
-        plt.show()
+        #plt.show()
+        self.showOrPrint(plt,title)
         return
     def drawComp(self,nbins,limits,hist1,hist2,y,xtitle,ytitle,title,label1='hist1',label2='hist2',
                      ylim=[-5.,5],debug=1):
@@ -337,7 +350,7 @@ class pmtcal():
         ax1 = plt.subplot2grid((n, 1), (0, 0), rowspan=m)
         ax2 = plt.subplot2grid((n, 1), (m, 0))
 
-        ax1.set_title(title)
+        ax1.set_title(r''+title)
         figpdf = 'FIG_'+title.replace(' ','_') + '.pdf'
 
         dx = (limits[1]-limits[0])/float(nbins)
@@ -360,7 +373,8 @@ class pmtcal():
         ax2.set_ylim(ylim)
         plt.subplots_adjust(hspace=0.) # zero height space between subplots
         
-        plt.show()
+        #plt.show()
+        self.showOrPrint(plt,title)
         
         return
     def renderTitle(self,title):
@@ -373,12 +387,14 @@ class pmtcal():
         if self.makeFigures:
             if self.currentConfig is None:
                 sys.exit('pmtcal.showOrPrint ERROR currentConfig is None')
-            C = self.currentConfig.zfill(2)
+            C = '{:>02d}'.format(self.currentConfig)
             figpdf = self.renderTitle(title)
+            
             directory = self.figdir + C + '/'
             if not os.path.exists(directory):
                 os.makedirs(directory)
                 print 'pmtcal.showOrPrint Created',directory
+                
             fn = directory + figpdf
             plot.savefig(fn)
         else:
