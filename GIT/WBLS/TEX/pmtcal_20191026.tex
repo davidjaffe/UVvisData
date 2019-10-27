@@ -36,83 +36,71 @@ Toy MC test of pmt calibration method.
 }
 \end{abstract}
 
+\section{Methodology}
+
+The ability to fit data with MC distributions of NPE (number of photoelectron) is examined.
+
+The MC NPE distribution is assumed to poisson with mean $\mu_M$.
+The data NPE distributions are assumed to poisson with mean $\mu_d$ with 
+a tail fraction (tailF) of events draw from a poisson distribution with a larger mean $\mu_t$.
+The single photoelectron resolution is taken to be 0.5 PE.
+The parameters and results of each configuration are shown in Table~\ref{tab:results} (Table numbering is screwed up by latex, I don't know why). 
+The best fit result is determined by a simple iterative scan of the $\chi^2$. The scanning is not optimized. 
+The $\chi^2$ defined in Section~\ref{sec:chisq}.
+
+\section{$\chi^2$ construction \label{sec:chisq}}
+Consider the response of a \underline{single PMT} in the one-ton detector filled with water.
+  \begin{itemize}
+	\item Let $d_j = $ the sum over data events with the measured number of photoelectrons between $e_j$ and 	
+	$e_{j+1}$ (in other words, the content of the $j^{th}$ bin),
+	\item Let $m_j = $ the sum over MC events with the simulated number of observed photoelectrons 
+	between $e_j$ and $e_{j+1}$ which is equal to the number of generated photons times the probability $a$ that
+	a generated photon creates a photoelectron in the PMT.
+	\item $m_j  = \sum_k^j c\times a\times g_k$ 
+	where $k=$ event number, 
+	$g_k = $ number of generated photons in the $k^{th}$ event and 
+	$\sum_k^j$ means the sum over all entries with 
+	$f\times a\times g_k$ in the $j^{th}$ bin. 
+	$f=$ is the {\em calibration factor} defined such that the overall probability that a generated photon creates a photoelectron is the same as the data. 
+	\item Let $M \equiv \sum_j m_j = $ the total number of MC events 
+	\item and $D \equiv \sum_j d_j = $ the total number of data events for a single PMT.
+	
+\end{itemize}
+For a single PMT, determine the {\em calibration factor} $f$ by defining the $\chi^2(f)$ as
+\begin{equation}\label{eqn:chisq}
+	\chi^2(f) \equiv \sum_j \bigl( \frac{d_j - m_j \frac{D}{M}}{\sigma_j} \bigr)^2
+\end{equation}
+
+$\sigma_j$ can be calculated as follows. Let $y_j = d_j - m_j\frac{D}{M}$, then
+
+\begin{eqnarray}
+\sigma_{\color{black}j}^{\color{black}2} \equiv \delta y_j^2 &= (\frac{\partial y_j}{\partial d_j} \delta d_j)^2 + (\frac{\partial y_j}{\partial m_j} \delta m_j)^2  \\
+                    &=(\delta d_j)^2 + (\frac{D}{M} \delta m_j)^2 \\
+                    &=(\sqrt{d_j})^2 + (\frac{D}{M} \sqrt{m_j})^2 \\
+                    &= d_j + (\frac{D}{M})^2 m_j
+\end{eqnarray}
+Note that $\sigma_j$ depends on $f$, the calibration factor. 
+
+Note that a sum must be taken over the number of photoelectrons in the MC events  $m_j  = \sum_k^j f\times h_k$ to evaluate $\chi^2(f)$, 
+where $h_k \equiv a\times g_k$ and $\sum_k^j$ was defined above.
+
+
 
 %\doublespacing
-\onehalfspacing   %%%% GLOBAL CHANGE OF SPACING
-
+%\onehalfspacing   %%%% GLOBAL CHANGE OF SPACING
+\clearpage
+\section{Results}
+Figures are provided showing the data and MC NPE distributions, best fit results, random fit results and the $\chi^2(f)$ where $f$ the calibration factor.
+In general the fitted calibration factor is an unbiased estimator of the expected calibration factor for tail fractions up to 5\%. 
+Performance may differ if the NPE distributions are poisson or combinations of poisson distributions as approximated in this study.
 
 
 \input{../FIGURES/results_table.tex}
+\clearpage
 
-\end{document}
-\input{../FIGURES/Shifts_table.tex} 
-
-
-\begin{figure}[htbp]
-\begin{center}
-\includegraphics[width=\textwidth]{../FIGURES/B2GM_Participants.pdf}
-\caption{Participants in B2GMs. }
-\label{fig:B2GM_part}
-\end{center}
-\end{figure}
-
-\begin{figure}[htbp]
-\begin{center}
-\includegraphics[width=\textwidth]{../FIGURES/B2GM_Fares.pdf}
-\caption{Actual and estimated total airfare in USD for B2GMs. See text for details.}
-\label{fig:B2GM_fares}
-\end{center}
-\end{figure}
-
- \begin{figure}[htbp]
-\begin{center}
-\includegraphics[width=\textwidth]{../FIGURES/B2GM_CO2.pdf}
-\caption{Actual and estimated total \COtwo\ in kg for B2GMs. See text for details.}
-\label{fig:B2GM_COtwo}
-\end{center}
-\end{figure}
-
- \begin{figure}[htbp]
-\begin{center}
-\includegraphics[width=\textwidth]{../FIGURES/B2GM_r-t.pdf}
-\caption{Actual and estimated total round-trip air travel distance for B2GMs. See text for details.}
-\label{fig:B2GM_r-t}
-\end{center}
-\end{figure}
-
-\begin{figure}[htbp]
-\begin{center}
-\includegraphics[width=\textwidth]{../FIGURES/Shifts_Shifters.pdf}
-\caption{Actual and estimate total shifters for CR shifts. See text for details.}
-\label{fig:Shifts_shifters}
-\end{center}
-\end{figure}
-
-\begin{figure}[htbp]
-\begin{center}
-\includegraphics[width=\textwidth]{../FIGURES/Shifts_Fares.pdf}
-\caption{Actual and estimated total airfare in USD for B2GMs. See text for details.}
-\label{fig:Shifts_fares}
-\end{center}
-\end{figure}
-
-\begin{figure}[htbp]
-\begin{center}
-\includegraphics[width=\textwidth]{../FIGURES/Shifts_CO2.pdf}
-\caption{Actual and estimated total \COtwo\ in kg for B2GMs. See text for details.}
-\label{fig:Shifts_COtwo}
-\end{center}
-\end{figure}
-
-\begin{figure}[htbp]
-\begin{center}
-\includegraphics[width=\textwidth]{../FIGURES/Shifts_r-t.pdf}
-\caption{Actual and estimated total round-trip air travel distance for B2GMs. See text for details.}
-\label{fig:Shifts_r-t}
-\end{center}
-\end{figure}
-
+\input{ all_figint_00_30.tex}
 
 
 \end{document}
+
 

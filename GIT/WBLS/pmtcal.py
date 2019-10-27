@@ -77,6 +77,7 @@ class pmtcal():
         text = text defining the configuration
         '''
         onlyOne = False #True
+        shortLists = False # True
         ic = 0
         config = {}
         nData = 10000
@@ -91,29 +92,35 @@ class pmtcal():
             print 'pmtcal.makeConfigs STOP WITH',ic+1,'CONFIGURATIONS'
             return config
 
-    
-        for tailFrac in [0., 0.01, 0.05]:
-            for muMC in [6.0, 7., 8., 9., 10.0]:
-                ic += 1
-                text = '\n{6}: nD={0}, nM={1}, $\mu_D=${2:0.2f}, $\mu_M=${3:0.2f}, tailF={4:0.2f}, $\mu_t$={5:0.2f}'.format(nData,nMC,muData,muMC,tailFrac,tailMu,ic)
-                config[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
+        for muData in [8.3, 16.6]:
+            tailFracs = [0., 0.01, 0.05]
+            muMCs     = [float(i) for i in range(int(muData)-2,int(muData)+3) ]
+            if shortLists:
+                tailFracs = [tailFracs[0]]
+                muMCs     = [muMCs[0]]
+                print 'pmtcal.makeConfigs Only use single-entry lists for loops over tailFrac and muMC'
+
+
+            for tailFrac in tailFracs:
+                for muMC in muMCs:
+                    ic += 1
+                    text = '\n{6}: nD={0}, nM={1}, $\mu_D=${2:0.2f}, $\mu_M=${3:0.2f}, tailF={4:0.2f}, $\mu_t$={5:0.2f}'.format(nData,nMC,muData,muMC,tailFrac,tailMu,ic)
+                    config[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
         return config
             
     def main(self):
         '''
         main routine
-        generate data and mc
-        bin data and mc
-        plot data and mc
+        for each experiment configuration:
+           generate data and mc
+           bin data and mc
+           plot data and mc
+           scan chi2 and get best fit value
+        summarize results
         '''
 
         debug = 0
-        
-        nData = 10000
-        nMC = 10*nData
-        muData = 8.3
-        tailMu = 40.
-        muMC   = 8.3
+
 
         configs = self.makeConfigs()
         results = {}
@@ -142,10 +149,10 @@ class pmtcal():
             sMC = sum(histData)/sum(histMC)*histMC
             self.draw2Hist(nbins,limits,histData,sMC,'NPE','Events','Data and scaled MC'+words,label1='Data',label2='Scaled MC')
 
-            
+            # iterative scan to find minimum
             bChi,Chi2,MChists = {},{},{}
             nf = 11
-            fmi,fma = 0.5,1.5
+            fmi,fma = 0.1,1.9
             df = (fma-fmi)/float(nf-1)
             dfmin = 0.0001 # 0.0001
             while df>dfmin:
@@ -162,18 +169,19 @@ class pmtcal():
                 nf = (nf-1)*2 + 1
                 df = (fma-fmi)/float(nf-1)           
 
+            # show data, MC comparison for best fit and 2 random fits
             fcal = fatmin
             results[ic] = [fcal, Chi2[fcal], nbins]
             title = 'Best fit at calibration factor of {0:.3f}'.format(fcal)+words
             self.drawComp(nbins,limits,histData,MChists[fcal],bChi[fcal],'NPE','Events',title,label1='Data',label2='Scaled MC')
                 
             x = sorted(Chi2)
-            
             rx = random.sample(x,2) # select and draw a couple results at random
             for fcal in rx:
                 title = 'Fit result for calibration factor of {0:.3f}'.format(fcal)+words
                 self.drawComp(nbins,limits,histData,MChists[fcal],bChi[fcal],'NPE','Events',title,label1='Data',label2='Scaled MC')
-            
+                
+            # show chi2 over full range and around minimum
             y = []
             for fcal in x: y.append( Chi2[fcal] )
             self.drawIt(x,y,'calibration factor','Chi2','Chi2 vs calib factor'+words)
@@ -194,9 +202,75 @@ class pmtcal():
             if xma is None: xma = x[ix]+0.05
             self.drawIt(x,y,'calibration factor','Chi2','Chi2 vs calib factor Zoom on chi2min'+words,ylims=[ymi,yma],xlims=[xmi,xma])
 
+        # show best fit vs expectation 
+        self.drawBias(configs, results)
 
+        # summary table and summary figures for latex
         self.makeSummary(configs, results)
+        self.makeFigureFile(configs)
             
+        return
+    def drawBias(self,configs, results):
+        '''
+        for configuration ic
+        configs[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
+        results[ic] = [fcal, Chi2[fcal], nbins]
+
+        compare best fit calibration factor with expectation as a function of tailFrac
+
+        '''
+        markers = ['o',   '<',    '^',  '>',    'v']
+        colors  = ['blue','green','red','black','orange']
+
+        
+        x,y = {},{}
+        xmi,xma,ymi,yma = 0.,2.,0.,2.
+        for ic in sorted(configs):
+            tailFrac=configs[ic][5]
+            muData = configs[ic][2]
+            muMC   = configs[ic][3]
+            fexp   = muData/muMC
+            fbest  = results[ic][0]
+            xma = yma = max(xma,fexp,fbest)
+            
+            if tailFrac not in x:
+                x[tailFrac],y[tailFrac] = [],[]
+            x[tailFrac].append(fexp)
+            y[tailFrac].append(fbest)
+
+        plt.clf()
+        plt.grid()
+        title = 'Compare best fit vs expectation as a function of tail fraction'
+        plt.title(title)
+        plt.xlabel('Expected calibration factor')
+        plt.ylabel('Best fit calibration factor')
+        plt.xlim( [xmi,xma] )
+        plt.ylim( [ymi,yma] )
+        plt.plot( [xmi,xma], [ymi,yma],'--') # diagonal dashed line
+        for i,tailFrac in enumerate(sorted(x)):
+            X = numpy.array( x[tailFrac] )
+            Y = numpy.array( y[tailFrac] )
+            lg = 'Tail fraction = {0:.3f}'.format(tailFrac)
+            plt.plot(X,Y,'s',marker=markers[i],color=colors[i],label=lg)
+
+        plt.legend(loc='best')
+        self.showOrPrint(plt,title)
+        return
+    def makeFigureFile(self,configs):
+        '''
+        use figurePacker to make an latex input file for figures for each configuration
+        then create a single latex input for all the files
+        '''
+        confs = sorted(configs)
+        c1 = '{0:>02d}'.format(confs[0])
+        c2 = '{0:>02d}'.format(confs[-1])
+        fnall = 'TEX/all_figint_'+c1+'_'+c2+'.tex'
+        f = open(fnall,'w')
+        for c in confs:
+            figint = self.figurePacker(c)
+            f.write('\\input{' + figint + '} \n')
+        f.close()
+        print 'pmtcal.makeFigureFile Wrote',len(confs),'input files into',fnall
         return
     def makeSummary(self,configs, results):
         '''
@@ -244,6 +318,7 @@ class pmtcal():
 
             
         latex.close()
+        print 'pmtcal.makeSummary wrote',latexFile
         return
         
     def binnedChi(self,fcal, histData, MC, nbins, limits):
@@ -251,6 +326,8 @@ class pmtcal():
         return array of (data - MC)/sigma for each bin and MC hist
         given the calibration scale factor fcal, histData = histogram of data, MC = MC events, nbins, limits = #bins, limits of histogram 
         MC is scaled by the calibration factor fcal
+
+        handle the case where both hists have zero entries
         '''
         nData = sum(histData)
         nMC   = float(len(MC))
@@ -259,6 +336,18 @@ class pmtcal():
         histMC = self.histMaker(sMC, nbins, limits)
         sig = numpy.sqrt(histData + rdmc*rdmc*histMC)
         histMC *= rdmc
+        if not numpy.all(sig):
+            while not numpy.all(sig):
+                i = numpy.argmin(sig)
+                if histData[i]==0. and histMC[i]==0. :
+                    sig[i] = 1.
+                else:
+                    print 'pmtcal.binnedChi i',i,'sig[i]',sig[i],\
+                      'histData[i]',histData[i],'histMC[i]',histMC[i],\
+                      ' THIS SHOULD NOT HAPPEN. ALL VALUES BESIDES INDEX SHOULD BE ZERO'
+            for i,s in enumerate(sig):
+                if s==0. and histData[i]==0. and histMC[i]==0.: sig[i] = 1.
+            
         histChi = (histData - histMC)/sig
         return histChi, histMC
     def binData(self,data,MC,nThres=10,debug=0):
@@ -267,7 +356,7 @@ class pmtcal():
         given data,MC and threshold counts for data histogram
 
         First make a histogram of data with unit bins that contains all data.
-        Then find the first bin with content<nThres = thresBin
+        Then find the first bin past the bin containing the maximum content with content<nThres = thresBin
         Then make a new histogram of data with contents of bins>thresBin in thresBin
         Also make a hist with same limits as data for MC
 
@@ -284,16 +373,21 @@ class pmtcal():
             histMC   = self.histMaker(MC,nmax,limits,debug=debug,caller='pmtcal.binData original MC')
             return histData,histMC,nmax,limits
     
-        
+        # make a hist of all data
         hist, lowerlimit, binsize, extrapoints = relfreq(data,nmax,limits)
 
-        if debug>1: print 'pmtcal.binData histogram #bins,limits,lowerlimit, binsize, extrapoints=',nmax-1,limits,lowerlimit,binsize,extrapoints
+        if debug>1: print 'pmtcal.binData histogram #bins,limits,lowerlimit, binsize, extrapoints=',\
+            nmax-1,limits,lowerlimit,binsize,extrapoints
         if extrapoints>0:
             print 'pmtcal.binData ERROR extrapoints',extrapoints,'. It should be zero!'
         hist *= len(data)
 
-        joverflow = numpy.where(hist-nThres<0.)[0][0]
-        if joverflow<2: joverflow = numpy.where(hist-nThres<0.)[0][1]
+        # add a 'bump' to hist to make sure that first value found below threshold is past the peak of the hist
+        max_index = numpy.argmax(hist)
+        max_value = hist[max_index]
+        bump = numpy.array( [max_value*float(i<max_index) for i in range(len(hist)) ] )
+
+        joverflow = numpy.where(hist+bump-nThres<0.)[0][0]
         if debug>1: print 'pmtcal.binData joverflow',joverflow
         
         ioverflow = joverflow+1
@@ -448,7 +542,7 @@ class pmtcal():
     def renderTitle(self,title):
         i = title.find('\n')
         if i>-1: title = title[:i]
-        figpdf = title.replace(' ','_')
+        figpdf = title.replace(' ','_').replace('.','_')
         figpdf = 'FIG_' + figpdf + '.pdf'
         return figpdf
     def showOrPrint(self,plot,title):
@@ -468,10 +562,111 @@ class pmtcal():
         else:
             plot.show()
         return
+    def figurePacker(self,ic):
+        '''
+        create generic packages that to include all figures produced in a latex file
+
+        return the filename of a file that contains something like the following:
+
+        \begin{figure}[htbp]
+        \begin{center}
+        \includegraphics[width=0.45\textwidth]{../FIGURES/00/FIG_Original_Data.pdf}
+        \includegraphics[width=0.45\textwidth]{../FIGURES/00/FIG_Original_MC.pdf}
+        \includegraphics[width=0.45\textwidth]{../FIGURES/00/FIG_Data.pdf}
+        \includegraphics[width=0.45\textwidth]{../FIGURES/00/FIG_MC.pdf}
+        \caption{NPE histograms for data and MC for configuration 00. }
+        \label{fig:dmc_00}
+        \end{center}
+        \end{figure}
+
+        '''
+        debug = 0
+        fnprefix = '../'
+        conf = '{0:>02d}'.format(ic)
+        fmatch = 'FIGURES/'+conf+'/*.pdf'
+        filelist = glob.glob(fmatch)
+        if debug>0 :
+            print 'pmtcal.figurePacker files matched to',fmatch,'by glob'
+            for f in filelist: print f
+        captions = ['Data compared to nominal MC, MC scaled by the best fit calibration factor,'+
+                        ' scans of $\chi^2$ over a large range and about the minimum for configuration '+conf+
+                        '. Data compared to MC scaled by two randomly chosen calibration factors.',
+                        'NPE histograms for data and MC for configuration '+conf+'. Top are original hists.'+
+                        ' Bottom are hists after truncation at bin containing less than 10 entries with that bin containing overflows.']
+        labels = ['tab:best_'+conf,'tab:npe_'+conf]
+        keys1 = ['_Data_and_scaled_MC','Best_fit','Chi2', 'Fit_result']
+        keys2 = ['Original', '_Data.', '_MC.']
+        list1,list2 = [],[]
+        keys = [ keys1, keys2 ]
+        lists= [ list1, list2 ]
+        for k,KL in enumerate(zip(keys,lists)):
+            key,l = KL
+            for akey in key:
+                if debug>1: print 'pmtcal.figurePacker akey',akey
+                deletionList = []
+                for i,f in enumerate(filelist):
+                    if debug>1 : print 'pmtcal.figurePacker f',f
+                    if akey in f:
+                        l.append(fnprefix+f)
+                        deletionList.append(i)
+                deletionList.sort(reverse=True)
+                if debug>0 : print 'pmtcal.figurePacker deletionList',deletionList
+                for i in deletionList:
+                    if debug>0 : print 'pmtcal.figurePacker --------> Delete',filelist[i]
+                    del filelist[i]
+        if debug>0:
+            print 'pmtcal.figurePacker Here are the lists'
+            for i,l in enumerate(lists):
+                print 'pmtcal.figurePacker List#',i
+                for x in l: print x
+        if debug>0 or len(filelist)>0: 
+            print 'pmtcal.figurePacker There are',len(filelist),'files left in filelist:',
+            L2 = []
+            for f in filelist:
+                print f
+                L2.append(fnprefix+f)
+            lists.append(L2)
+            labels.append('tab:extra_'+conf)
+            captions.append('Comparison of best fit with expectation as a function of tail fractions')
+                
+                
+
+        
+        fname = 'TEX/figint_'+conf+'.tex'
+        f = open(fname,'w')
+        hdr = '\n \\begin{figure}[htbp] \\begin{center} \n'
+        for i,figlist in enumerate(lists):
+            fig = self.packFigures(figlist)
+            trl = self.getTrailer(captions[i],labels[i])
+
+            f.write(hdr)
+            f.write(fig)
+            f.write(trl)
+        f.write('\\clearpage\n ')
+        f.close()
+        print 'pmtcal.figurePacker Wrote',fname
+
+        fname = fname.replace('TEX/','')
+        return fname
+    def getTrailer(self,caption,label):
+        trl = '\\caption{'+caption+'} \n'
+        trl += '\\label{'+label+'} \n'
+        trl += '\\end{center} \\end{figure} \n'
+        return trl
+    def packFigures(self,figlist):
+        figpre = '\includegraphics[width=0.45\\textwidth]{'
+        if len(figlist)==1 : figpre = figpre.replace('0.45','1.00')
+        figpost= '} \n'
+        f = ''
+        for fig in figlist:
+            f += figpre + fig + figpost
+        return f
 if __name__ == '__main__' :
 
     makeFigures = False
     if len(sys.argv)>1:
         if sys.argv[1].lower()=='print': makeFigures=True
     pc = pmtcal(makeFigures=makeFigures)
+
+    #pc.figurePacker(0)
     pc.main()
