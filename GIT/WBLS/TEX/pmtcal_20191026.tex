@@ -24,6 +24,7 @@
 
 \begin{document}
 
+\doublespacing
 
 \title{Testing pmt calibration}
 
@@ -40,11 +41,39 @@ Toy MC test of pmt calibration method.
 
 The ability to fit data with MC distributions of NPE (number of photoelectron) is examined.
 
-The MC NPE distribution is assumed to poisson with mean $\mu_M$.
-The data NPE distributions are assumed to poisson with mean $\mu_d$ with 
-a tail fraction (tailF) of events draw from a poisson distribution with a larger mean $\mu_t$.
+Two different generators are used for the underlying NPE distribution. 
+The poisson and betaprime functions are used. 
+
+The betaprime function is defined as 
+\begin{equation}\label{eqn:betaprime}
+f(x,a,b) = \frac{x^{a-1} (1+x)^{-a-b}}{\beta(a,b)}
+\end{equation}
+\noindent for $x\ge 0$, $a>0$, $b>0$ with $\beta(a,b)$ defined as
+
+\begin{equation}\label{eqn:beta}
+\beta(a,b) \equiv \Gamma(a)\Gamma(b)/\Gamma(a+b)
+\end{equation}
+available from \href{https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.betaprime.html}{\color{blue}scipy.stats.betaprime}.
+
+When the poisson generator is used:
+\begin{itemize}
+\item The MC NPE distribution is assumed to poisson with mean $\mu_M$.
+\item The data NPE distributions are assumed to poisson with mean $\mu_d$ with 
+	a tail fraction (tailF) of events draw from a poisson distribution with a larger mean $\mu_t$.
+\end{itemize}
+
+When the betaprime generator is used, 
+\begin{itemize}
+\item The MC NPE distribution is assumed to be betaprime with parameter $a = a_M$.
+\item Them data NPE distribution is assumed to be betaprime with parameter $a = a_d$.
+\end{itemize}
+The parameter $b = 2.2$ for data and MC. The range of values chosen for $a, b$ correspond 
+to distributions with mean in the range (8, 26). 
+This range for $a, b$ and the betaprime generator were chosen because it resembles the NPE distribution from some of the oneton PMTs. 
+
 The single photoelectron resolution is taken to be 0.5 PE.
-The parameters and results of each configuration are shown in Table~\ref{tab:results} (Table numbering is screwed up by latex, I don't know why). 
+The parameters and results of each configuration are shown in Table~\ref{tab:results}  for the poisson generator and 
+Table~\ref{tab:betaprime_results} for the betaprime generator. (Table numbering is screwed up by latex, I don't know why). 
 The best fit result is determined by a simple iterative scan of the $\chi^2$. The scanning is not optimized. 
 The $\chi^2$ defined in Section~\ref{sec:chisq}.
 
@@ -92,13 +121,17 @@ where $h_k \equiv a\times g_k$ and $\sum_k^j$ was defined above.
 \section{Results}
 Figures are provided showing the data and MC NPE distributions, best fit results, random fit results and the $\chi^2(f)$ where $f$ the calibration factor.
 In general the fitted calibration factor is an unbiased estimator of the expected calibration factor for tail fractions up to 5\%. 
-Performance may differ if the NPE distributions are poisson or combinations of poisson distributions as approximated in this study.
+This conclusion applies for both the poisson and betaprime generators.
+%Performance may differ if the NPE distributions are poisson or combinations of poisson distributions as approximated in this study.
 
 
 \input{../FIGURES/results_table.tex}
 \clearpage
+\input{../FIGURES/results_betaprime_table.tex}
+\clearpage
 
 \input{ all_figint_00_30.tex}
+\input{all_figint_101_105.tex}
 
 
 \end{document}

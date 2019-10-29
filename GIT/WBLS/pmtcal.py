@@ -8,7 +8,7 @@ import sys,os,shutil
 
 import datetime
 import numpy
-from scipy.stats import poisson,norm,relfreq
+from scipy.stats import poisson,norm,relfreq,betaprime
 #import copy
 
 import random
@@ -24,15 +24,23 @@ class pmtcal():
         self.debug = 1
 
         self.currentConfig = None
+        self.cfmt  = '{0:>03d}' # zero-padded string for configuration 
+
+        self.generatorType = 'Betaprime' # 'Poisson'
+        self.b_bp = None # betaprime parameter b
         
         self.figdir = 'FIGURES/'
         self.makeFigures = makeFigures
         if self.makeFigures:
             print 'pmtcal.__init__ will create new sub-directories in',self.figdir
-            for dirpath, dirnames, filenames in os.walk(self.figdir):
-                if dirpath!=self.figdir:
-                    shutil.rmtree(dirpath)
-                    print 'pmtcal.__init__ Deleted',dirpath
+            deletePaths = False
+            if deletePaths:
+                for dirpath, dirnames, filenames in os.walk(self.figdir):
+                    if dirpath!=self.figdir:
+                        shutil.rmtree(dirpath)
+                        print 'pmtcal.__init__ Deleted',dirpath
+            else:
+                print 'pmtcal.__init__ NOT DELETING DIRECTORIES UNDER',self.figdir
 
             
 
@@ -40,72 +48,133 @@ class pmtcal():
         from matplotlib import rc
         rc('text', usetex=True)
             
-        print 'pmtcal.__init__ Done'
+        print 'pmtcal.__init__ Done. Generator type is',self.generatorType
         return
     def takeData(self,mu,nData,smear=0.5,tailFrac=0.01,tailMu=100.,debug=0):
         '''
+        for Poisson generator:
         generate nData events drawn from two poisson distributions with 
         means mu and tailMu with frequency 1-tailFrac, tailFrac
         with gaussian smearing with sigma=smear
         non negative results required
+
+        for Betaprime generator:
+        betaprime parameter a = mu
+        tailFrac, tailMu are meaningless
+        betaprime parameter b is take from global variable
+        same smearing and non-negative requirements
         '''
-        if tailFrac<0. or tailFrac>1. :
-            sys.exit('pmtcal.takeData ERROR tailFrac='+str(tailFrac)+' must be in [0,1]')
-        n1 = int(float(nData)*(1.-tailFrac))
-        n2 = nData - n1
-        if debug>0: print 'pmtcal.takeData tailFrac,n1,n2',tailFrac,n1,n2
-        pile1 = poisson.rvs(mu,size=n1) + smear*norm.rvs(size=n1)
-        pile2 = poisson.rvs(tailMu,size=n2) + smear*norm.rvs(size=n2)
-        pile = numpy.append(pile1,pile2)
+        if self.generatorType is 'Poisson':
+            if tailFrac<0. or tailFrac>1. :
+                sys.exit('pmtcal.takeData ERROR tailFrac='+str(tailFrac)+' must be in [0,1]')
+            n1 = int(float(nData)*(1.-tailFrac))
+            n2 = nData - n1
+            if debug>0: print 'pmtcal.takeData tailFrac,n1,n2',tailFrac,n1,n2
+            pile1 = poisson.rvs(mu,size=n1) + smear*norm.rvs(size=n1)
+            pile2 = poisson.rvs(tailMu,size=n2) + smear*norm.rvs(size=n2)
+            pile = numpy.append(pile1,pile2)
+            
+        if self.generatorType is 'Betaprime':
+            a = mu
+            b = self.b_bp
+            pile = betaprime.rvs(a,b,size=nData) + smear*norm.rvs(size=nData)
+
+            
         data = numpy.maximum( numpy.zeros(len(pile)), pile )
         return data
     def generateMC(self,mu,nMC,smear=0.5):
         '''
+        for Poisson generator:
         generate nMC MC events drawn from poisson distribution, mean mu
+
+        for Betaprime generator:
+        betaprime parameter a = mu
+        betaprime parameter b = self.b_bp
+
+        
         '''
-        pile = poisson.rvs(mu,size=nMC) + smear*norm.rvs(size=nMC)
+        if self.generatorType is 'Poisson':
+            pile = poisson.rvs(mu,size=nMC) + smear*norm.rvs(size=nMC)
+
+        if self.generatorType is 'Betaprime':
+            a = mu
+            b = self.b_bp
+            pile = betaprime.rvs(a,b,size=nMC) + smear*norm.rvs(size=nMC)
+            
         MC = numpy.maximum( numpy.zeros(len(pile)), pile )
         return MC
     def makeConfigs(self):
         '''
         return dict that defines various configurations
-        dict[key] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
+        dict[key] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]   # for Poisson generator
+        dict[key] = [nData,nMC, aData,aMC,   -999,-999,       text]   # for Betaprime generator
         nData = # of data events
         muData= mean of poisson for data
         tailFrac = fraction of data that has poisson with mean=tailMu
+
+        aData = betaprime parameter a for data
         analogous definitions for MC
         text = text defining the configuration
+        for Betaprime generator dict[key][4]=mean of data, dict[key][5]=mean of MC calculated after generation
+
         '''
         onlyOne = False #True
         shortLists = False # True
-        ic = 0
+
+        Poisson, Betaprime = False, False
+            
+        ic_Poisson = 0
+        ic_betaprime = 100
+
+        if self.generatorType is 'Poisson':
+            Poisson = True
+            ic = ic_Poisson
+            print 'pmtcal.makeConfigs Use Poisson for base pmt distributions'
+        elif self.generatorType is 'Betaprime':
+            Betaprime = True
+            ic = ic_betaprime
+            print 'pmtcal.makeConfigs Use betaprime for base pmt distributions'
+        else:
+            sys.exit('pmtcal.makeConfigs ERROR NO BASE PMT DISTRIBUTION CHOSEN')
+
+            
         config = {}
         nData = 10000
         nMC   = 10*nData
-        muData = 8.3
-        muMC   = 8.3
-        tailMu = 40.
-        tailFrac = 0.
-        text = '\n{6}: nD={0}, nM={1}, $\mu_D=${2:0.2f}, $\mu_M=${3:0.2f}, tailF={4:0.2f}, $\mu_t={5:0.2f}'.format(nData,nMC,muData,muMC,tailFrac,tailMu,ic)
-        config[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
-        if onlyOne:
-            print 'pmtcal.makeConfigs STOP WITH',ic+1,'CONFIGURATIONS'
-            return config
+        if Poisson:  ################################### configure for Poisson
+            muData = 8.3
+            muMC   = 8.3
+            tailMu = 40.
+            tailFrac = 0.
+            text = '\n{6}: nD={0}, nM={1}, $\mu_D=${2:0.2f}, $\mu_M=${3:0.2f}, tailF={4:0.2f}, $\mu_t={5:0.2f}'.format(nData,nMC,muData,muMC,tailFrac,tailMu,ic)
+            config[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
+            if onlyOne:
+                print 'pmtcal.makeConfigs STOP WITH',ic+1,'CONFIGURATIONS'
+                return config
 
-        for muData in [8.3, 16.6]:
-            tailFracs = [0., 0.01, 0.05]
-            muMCs     = [float(i) for i in range(int(muData)-2,int(muData)+3) ]
-            if shortLists:
-                tailFracs = [tailFracs[0]]
-                muMCs     = [muMCs[0]]
-                print 'pmtcal.makeConfigs Only use single-entry lists for loops over tailFrac and muMC'
+            for muData in [8.3, 16.6]:
+                tailFracs = [0., 0.01, 0.05]
+                muMCs     = [float(i) for i in range(int(muData)-2,int(muData)+3) ]
+                if shortLists:
+                    tailFracs = [tailFracs[0]]
+                    muMCs     = [muMCs[0]]
+                    print 'pmtcal.makeConfigs Only use single-entry lists for loops over tailFrac and muMC'
 
 
-            for tailFrac in tailFracs:
-                for muMC in muMCs:
-                    ic += 1
-                    text = '\n{6}: nD={0}, nM={1}, $\mu_D=${2:0.2f}, $\mu_M=${3:0.2f}, tailF={4:0.2f}, $\mu_t$={5:0.2f}'.format(nData,nMC,muData,muMC,tailFrac,tailMu,ic)
-                    config[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
+                for tailFrac in tailFracs:
+                    for muMC in muMCs:
+                        ic += 1
+                        text = '\n{6}: nD={0}, nM={1}, $\mu_D=${2:0.2f}, $\mu_M=${3:0.2f}, tailF={4:0.2f}, $\mu_t$={5:0.2f}'.format(nData,nMC,muData,muMC,tailFrac,tailMu,ic)
+                        config[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
+        if Betaprime: ################################## configure for Betaprime
+            self.b_bp = b_bp = 2.2
+            a_bp_range = [10., 31.]
+            aData = 15.
+            for aMC in numpy.linspace(a_bp_range[0],a_bp_range[1],5):
+                ic += 1
+                text = '\n{6}: nD={0}, nM={1}, $a_D=${2:0.2f}, $a_M=${3:0.2f}, b={4:0.2f}, null'.format(nData,nMC,aData,aMC,b_bp,0.,ic)
+                config[ic] = [nData,nMC, aData,aMC, -999, -999, text]
+                
         return config
             
     def main(self):
@@ -133,6 +202,9 @@ class pmtcal():
             words = text
             data = self.takeData(muData,nData,tailFrac=tailFrac,tailMu=tailMu)
             MC   = self.generateMC(muMC,nMC)
+            if self.generatorType is 'Betaprime':
+                configs[ic][4] = data.mean()
+                configs[ic][5] = MC.mean()
 
             origData,origMC,nmax,limits = self.binData(data,MC,nThres=-99)
             self.drawHist(nmax,limits,origData,'NPE','Events','Original Data'+words)
@@ -213,10 +285,15 @@ class pmtcal():
     def drawBias(self,configs, results):
         '''
         for configuration ic
-        configs[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
+        configs[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]  # Poisson generator
+        configs[ic] = [nData,nMC, muData,muMC, dataMean,MCMean, text]  # Betaprime generator
         results[ic] = [fcal, Chi2[fcal], nbins]
 
+        for Poisson generator:
         compare best fit calibration factor with expectation as a function of tailFrac
+
+        for Betaprime generator:
+        compare best fit calibration factor with expectation
 
         '''
         markers = ['o',   '<',    '^',  '>',    'v']
@@ -226,10 +303,20 @@ class pmtcal():
         x,y = {},{}
         xmi,xma,ymi,yma = 0.,2.,0.,2.
         for ic in sorted(configs):
-            tailFrac=configs[ic][5]
             muData = configs[ic][2]
             muMC   = configs[ic][3]
-            fexp   = muData/muMC
+
+            if self.generatorType is 'Poisson':
+                tailFrac=configs[ic][5]
+                fexp   = muData/muMC 
+            if self.generatorType is 'Betaprime':
+                tailFrac = 0
+                dataMean = configs[ic][4]
+                MCMean   = configs[ic][5]
+                if MCMean==0.:
+                    fexp = -1.
+                else:
+                    fexp = dataMean/MCMean
             fbest  = results[ic][0]
             xma = yma = max(xma,fexp,fbest)
             
@@ -240,7 +327,8 @@ class pmtcal():
 
         plt.clf()
         plt.grid()
-        title = 'Compare best fit vs expectation as a function of tail fraction'
+        title = 'Compare best fit vs expectation'
+        if self.generatorType is 'Poisson': title += ' as a function of tail fraction'
         plt.title(title)
         plt.xlabel('Expected calibration factor')
         plt.ylabel('Best fit calibration factor')
@@ -250,7 +338,9 @@ class pmtcal():
         for i,tailFrac in enumerate(sorted(x)):
             X = numpy.array( x[tailFrac] )
             Y = numpy.array( y[tailFrac] )
-            lg = 'Tail fraction = {0:.3f}'.format(tailFrac)
+            lg = 'betaprime generator'
+            if self.generatorType is 'Poisson': 
+                lg = 'Tail fraction = {0:.3f}'.format(tailFrac)
             plt.plot(X,Y,'s',marker=markers[i],color=colors[i],label=lg)
 
         plt.legend(loc='best')
@@ -262,8 +352,8 @@ class pmtcal():
         then create a single latex input for all the files
         '''
         confs = sorted(configs)
-        c1 = '{0:>02d}'.format(confs[0])
-        c2 = '{0:>02d}'.format(confs[-1])
+        c1 = self.cfmt.format(confs[0])
+        c2 = self.cfmt.format(confs[-1])
         fnall = 'TEX/all_figint_'+c1+'_'+c2+'.tex'
         f = open(fnall,'w')
         for c in confs:
@@ -278,13 +368,21 @@ class pmtcal():
         configs[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
         results[ic] = [fcal, Chi2[fcal], nbins]
         '''
-        latexFile = self.figdir + 'results' + '_table.tex'
+        latexFile = self.figdir + 'results_'+ self.generatorType.lower() + '_table.tex'
         latex = open(latexFile,'w')
         
-        label = 'tab:' + 'results'
+        label = 'tab:' + self.generatorType.lower() +'_results'
         caption = 'Different configurations and results. '
-        caption += '$\mu_d = $ mean PE in data, $\mu_M =$ mean PE in MC, $\mu_t = $ mean PE in the tail, '
-        caption += 'tailF = tail fraction, $f_{exp}=$ expected calibration factor, $f_{best} =$ best fit calibration factor, '
+        caption += 'Generator is ' + self.generatorType + '. '
+        if self.generatorType is 'Poisson':
+            caption += '$\mu_d = $ mean PE in data, $\mu_M =$ mean PE in MC, $\mu_t = $ mean PE in the tail, '
+            caption += 'tailF = tail fraction,'
+        if self.generatorType is 'Betaprime':
+            caption += '$b = $' + '{0:.2f}'.format(self.b_bp) + ' is betaprime parameter b for data and MC, '
+            caption += '$a_d = $ betaprime parameter a in data, $a_M =$ betaprime param. a in MC,'
+            caption += ' mean$_d = $ data mean, mean$_M = $ MC mean, '
+            
+        caption += ' $f_{exp}=$ expected calibration factor, $f_{best} =$ best fit calibration factor, '
         caption += '$\chi^2_{min} = $ value of $\chi^2$ at minimum and nBin = number of bins in histogram.'
 
         ds = ' \\\\ \n' 
@@ -296,14 +394,19 @@ class pmtcal():
         fmt = '{0:>6} {1:>6} {2:>6} {3:>6} {4:>6} {5:>6} {6:>6} {7:>6} {8:>6} {9:>6} {10:>6}'
         fmt = fmt.replace('} {','}&{')
         latex.write( '\\hline \n' )
-        latex.write(fmt.format('config','nData','nMC','$\mu_d$','$\mu_M$','$\mu_t$','tailF', '$f_{exp}$', '$f_{best}$', '$\chi^2_{min}$','nBin')+ds)
+        if self.generatorType is 'Poisson':
+            latex.write(fmt.format('config','nData','nMC','$\mu_d$','$\mu_M$','$\mu_t$','tailF', '$f_{exp}$', '$f_{best}$', '$\chi^2_{min}$','nBin')+ds)
+        if self.generatorType is 'Betaprime':
+            latex.write(fmt.format('config','nData','nMC','$a_d$','$a_M$','mean$_d$','mean$_M$', '$f_{exp}$', '$f_{best}$', '$\chi^2_{min}$','nBin')+ds)
+            
         latex.write( '\\hline \n' )
         fmt = '{9:>6} {0:>6} {1:>6} {2:>6.2f} {3:>6.2f} {4:>6.2f} {5:>6.2f} {6:>6.2f} {7:>6.2f} {8:>6.2f} {10:>6}'
         fmt = fmt.replace('} {','}&{')
         oldTF = None
         for ic in sorted(configs):
             nData,nMC, muData,muMC, tailMu,tailFrac, text = configs[ic]
-            if oldTF is not None and oldTF!=tailFrac: latex.write( '\\hline \n' )
+            if self.generatorType is 'Poisson':
+                if oldTF is not None and oldTF!=tailFrac: latex.write( '\\hline \n' )
             fexp = muData/muMC
             fcal, chi2min, nbins = results[ic]
             latex.write(fmt.format(nData,nMC, muData,muMC, tailMu,tailFrac, fexp,fcal, chi2min, ic, nbins) + ds )
@@ -549,7 +652,7 @@ class pmtcal():
         if self.makeFigures:
             if self.currentConfig is None:
                 sys.exit('pmtcal.showOrPrint ERROR currentConfig is None')
-            C = '{:>02d}'.format(self.currentConfig)
+            C = self.cfmt.format(self.currentConfig)
             figpdf = self.renderTitle(title)
             
             directory = self.figdir + C + '/'
@@ -582,7 +685,7 @@ class pmtcal():
         '''
         debug = 0
         fnprefix = '../'
-        conf = '{0:>02d}'.format(ic)
+        conf = self.cfmt.format(ic)
         fmatch = 'FIGURES/'+conf+'/*.pdf'
         filelist = glob.glob(fmatch)
         if debug>0 :
@@ -627,7 +730,7 @@ class pmtcal():
                 L2.append(fnprefix+f)
             lists.append(L2)
             labels.append('tab:extra_'+conf)
-            captions.append('Comparison of best fit with expectation as a function of tail fractions')
+            captions.append('Comparison of best fit with expectation.')
                 
                 
 
