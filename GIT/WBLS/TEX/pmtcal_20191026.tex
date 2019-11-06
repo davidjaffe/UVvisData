@@ -71,9 +71,10 @@ The parameter $b = 2.2$ for data and MC. The range of values chosen for $a, b$ c
 to distributions with mean in the range (8, 26). 
 This range for $a, b$ and the betaprime generator were chosen because it resembles the NPE distribution from some of the oneton PMTs. 
 
-The single photoelectron resolution is taken to be 0.5 PE.
-The parameters and results of each configuration are shown in Table~\ref{tab:results}  for the poisson generator and 
-Table~\ref{tab:betaprime_results} for the betaprime generator. (Table numbering is screwed up by latex, I don't know why). 
+The single photoelectron resolution is taken to be 0.5 PE. The bin size is 1 PE. 
+The threshold for putting events into an overflow bin is either 10 or 50 counts. 
+The parameters and results of each configuration are shown in Table~\ref{tab:results}(Threshold = 10 counts) for the poisson generator and 
+Table~\ref{tab:betaprime_results}(10 counts) and Table~\ref{tab:betaprime_results_thres50}(50 counts) for the betaprime generator. (Table numbering is screwed up by latex, I don't know why). 
 The best fit result is determined by a simple iterative scan of the $\chi^2$. The scanning is not optimized. 
 The $\chi^2$ defined in Section~\ref{sec:chisq}.
 
@@ -129,10 +130,11 @@ This conclusion applies for both the poisson and betaprime generators.
 \clearpage
 \input{../FIGURES/results_betaprime_table.tex}
 \clearpage
+\input{../FIGURES/results_betaprime_table_thres50.tex}
 
 \input{ all_figint_00_30.tex}
 \input{all_figint_101_105.tex}
-
+\input{all_figint_151_171.tex}
 
 \end{document}
 

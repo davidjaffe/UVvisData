@@ -124,7 +124,8 @@ class pmtcal():
         Poisson, Betaprime = False, False
             
         ic_Poisson = 0
-        ic_betaprime = 100
+        ic_betaprime = 100 # will use nThres=10
+        ic_betaprime = 150 # will use nThres=50
 
         if self.generatorType is 'Poisson':
             Poisson = True
@@ -170,7 +171,7 @@ class pmtcal():
             self.b_bp = b_bp = 2.2
             a_bp_range = [10., 31.]
             aData = 15.
-            for aMC in numpy.linspace(a_bp_range[0],a_bp_range[1],5):
+            for aMC in numpy.linspace(a_bp_range[0],a_bp_range[1],21):
                 ic += 1
                 text = '\n{6}: nD={0}, nM={1}, $a_D=${2:0.2f}, $a_M=${3:0.2f}, b={4:0.2f}, null'.format(nData,nMC,aData,aMC,b_bp,0.,ic)
                 config[ic] = [nData,nMC, aData,aMC, -999, -999, text]
@@ -214,6 +215,7 @@ class pmtcal():
             
             # bin the data, require >nThres events per bin. Overflows in bin failing overflow criterion
             nThres = 10
+            if ic>=150 : nThres = 50
             histData, histMC, nbins, limits = self.binData(data,MC,nThres=nThres)
 
             self.drawHist(nbins,limits,histData,'NPE','Events','Data'+words)
@@ -278,7 +280,7 @@ class pmtcal():
         self.drawBias(configs, results)
 
         # summary table and summary figures for latex
-        self.makeSummary(configs, results)
+        self.makeSummary(configs, results, thres=nThres)
         self.makeFigureFile(configs)
             
         return
@@ -362,17 +364,20 @@ class pmtcal():
         f.close()
         print 'pmtcal.makeFigureFile Wrote',len(confs),'input files into',fnall
         return
-    def makeSummary(self,configs, results):
+    def makeSummary(self,configs, results, thres=None):
         '''
         for configuration ic
         configs[ic] = [nData,nMC, muData,muMC, tailMu,tailFrac, text]
         results[ic] = [fcal, Chi2[fcal], nbins]
         '''
         latexFile = self.figdir + 'results_'+ self.generatorType.lower() + '_table.tex'
+        if thres is not None: latexFile = latexFile.replace('table','table_thres'+str(thres))
         latex = open(latexFile,'w')
         
         label = 'tab:' + self.generatorType.lower() +'_results'
+        if thres is not None :label = 'tab:' + self.generatorType.lower() +'_results_' +str(thres)
         caption = 'Different configurations and results. '
+        if thres is not None: caption += 'Per-bin threshold for determining overflow bin is ' + str(thres) + '. '
         caption += 'Generator is ' + self.generatorType + '. '
         if self.generatorType is 'Poisson':
             caption += '$\mu_d = $ mean PE in data, $\mu_M =$ mean PE in MC, $\mu_t = $ mean PE in the tail, '
