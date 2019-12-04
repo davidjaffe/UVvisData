@@ -182,7 +182,7 @@ class combiner():
             ratmin = ', min at '+str(x[numpy.argmin(m2ll)])
             if debug>1 : print 'combiner.main dataset,len(x),len(m2ll)',dataset,len(x),len(m2ll)
             if debug>2 : print 'combiner.main dataset',dataset,[str(a)+'/{0:.2f}'.format(b) for a,b in zip(x,m2ll)]
-            if drawEach : self.drawIt(x,m2ll,xtitle,ytitle,dataset+ratmin)
+            if drawEach : self.drawIt(x,m2ll,xtitle,ytitle,dataset+ratmin,mark='-')
             if globalM2LL is None:
                 globalM2LL = numpy.array(m2ll)
             else:
@@ -288,7 +288,7 @@ class combiner():
         AssumedBr = 7.5e-11
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
-        dataset = 'pnn1_e949'
+        dataset = 'pnn1_E949'
         journal = 'PRD77_052003'
         NK = 1.77e12
         Atot = 1.694e-3
@@ -351,7 +351,7 @@ class combiner():
         units = {'NK':1e12, 'Atot':1e-3, 'AssumedBr':1e-10, 'SES':1.e-10}
 
         
-        print 'combiner.reportData mode is',mode,'. `AssBr` means Assumed Branching fraction of K+ => pi,nu,nubar'
+        print 'combiner.reportData mode is',mode,'. `AssBr` means Assumed Branching fraction of K+ => pi,nu,nubar for sig/bkg column'
         print '{0:<15} {1:>5}({2:5.0e}) {3:>5}({4:5.0e}) {5:>5}({6:5.0e}) {7:>5}({8:5.0e}) {9:>5} {10:>15} {11:>15}'.format('dataset','NK',units['NK'],'Atot',units['Atot'],'SES',units['SES'],'AssBr',units['AssumedBr'],'Ncand','sig/bkg','journal')
         #           0      1    2           3       4            5      6            7      8                 9        10        11
         for dataset in sorted(cands):
@@ -438,7 +438,7 @@ class combiner():
             contents = self.readJoeDat(name)
             if contents is not None : self.plotJoeDat(name,contents,xname,yname)
         return
-    def drawIt(self,x,y,xtitle,ytitle,title,figDir=None,ylog=False,xlims=None,ylims=None):
+    def drawIt(self,x,y,xtitle,ytitle,title,figDir=None,ylog=False,xlims=None,ylims=None,mark='o-'):
         '''
         draw graph defined by x,y
 
@@ -450,7 +450,7 @@ class combiner():
 
         X = numpy.array(x)
         Y = numpy.array(y)
-        plt.plot(X,Y,'o-')
+        plt.plot(X,Y,mark)
         plt.xlabel(xtitle)
         plt.ylabel(ytitle)
         if ylog : plt.yscale('log')
