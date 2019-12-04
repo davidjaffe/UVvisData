@@ -1,0 +1,92 @@
+This is TeX, Version 3.14159 (Web2C 7.3.1) (format=latex 1999.5.27)  5 NOV 2001 15:14
+**eclresults
+(eclresults.tex
+LaTeX2e <1998/12/01> patch level 1
+Babel <v3.6x> and hyphenation patterns for american, french, german, ngerman, n
+ohyphenation, loaded.
+(/triumfcs/linux/tex/1.0/share/texmf/tex/latex/base/article.cls
+Document Class: article 1999/01/07 v1.4a Standard LaTeX document class
+(/triumfcs/linux/tex/1.0/share/texmf/tex/latex/base/size11.clo
+File: size11.clo 1999/01/07 v1.4a Standard LaTeX file (size option)
+)
+\c@part=\count79
+\c@section=\count80
+\c@subsection=\count81
+\c@subsubsection=\count82
+\c@paragraph=\count83
+\c@subparagraph=\count84
+\c@figure=\count85
+\c@table=\count86
+\abovecaptionskip=\skip41
+\belowcaptionskip=\skip42
+\bibindent=\dimen102
+)
+(/triumfcs/linux/tex/1.0/share/texmf/tex/latex/graphics/graphicx.sty
+Package: graphicx 1999/02/16 v1.0f Enhanced LaTeX Graphics (DPC,SPQR)
+
+(/triumfcs/linux/tex/1.0/share/texmf/tex/latex/graphics/keyval.sty
+Package: keyval 1999/03/16 v1.13 key=value parser (DPC)
+\KV@toks@=\toks14
+)
+(/triumfcs/linux/tex/1.0/share/texmf/tex/latex/graphics/graphics.sty
+Package: graphics 1999/02/16 v1.0l Standard LaTeX Graphics (DPC,SPQR)
+
+(/triumfcs/linux/tex/1.0/share/texmf/tex/latex/graphics/trig.sty
+Package: trig 1999/03/16 v1.09 sin cos tan (DPC)
+)
+(/triumfcs/linux/tex/1.0/share/texmf/tex/latex/config/graphics.cfg)
+Package graphics Info: Driver file: dvips.def on input line 80.
+
+(/triumfcs/linux/tex/1.0/share/texmf/tex/latex/graphics/dvips.def
+File: dvips.def 1999/02/16 v3.0i Driver-dependant file (DPC,SPQR)
+))
+\Gin@req@height=\dimen103
+\Gin@req@width=\dimen104
+)
+(/triumfcs/linux/tex/1.0/share/texmf.local/tex/latex209/dvips/colordvi.sty)
+(eclresults.aux)
+\openout1 = `eclresults.aux'.
+
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 97.
+LaTeX Font Info:    ... okay on input line 97.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 97.
+LaTeX Font Info:    ... okay on input line 97.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 97.
+LaTeX Font Info:    ... okay on input line 97.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 97.
+LaTeX Font Info:    ... okay on input line 97.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 97.
+LaTeX Font Info:    ... okay on input line 97.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 97.
+LaTeX Font Info:    ... okay on input line 97.
+LaTeX Font Info:    Try loading font information for OMS+cmr on input line 381.
+
+ (/triumfcs/linux/tex/1.0/share/texmf/tex/latex/base/omscmr.fd
+File: omscmr.fd 1998/03/27 v2.5g Standard LaTeX font definitions
+)
+LaTeX Font Info:    Font shape `OMS/cmr/m/n' in size <10.95> not available
+(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 381.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <10.95> on input line 381.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <8> on input line 381.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <6> on input line 381.
+[1
+
+] [2]
+Overfull \hbox (8.86885pt too wide) in paragraph at lines 451--487
+ [] 
+ []
+
+[3] (eclresults.aux) ) 
+Here is how much of TeX's memory you used:
+ 742 strings out of 10891
+ 8000 string characters out of 71843
+ 65142 words of memory out of 263001
+ 3725 multiletter control sequences out of 10000+0
+ 6687 words of font info for 24 fonts, out of 400000 for 1000
+ 15 hyphenation exceptions out of 1000
+ 25i,9n,19p,229b,313s stack positions out of 300i,100n,500p,50000b,4000s
+
+Output written on eclresults.dvi (3 pages, 13972 bytes).

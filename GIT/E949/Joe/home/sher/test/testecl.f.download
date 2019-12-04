@@ -1,0 +1,49 @@
+c single-channel tester for ecl.f
+
+      program testecl
+      implicit none
+      real*8 s(500),b(500),cls,clb,clsb,acls,aclb,aclsb
+      integer d(500),n,i
+      integer iwork(500)
+      real*8 clstoy,clbtoy,clsbtoy
+
+ 10   continue
+      write(*,*) 'Number of channels: '
+      read(*,*,end=999) n
+      if (n.gt.10) then
+        do i=1,n
+          s(i) = 3.0/n
+          b(i) = 0.0
+          d(i) = 0
+        enddo
+      else
+        do i=1,n
+          write(*,*) 'Expected signal in channel ',i,':'
+          read(*,*) s(i)
+          write(*,*) 'Expected background in channel ',i,':'
+          read(*,*) b(i)
+          write(*,*) 'Observed candidates in channel ',i,':'
+          read(*,*) d(i)
+        enddo
+      endif
+
+      call e_cls(n,s,b,d,cls,clsb,clb)
+      call e_avcls(n,s,b,acls,aclsb,aclb)
+
+      call e_clstoymc(n,s,b,d,iwork,clstoy,clsbtoy,clbtoy)
+
+      write(*,*) 'CL(s): ',cls
+      write(*,*) 'CL(s+b): ',clsb
+      write(*,*) 'CL(b): ',clb
+
+      write(*,*) 'CL(s) toyMC: ',clstoy
+      write(*,*) 'CL(s+b) toyMC: ',clsbtoy
+      write(*,*) 'CL(b) toyMC: ',clbtoy
+
+      write(*,*) '<CL(s)>: ',acls
+      write(*,*) '<CL(s+b)>: ',aclsb
+      write(*,*) '<CL(b)>: ',aclb
+
+      goto 10
+ 999  continue
+      end

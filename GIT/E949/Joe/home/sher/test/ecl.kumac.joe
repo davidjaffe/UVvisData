@@ -1,0 +1,277 @@
+*********
+macro awk
+*********
+
+for label in 9597inside 9597insidelo 9597insidehi 98inside 98insidelo 98insidehi 98outside 98outside0 98total 9598inside 9598insidelo 9598insidehi 9598outside 9598outside0 9598total
+   shell awk -f ecl.awk ecl[label].dat > ecl[label].vect
+endfor
+
+return
+
+**********
+macro read
+**********
+
+for label in 9597inside 9597insidelo 9597insidehi 98inside 98insidelo 98insidehi 98outside 98outside0 98total 9598inside 9598insidelo 9598insidehi 9598outside 9598outside0 9598total
+   vec/read x[label],br[label],cls[label],diff[label],clb[label] ecl[label].vect
+endfor
+
+return
+ 
+**********
+macro plot
+**********
+
+nval = 501
+*nsum = 5
+*ndval = $sigma(int([nval]/[nsum]))
+*
+*for label in 9598inside
+*   vec/cre br2[label]([ndval])
+*   vec/cre diff2[label]([ndval])
+*   vec/copy br[label] x
+*   vec/copy diff[label] y
+*   j = 0
+*   brsum = 0
+*   diffsum = 0
+*   do i = 1,[nval]
+*      brsum = $sigma([brsum] + x([i]))
+*      diffsum = $sigma([diffsum] + y([i]))
+*      if ($sigma(mod([i],[nsum])) = 0) then
+*         j = [j] + 1
+*         brav = [brsum]/[nsum]
+*         diffav = [diffsum]/[nsum]
+*         vec/inp br2[label]([j]) [brav]
+*         vec/inp diff2[label]([j]) [diffsum]
+*         brsum = 0
+*         diffsum = 0
+*      endif
+*   enddo
+*endfor
+
+vec/cre dum([nval]) r [nval]*0.0000000001
+
+opt date
+opt grid
+opt linx
+opt liny
+*opt zfl1
+
+zon 1 1
+title 'BR limits for 1995-7 and 1998 events'
+
+size = 0.1
+
+opt logx
+null 0.2 6.0 -0.01 1.01
+atitle 'BR (10^-10!)' 'CLs'
+key 0.25 0.70 26 '95-97 inside'
+key 0.25 0.66 20 '98 inside'
+key 0.25 0.62 24 '98 outside'
+key 0.25 0.58 23 '98 outside0'
+key 0.25 0.54 27 '98 total'
+key 0.25 0.50 21 '95-98 inside'
+key 0.25 0.46 25 '95-98 outside'
+key 0.25 0.42 22 '95-98 outside0'
+key 0.25 0.38 28 '95-98 total'
+set lwid 6
+dline 0.2 6.0 0.84 0.84 
+dline 0.2 6.0 0.16 0.16
+set lwid 1
+text 2 0.85 '68"Y# CL lower limit' 0.3 0
+text 0.3 0.17 '68"Y# CL upper limit' 0.3 0
+label = 9597inside
+xvec = br[label]
+yvec = cls[label]
+gra/hplot/err [xvec] [yvec] dum dum [nval] 26 [size]
+message [label]
+wait
+label = 98inside
+xvec = br[label]
+yvec = cls[label]
+gra/hplot/err br98inside cls98inside dum dum 501 20 [size]
+*gra/hplot/err [xvec] [yvec] dum dum [nval] 20 [size]
+*gra/hplot/err br[label] cls[label] dum dum [nval] 20 [size]
+message [label]
+wait
+label = 98outside
+xvec = br[label]
+yvec = cls[label]
+gra/hplot/err [xvec] [yvec] dum dum [nval] 24 [size]
+*gra/hplot/err br[label] cls[label] dum dum [nval] 24 [size]
+message [label]
+wait
+label = 98outside0
+xvec = br[label]
+yvec = cls[label]
+gra/hplot/err [xvec] [yvec] dum dum [nval] 23 [size]
+*gra/hplot/err br[label] cls[label] dum dum [nval] 23 [size]
+message [label]
+wait
+label = 98total
+xvec = br[label]
+yvec = cls[label]
+gra/hplot/err [xvec] [yvec] dum dum [nval] 27 [size]
+*gra/hplot/err br[label] cls[label] dum dum [nval] 27 [size]
+message [label]
+wait
+label = 9598inside
+xvec = br[label]
+yvec = cls[label]
+gra/hplot/err [xvec] [yvec] dum dum [nval] 21 [size]
+*gra/hplot/err br[label] cls[label] dum dum [nval] 21 [size]
+message [label]
+wait
+label = 9598outside
+xvec = br[label]
+yvec = cls[label]
+gra/hplot/err [xvec] [yvec] dum dum [nval] 25 [size]
+*gra/hplot/err br[label] cls[label] dum dum [nval] 25 [size]
+message [label]
+wait
+label = 9598outside0
+xvec = br[label]
+yvec = cls[label]
+gra/hplot/err [xvec] [yvec] dum dum [nval] 22 [size]
+*gra/hplot/err br[label] cls[label] dum dum [nval] 22 [size]
+message [label]
+wait
+label = 9598total
+xvec = br[label]
+yvec = cls[label]
+gra/hplot/err [xvec] [yvec] dum dum [nval] 28 [size]
+*gra/hplot/err br[label] cls[label] dum dum [nval] 28 [size]
+message [label]
+opt linx
+
+wait
+message End of first picture
+wait
+
+*pic/pri ecl.limits.ps
+*pic/pri ecl.limits.eps
+
+zon 1 1
+title 'BR limits for 1995-8 inside-the-box'
+
+size = 0.1
+
+opt logx
+null 0.02 10.0 -0.01 1.01
+atitle 'BR (10^-10!)' 'CLs'
+key 0.03 0.70 21 '95-98 inside'
+key 0.03 0.65 29 '95-98 insidelo'
+key 0.03 0.60 30 '95-98 insidehi'
+*set lwid 6
+*dline 0.02 10.0 0.84 0.84 
+*dline 0.02 10.0 0.16 0.16
+*set lwid 1
+*text 7 0.86 '68"Y# CL upper limit' 0.3 0
+*text 2 0.18 '68"Y# CL lower limit' 0.3 0
+label = 9598inside
+gra/hplot/err br[label] cls[label] dum dum [nval] 21 [size]
+message [label]
+wait
+label = 9598insidelo
+gra/hplot/err br[label] cls[label] dum dum [nval] 29 [size]
+message [label]
+wait
+label = 9598insidehi
+gra/hplot/err br[label] cls[label] dum dum [nval] 30 [size]
+message [label]
+opt linx
+
+wait
+pic/pri ecl.limits.syst.ps
+pic/pri ecl.limits.syst.eps
+
+*zon 1 1
+*title 'BR limits for 1995-7 and 1998 events'
+*
+*size = 0.1
+*
+*opt logx
+*null 0.01 10.0 0.8 1.0
+*atitle 'BR (10^-10!)' 'CL'
+*key 0.02 0.94 26 '95-97 inside'
+*key 0.02 0.93 20 '98 inside'
+*key 0.02 0.92 24 '98 outside'
+*key 0.02 0.91 23 '98 outside0'
+*key 0.02 0.90 27 '98 total'
+*key 0.02 0.89 21 '95-98 inside'
+*key 0.02 0.88 25 '95-98 outside'
+*key 0.02 0.87 22 '95-98 outside0'
+*key 0.02 0.86 28 '95-98 total'
+*set lwid 6
+*dline 0.01 8 0.84 0.84
+*set lwid 1
+*text 0.03 0.842 '68"Y# CL interval' 0.3 0
+*gra/hplot/err br9597inside int9597inside dum dum [nval] 26 [size]
+*message 1995-7 inside
+*wait
+*gra/hplot/err br98inside int98inside dum dum [nval] 20 [size]
+*message 1998 inside
+*wait
+*gra/hplot/err br98outside int98outside dum dum [nval] 24 [size]
+*message 1998 outside
+*wait
+*gra/hplot/err br98outside0 int98outside0 dum dum [nval] 23 [size]
+*message 1998 outside0
+*wait
+*gra/hplot/err br98total int98total dum dum [nval] 27 [size]
+*message 1998 total
+*wait
+*gra/hplot/err br9598inside int9598inside dum dum [nval] 21 [size]
+*message 1995-8 inside
+*wait
+*gra/hplot/err br9598outside int9598outside dum dum [nval] 25 [size]
+*message 1995-8 outside
+*wait
+*gra/hplot/err br9598outside0 int9598outside0 dum dum [nval] 22 [size]
+*message 1995-8 outside0
+*wait
+*gra/hplot/err br9598total int9598total dum dum [nval] 28 [size]
+*message 1995-8 total
+*opt linx
+*
+*wait
+*pic/pri ecl.limits.ps
+*pic/pri ecl.limits.eps
+
+*zon 1 2
+zon 1 1
+title 'Prob. Dist. Fn. of BR for 1995-8 inside-the-box'
+
+size = 0.1
+
+null 0.0 6.0 0.0 0.01
+atitle 'BR (10^-10!)' 'd(CL)/d(BR)'
+gra/hplot/err br9598inside diff9598inside dum dum [nval] 21 [size]
+
+*null 0.0 6.0 0.0 0.05
+*atitle 'BR (10^-10!)' 'd(CL)/d(BR)'
+*gra/hplot/err br29598inside diff29598inside dum dum [ndval] 21 [size]
+*ltxt = rebinned by [nsum]
+*text 6 0.04 [ltxt] 0.4
+
+wait
+vec/wri br9598inside,diff9598inside ecl.probbr.dat (G13.7,2X,G13.7)
+*vec/wri br29598inside,diff29598inside ecl.probbr.rebin.dat (G13.7,2X,G13.7)
+pic/pri ecl.probbr.ps
+pic/pri ecl.probbr.eps
+
+zon 1 1
+title 'Likelihood estimator vs. BR for 1995-8 inside-the-box'
+
+size = 0.1
+
+null 0.0 10.0 0.0 100.0
+atitle 'BR (10^-10!)' 'Xobs'
+gra/hplot/err br9598inside x9598inside dum dum [nval] 21 [size]
+
+wait
+pic/pri ecl.xbr.ps
+pic/pri ecl.xbr.eps
+
+return
+

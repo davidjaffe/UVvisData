@@ -1,0 +1,32 @@
+*** Begin of history file: Wed Nov  7 15:53:25 2001
+exec ecl#awk
+exec ecl#read
+vec/list
+shell ls -l ecl*.vect
+shell wc ecl00005.vect
+2d 1000 ' ' 100 0.2 6.0 100 -0.1 1.01
+h/pl 1000
+dline 0.2 6.0 0.84 0.84
+dline 0.2 6.0 0.16 0.16
+set lwid 1
+text 2 0.85 '68"Y# CL lower limit' 0.3 0
+text 0.3 0.17 '68"Y# CL upper limit' 0.3 0
+gra/hplot/err br0 cls0 dum dum 501 26 0.1
+gra/hplot/err br5 cls5 dum dum 501 26 0.1
+gra/hplot/err br2 cls2 dum dum 501 26 0.1
+gra/hplot/err br2 cls2 dum dum 501 26 0.1
+gra/hplot/err br2 cls2 dum dum 501 26 0.1
+gra/hplot/err br2 cls2 dum dum 501 26 0.1
+gra/hplot/err br2 cls2 dum dum 501 26 0.1
+gra/hplot/err br2 cls2 dum dum 501 26 0.1
+gra/hplot/err br2 cls2 dum dum 501 26 0.1
+gra/hplot/err br2 cls2 dum dum 501 26 0.1
+h/pl 1000
+gra/hplot/err br000001 cls000001 dum dum 501 26 0.1
+gra/hplot/err br000001 cls0 dum dum 501 26 0.1
+h/pl 1000
+gra/hplot/err br000001 cls000001 dum dum 501 26 0.1
+gra/hplot/err br0 cls0 dum dum 501 26 0.1
+locate
+quit
+*** End   of history file: Wed Nov  7 16:01:21 2001

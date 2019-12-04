@@ -1,0 +1,7 @@
+*** Begin of history file: Wed Nov  7 15:52:13 2001
+exec ecl#awk
+exec ecl#awk
+exec ecl#read
+vec/list
+quit
+*** End   of history file: Wed Nov  7 15:53:18 2001

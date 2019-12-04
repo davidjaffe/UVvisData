@@ -1,0 +1,87 @@
+*
+*    File:  chain.kumac
+* Purpose:  to chain ntuple files together, according to skim stream
+*           and year
+*   Usage:  PAW> exec chain {skim_stream} {year} [no_of_files]
+*            e.g. exec chain skim2 95
+*
+* History:  97 Dec  PB  created
+*           00 Nov  PB  modified for 1998 summary ntuples
+*
+
+*
+* Command line syntax.
+*
+if ([#] < 2) then
+   message
+   message Usage:  exec chain {skim_stream} {year} [no_of_files]
+   message
+   exitm
+else
+   stream = [1]
+   str = $substring([stream],5,7)
+   years = [2]
+   nfiles = [3]
+endif
+all = 0
+if ([nfiles] = ' ') then
+   all = 1
+endif
+
+nchar = $len([years])
+nyear = $sigma(int([nchar]/2))
+do iyr = 1,[nyear]
+   indlo = $sigma(2*([iyr]-1) + 1)
+   if ([nchar] < 4) then
+      year = [years]
+   else
+      year = $substring([years],[indlo],2)
+   endif
+
+*
+* Get locations of files.
+*
+   if ([year] = 95) then
+      disk = data3
+      dir = /[disk]/e787/pass2/ntskim/pnn_standard_[stream]_95
+   elseif ([year] = 96) then
+      disk = data3
+      dir = /[disk]/e787/pass2/ntskim/summary_[stream]
+   elseif ([year] = 97) then
+      disk = data1
+      dir = /[disk]/e787/pass2/ntskim/summary_[stream]
+   elseif ([year] = 98) then
+      disk = data3
+      dir = /[disk]/e787/pass2/ntskim/summary_[stream]_merged
+   else
+      message year [year] not available
+      exitm
+   endif
+
+*
+* Get list of filenames.
+*
+   cmd = ls [dir]
+   filelist = $shell([cmd])
+   ntotal = $words([filelist],' ')
+   if ([all] = 1) then
+      nfiles = [ntotal]
+   endif
+
+*
+* Chain files together.
+*
+   message stream = [stream], nfiles = [nfiles]
+
+   do i = 1,[nfiles]
+      file = $word([filelist],[i],1,' ')
+      message [dir]/[file]
+      chain [stream] [dir]/[file]
+   enddo
+
+enddo
+
+cd //[stream]
+
+return
+

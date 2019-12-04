@@ -1,0 +1,230 @@
+*
+*    File:  README
+* Purpose:  Explain the mechanics of the statistical analysis
+*           of the K->pnn branching ratio
+*   Usage:  ascii file
+*
+* History:  2001 Sep 27  PB  created
+*
+
+***************
+A. INTRODUCTION
+***************
+
+There are 2 steps to the statistical analysis of the K->pnn BR:
+
+(1)  Define a number of "cells" inside and outside the box, and
+calculate the expected signal:noise, dA/dN, in each of these cells.
+
+(2)  Examine the data to see if any events are observed these cells.
+Then, with
+
+(a)  the set of observed events {d_i} in the M cells, i = 1,M
+(b)  the expected background in each cell, from dN above
+(c)  the expected signal in each cell, from dA above and a
+K->pnn branching ratio,
+
+run Tom Junk's "ecl" code to loop over possible branching ratios
+to get the "confidence level" for each.
+
+************
+B.  STEP ONE
+************
+
+The code for this step is bgtotal.c (also bgtotal.h and quicksort.c).
+bgtotal.c is well-documented and should be self-explanatory.  At the top
+of the file, input
+
+(a)  the names of the files which contain the background "functions".
+Currently, there are 7 functions:
+
+(i)  PV:  pvfunc.dat
+(ii)  Kp2 kinematic:  kp2func.dat
+(iii)  TD:  tdfunc.dat
+(iv)  Km2 range-tail kianematic:  km2tfunc.dat
+(v)  muon-band kinematic:  km2bfunc.dat
+(vi)  single-beam:  bm1func.dat
+(vii)  double-beam:  bm2func.dat
+
+Each of these files contains several columns of numbers.  The only
+important numbers, however, are the N and A values.  For
+example, pvfunc.dat contains the PV rejections and acceptances,
+which are converted into N and A values (see bgtotal.c).  kp2func.dat
+contains rdev, edev, pdev, A and N values.  tdfunc.dat contains
+numbers of events after TD cuts, acceptances, and TD neural net
+values, the first two of which are converted into N and A values
+(see bgtotal.c).  km2tfunc.dat and km2bfunc.dat contain N and A
+values.  bm1func.dat contains tcut, K-entering bg (E-2),
+Pi-entering bg (E-2), CEX bg (E-2), total BM1 bg (E-2), N and A.
+bm2func.dat contains tcut, K-entering bg (E-2), Pi-entering bg (E-2),
+total BM2 bg (E-2), N and A.  Note that some of these numbers are
+"old" (e.g., beam bg levels), but I assume that the N and A values
+are OK and haven't been affected by subsequent revisions in the final
+beam background levels.
+
+For the 1998 functions, we've used 5 data points, at roughly
+N = 0.2, 0.5, 1.0, 2.0, 5.0 relative to the "box" cut position
+(these files are named *.dat.eval, to which the above files are
+soft-linked.  Note that the muon-band function consists of only
+4 data points, because if we cut too hard, we end up in the pion
+band).  However, the code will work with any number of data points
+in the functions.  Note, however, that the number of cells (and
+the processing time) goes as
+
+~ 3*{(number of data points)^(number of functions-2)}.
+
+So we currently expect about 3*(5^5) = 9375 cells (actual number is
+7500).
+
+(b)  the background levels expected in the box for each background
+type.  The types that must be input are:  Kp2 (BoxBgkp2),
+Km2 range-tail (BoxBgkm2t), muon-band (BoxBgkm2b), single-beam kaon-
+plus pion-entering plus CEX (BoxBgbm1), and double-beam kaon- plus
+pion-entering (BoxBgbm2).
+
+(c)  the N and A values at the box cut position for each of the 7
+data files read in above.
+
+Then do
+
+> cc -o bgtotal bgtotal.c quicksort.c
+> bgtotal
+
+The code first checks that each individual background function
+is tabulated properly (see comments and code in bgtotal.c),
+then calculates expected signal and expected background in
+each cell according to a simple model (see comments and code
+in bgtotal.c).  Three output files are produced:
+bgtotal.dat, bgtotal.inside.dat, and bgtotal.outside.dat.
+bgtotal.dat contains a listing of all cells;
+bgtotal.inside.dat contains a listing of only those cells
+which lie inside the box; and bgtotal.outside.dat contains a
+listing of only those cells which lie outside the box.  Each of
+these files is a table of 12 columns of numbers:
+
+N, A, dN, dA, dA/dN, Npv, Nkp2, Ntd, Nkm2t, Nkm2b, Nbm1, Nbm2
+
+where N and A are those of the "total" combined function of
+the 7 individual functions, and Npv, Nkp2, etc. are the individual
+function values.  N and A are normalized such that N = 1 and A = 1
+at the box cut position.  The entries are in decreasing order of
+dA/dN, such that the "cleanest" regions (highest signal:noise) are
+listed first.  dN and dA are summed in this order to define the
+integrated N and A values.
+
+To find the total N and A value of an event, or the region of
+dA/dN-space in which it lies, find the top-most entry in the table
+(largest dA/dN, smallest N) for which the event's values of Npv,
+Nkp2, etc. are *less* than the values in the table.  To do this, one
+can edit bgtotal.awk for individual function values of the event in
+question, then do
+
+> awk -f bgtotal.awk bgtotal.dat | head -1  (complete function)
+
+or
+
+> awk -f bgtotal.awk bgtotal.inside.dat | head -1  (inside-the-box function)
+
+13 values are printed out, which are the "array number" of the
+cell in which the event lies, plus the same 12 values listed above.
+
+************
+C.  STEP TWO
+************
+
+The statistical analysis of the K->pnn branching ratio is
+performed according to Tom Junk's code, located at
+
+http://t.home.cern.ch/t/thomasj/www/searchlimits/ecl.html
+
+To run the code, do
+
+> make_all.sh
+> ecl.bat >& ecl.log &
+
+The output of this step is a number of ecl{label}.dat files,
+where label = 9597inside, 9598inside, etc.  These *.dat files
+contain a listing of scale factors, confidence levels, etc.,
+according to "write" statements in ecl{label}.f (these fortran
+files are described in more detail below).
+
+When this is finished, do
+
+PAW> exec ecl#awk (uses ecl.awk to make *.vect files)
+PAW> exec ecl#read (reads in the *.vect files)
+PAW> exec ecl#plot (makes plots)
+
+The *.vect files are formatted summaries of the *.dat files,
+and have 6 columns of numbers which are
+
+(i) value of the likelihood estimator, given (ii)
+(ii) the BR (E-10)
+(iii) CLs (confidence level for signal)
+(iv) dCLs/dBR
+(v) CLb (confidence level for background).  1 - CLb = "probability that
+background processes would give fewer than or equal to the number of
+candidates observed."
+
+The *.vect files are read in by eclresults.c, such that
+
+> make eclresults
+> eclresults
+
+prints out a latex table of the BR limits, central values, etc.
+
+The code which is important to the calculation of confidence
+levels is in ecl.f and ecl.inc.  Note that the routine e_calc
+in ecl.f has been modified to calculate lower limits as well
+as upper limits.  Also note that the calculated confidence 
+levels are sensitive to "scaleplin" in ecl.inc (see Tom Junk's
+technote), which should be no smaller than ~1000 in the E787
+application.  Also note that "maxlist" in ecl.inc is equal to 
+the maximum number of events in any one cell for which the
+probability is calculated.  This number should be large enough
+(.e.g, >10) such that the probability of observing this number,
+given the actual observed number, is very small (e.g. < 1E-8).
+"scaleplin" has a noticeable effect on running time (larger
+values mean longer times) whereas "maxlist" doesn't appear to.
+
+The "setup" code, which reads in the dN and dA values for each
+cell, and the observed number of events in each cell, is in
+ecl{label}.f, where label = 9597inside, 98inside, 9598inside, etc.
+Again, these ecl{label}.f files are well-documented and should
+be self-explanatory.  In each of these files, one needs to
+input:
+
+(a)  the background expected in the box, and its uncertainty
+(both for 1995-7 and 1998)
+
+(b)  the single-event sensitivities for 1995-7 and 1998
+
+(c)  the observed number of events in each cell, d(i).
+Most d(i) = 0, because there are many cells and only a few
+observed events.  The "i" at which events are observed can be
+found by running bgtotal.awk as decribed in step one above.
+Note that this "i" will depend on which function you are
+reading in:  bgtotal.inside.dat (inside-the-box cells only)
+or bgtotal.dat (inside+outside-the-box cells).
+
+In the case of E787, the file eclsyst.f (which can be used
+in place of ecl.f) should not be used.  This file calculates
+confidence levels under the assumption that the expected
+background and signal in each cell vary indepedently of
+all other cells, which is not the case for E787.  Instead,
+one can increase or decrease the global expected background
+and signal (e.g., see ecl9598insidehi.f) then re-run the CL
+calculation as described above.
+
+
+ADDITIONAL NOTES:
+
+* If the background levels are revised, then both steps
+one and two have to be re-run.
+* If the single-event-sensitivities are revised, then
+only step two needs to be re-run.  In particular, the
+ecl{label}.f files need to be updated, as well as
+ecl.awk.
+* For the CLb calculation, may want to use a large
+scale factor, such that all possible observed-event
+situations are more likely to be due to signal events
+than background events

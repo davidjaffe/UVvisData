@@ -1,0 +1,52 @@
+#------------------------------------------------------------------#
+#                                                                  #
+#                    KOFIA executable Makefile                     #
+#                      Morgan Burke (TRIUMF)                       #
+#                          1992-Sept-08                            #
+#                                                                  #
+#  usage examples:                                                 #
+#                                                                  #
+#  % make                                                          #
+#  % make photo                                                    #
+#  % make FFLAGS=-g OBJECTS="dplot.o define.o" OUTPUT=test.exe     #
+#------------------------------------------------------------------#
+
+#------------------------------------------------------------------#
+# this can be changed here, or defined on the command line.
+# (Say "make OUTPUT=progname", for example.)
+
+OUTPUT=like.exe.new
+
+#------------------------------------------------------------------#
+# this is defined so that you can specify extra object files
+# on the command line.  (Say "make OBJECTS=file.o", for example.)
+
+OBJECTS= e949_test.o ranmar.o rannor.o poidev.o gammln.o \
+         e949like.o ecl.o ectoymc.o
+
+#------------------------------------------------------------------#
+# if you have your own version of a standard library, add its
+# directory to the top of this list
+
+LIBDIRS= $(LDIRFLAGS) -L. -L$(CERNLIB)
+
+#
+#------------------------------------------------------------------#
+# add or delete the support libraries as you require them
+#
+
+OTHER_LIBS = \
+   -lpacklib$(SHIFT_VERS) \
+   -lmathlib \
+   -lkernlib$(SHIFT_VERS) \
+   $(LFLAGS)
+
+#------------------------------------------------------------------#
+# normal kofia, suitable for analysis jobs.
+# Say "make" or "make kofia".
+#-lfpe
+
+kofia : $(OBJECTS)
+	$(F77) -o $(OUTPUT) $(FFLAGS) $(LIBDIRS) $(OBJECTS) $(OTHER_LIBS)
+
+include $(E949ETC)/make.std

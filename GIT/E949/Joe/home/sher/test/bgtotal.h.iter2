@@ -1,0 +1,166 @@
+/*
+ *    File:  bglike.h
+ * Purpose:  include file for bglike.c
+ *   Usage:  #include "bglike.h"
+ *
+ * History:  2001 Jul 25  PB  created
+ */
+
+/*
+ *  Filenames for the ascii data files which contain N and A values
+ *  for the 7 background functions.  Note that the functions are designed
+ *  such that:
+ *  - the pv and kp2 functions are linear in Kp2 background;
+ *  - the td function is linear in both Km2 range-tail and
+ *    muon-band background;
+ *  - the km2t function is linear in Km2 range-tail background;
+ *  - the km2b function is linear in muon-band background;
+ *  - the bm1 function is linear in the sum of single-beam kaon- and
+ *    pion-entering background plus charge-exchange background;
+ *  - the bm2 function is linear in the sum of double-beam kaon- and
+ *    pion-entering background.
+ *  This is why there are 7 functions but 8 background types.
+ *  The code below is written specifically with these particular
+ *  functions in mind.  The code is also written on the assumption
+ *  that N and A values are tabulated in decreasing order.
+ */
+char FilePv[15] = "pvfunc.dat";
+char FileKp2[15] = "kp2func.dat";
+char FileTd[15] = "tdfunc.dat";
+char FileKm2t[15] = "km2tfunc.dat";
+char FileKm2b[15] = "km2bfunc.dat";
+char FileBm1[15] = "bm1func.dat";
+char FileBm2[15] = "bm2func.dat";
+
+/*
+ *  Expected background levels at the final box position for the
+ *  8 background types.
+ */
+/*
+ *  based on 1/3 + 2/3 1998:
+ */
+float BoxBgKp2 = 0.035;
+float BoxBgKm2t = 0.0245;
+float BoxBgKm2b = 0.0093;
+float BoxBgBm1k = 0.00144;
+float BoxBgBm1p = 0.00023;
+float BoxBgCex = 0.01224;
+float BoxBgBm2k = 0.0000918;
+float BoxBgBm2p = 0.0000227;
+
+/*
+ *  Function (N and A) values at the final box position for the 7 functions
+ *  (bm1 and bm2 N values are also broken down into kaon, pion, and cex
+ *  values).  These must be EXACTLY the same as the correponding values in
+ *  the data files above.
+ */
+float BoxNPv = 1.0;
+float BoxNKp2 = 0.00147;
+float BoxNTd = 1.0;
+float BoxNKm2t = 0.1346800E-01;
+float BoxNKm2b = 0.2964120E-01;
+float BoxNBm1 = 1.0;
+float BoxNBm1k = 0.00144;
+float BoxNBm1p = 0.00023;
+float BoxNCex = 0.01224;
+float BoxNBm2 = 1.0;
+float BoxNBm2k = 0.0000918;
+float BoxNBm2p = 0.0000227;
+
+float BoxAPv = 0.90020;
+float BoxAKp2 = 1.0;
+float BoxATd = 1.0;
+float BoxAKm2t = 1.0;
+float BoxAKm2b = 1.0;
+float BoxABm1 = 1.0;
+float BoxABm2 = 1.0;
+
+/*
+ *  Template structure for the PV, TD, Kp2 and Km2 kinematic
+ *  background functions.
+ */
+struct dkvalue {
+   float n;
+   float a;
+   struct dkvalue *next;
+   struct dkvalue *prev;
+};
+typedef struct dkvalue DKVALUE;
+typedef DKVALUE *PTRDKVALUE;
+
+struct dkfunc {
+   int nvalues;
+   PTRDKVALUE head,box,tail;
+};
+typedef struct dkfunc DKFUNC;
+
+/*
+ *  Template structure for the combined Kp2 and Km2 functions.
+ */
+struct cbvalue {
+   float n;
+   float a;
+   PTRDKVALUE fn1;
+   PTRDKVALUE fn2;
+   PTRDKVALUE fn3;
+   struct cbvalue *next;
+   struct cbvalue *prev;
+};
+typedef struct cbvalue CBVALUE;
+typedef CBVALUE *PTRCBVALUE;
+
+struct cbfunc {
+   int nvalues;
+   PTRCBVALUE head,tail;
+};
+typedef struct cbfunc CBFUNC;
+
+/*
+ *  Template structure for the beam background functions.
+ */
+struct bmvalue {
+   float n;
+   float a;
+   float kaon;
+   float pion;
+   float cex;
+   struct bmvalue *next;
+   struct bmvalue *prev;
+};
+typedef struct bmvalue BMVALUE;
+typedef BMVALUE *PTRBMVALUE;
+
+struct bmfunc {
+   int nvalues;
+   PTRBMVALUE head,box,tail;
+};
+typedef struct bmfunc BMFUNC;
+
+/*
+ *  Template structure for the total background function.
+ */
+struct totvalue {
+   float n;
+   float a;
+   float kp2;
+   float km2t;
+   float km2b;
+   float bm1k;
+   float bm1p;
+   float cex;
+   float bm2k;
+   float bm2p;
+   PTRCBVALUE ptrkp2tot,ptrkm2tot;
+   PTRBMVALUE ptrbm1,ptrbm2;
+   struct totvalue *next;
+   struct totvalue *prev;
+};
+typedef struct totvalue TOTVALUE;
+typedef TOTVALUE *PTRTOTVALUE;
+
+struct totfunc {
+   int nvalues;
+   PTRTOTVALUE head,tail;
+};
+typedef struct totfunc TOTFUNC;
+

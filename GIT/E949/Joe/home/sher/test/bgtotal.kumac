@@ -1,0 +1,113 @@
+macro read
+
+vec/read npv,apv pvfunc.dat.eval
+sigma npvn = 46.918/npv
+sigma apvn = apv/0.90020
+vec/read d1,d2,d3,akp2n,nkp2 kp2func.dat.eval
+sigma nkp2n = nkp2/0.00147
+vec/read ntd,atdn tdfunc.dat.eval
+sigma ntdn = ntd/39.
+vec/read nkm2t,akm2tn km2tfunc.dat.eval
+sigma nkm2tn = nkm2t/0.013468
+vec/read nkm2b,akm2bn km2bfunc.dat.eval
+sigma nkm2bn = nkm2b/0.0296412
+vec/read d1,d2,d3,d4,d5,nbm1n,abm1n bm1func.dat.eval
+vec/read d1,d2,d3,d4,nbm2n,abm2n bm2func.dat.eval
+vec/read n,a bgtotal.dat.eval
+
+return
+
+macro plot
+
+opt date
+opt grid
+opt logx
+opt logy
+*opt linx
+*opt liny
+opt zfl1
+mark = 24
+size = 0.15
+
+nmax = 10000
+vec/cre dum([nmax]) r [nmax]*0.0000000001
+
+zon 2 2
+title 'N vs A for the PV, Kp2, TD, and Km2t functions'
+
+null 0.5 1.2 0.1 10                       
+gra/hplot/err apvn npvn dum dum [nmax] [mark] [size]
+atitle 'Apv' 'Npv'
+set lwid 6
+dline 0.5 1 1 1
+dline 1 1 0.1 1
+
+null 0.5 1.2 0.1 10                      
+gra/hplot/err akp2n nkp2n dum dum [nmax] [mark] [size]
+atitle 'Akp2' 'Nkp2'
+set lwid 6
+dline 0.5 1 1 1
+dline 1 1 0.1 1
+
+null 0.5 1.2 0.1 10                      
+gra/hplot/err atdn ntdn dum dum [nmax] [mark] [size]
+atitle 'Atd' 'Ntd'
+set lwid 6
+dline 0.5 1 1 1
+dline 1 1 0.1 1
+
+null 0.5 1.2 0.1 10                      
+gra/hplot/err akm2tn nkm2tn dum dum [nmax] [mark] [size]
+atitle 'Akm2t' 'Nkm2t'
+set lwid 6
+dline 0.5 1 1 1
+dline 1 1 0.1 1
+
+wait
+pic/pri bgtotal1.ps
+pic/pri bgtotal1.eps
+
+zon 2 2
+title 'N vs A for the Km2b, BM1, and BM2 functions'
+
+null 0.5 1.2 0.1 10                      
+gra/hplot/err akm2bn nkm2bn dum dum [nmax] [mark] [size]
+atitle 'Akm2b' 'Nkm2b'
+set lwid 6
+dline 0.5 1 1 1
+dline 1 1 0.1 1
+
+null 0.5 1.2 0.1 20                      
+gra/hplot/err abm1n nbm1n dum dum [nmax] [mark] [size]
+atitle 'Abm1' 'Nbm1'
+set lwid 6
+dline 0.5 1 1 1
+dline 1 1 0.1 1
+
+null 0.5 1.2 0.1 20                      
+gra/hplot/err abm2n nbm2n dum dum [nmax] [mark] [size]
+atitle 'Abm2' 'Nbm2'
+set lwid 6
+dline 0.5 1 1 1
+dline 1 1 0.1 1
+
+wait
+pic/pri bgtotal2.ps
+pic/pri bgtotal2.eps
+
+zon 1 1
+title 'N vs A for the total background function'
+
+null 0.01 10 0.001 100
+gra/hplot/err a n dum dum [nmax] [mark] [size]
+atitle 'Atot' 'Ntot'
+set lwid 6
+dline 0.01 1 1 1
+dline 1 1 0.001 1
+
+wait
+pic/pri bgtotal3.ps
+pic/pri bgtotal3.eps
+
+return
+

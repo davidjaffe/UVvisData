@@ -1,0 +1,546 @@
+\documentclass[11pt,twoside]{article}
+\usepackage{graphicx}
+\usepackage{colordvi}
+
+% SIDE MARGINS:
+\oddsidemargin  -0.5in    % Left margin on odd-numbered pages.
+\evensidemargin -0.5in   % Left margin on even-numbered pages.
+%\marginparwidth 40pt     % Width of marginal notes.
+%\marginparsep 10pt       % Horizontal space between outer margin and
+                          % marginal note.
+\parindent 0.30in         % Indentation for paragraphs.
+
+% VERTICAL SPACING:
+\topmargin  -0.6in        % (Space - 1.0in) between top of page and
+                          % top of box containing running head.
+\headsep 0.3in            % Space between bottom of running head and
+                          % top of box containing text.
+
+% DIMENSION OF TEXT:
+\textheight 9.0in         % Height of text(including footnotes and figures,
+                          % excluding running head and foot).
+\textwidth 7.5in          % Width of text line.
+
+%\renewcommand{\baselinestretch}{1.6}  % double-spacing
+
+\raggedright
+\raggedbottom
+
+\def\KPNN{K^+ \rightarrow \pi^+ \nu \bar{\nu}}
+\def\PNN{\pi^+ \nu \bar{\nu}}
+\def\KPIF{K^+ \rightarrow \pi^+ f}
+\def\PIF{\pi f}
+\def\KMU{K_{\mu 2}}
+\def\KMUG{K_{\mu \nu \gamma}}
+\def\KMUNU{K^+ \rightarrow \mu^+ \nu_{\mu}}
+\def\KMUNUG{K^+ \rightarrow \mu^+ \nu_{\mu} \gamma}
+\def\KPI{K_{\pi 2}}
+\def\KPIPI{K^+ \rightarrow \pi^+ \pi^0}
+\def\PISCAT{\pi_{scat}}
+
+\def\KPMM{K^+ \rightarrow \pi^+ \mu^+ \mu^-}
+\def\PIMUMU{\pi \mu \mu}
+\def\KPEE{K^+ \rightarrow \pi^+ e^+ e^-}
+\def\PIEE{\pi e e}
+\def\KPGG{K^+ \rightarrow \pi^+ \gamma \gamma}
+\def\KPENU{K^+ \rightarrow \pi^0 e^+ \nu_e}
+\def\KPMNU{K^+ \rightarrow \pi^0 \mu^+ \nu_{\mu}}
+\def\KPLNU{K^+ \rightarrow \pi^0 l^+ \nu_l}
+\def\KPPP{K^+ \rightarrow 3\pi}
+\def\RADKPI2{K^+ \rightarrow \pi^+ \pi^0 \gamma}
+\def\RADKMU3{K^+ \rightarrow \mu^+ \pi^0 \nu_{\mu} \gamma}
+\def\KEthree{K_{e3}}
+\def\KMthree{K_{\mu 3}}
+\def\KLEthree{K^0_{e3}}
+\def\KLMthree{K^0_{\mu 3}}
+\def\KEfour{K_{e4}}
+\def\KMfour{K_{\mu 4}}
+\def\TAUDK{\pi^+ \pi^+ \pi^-}
+\def\KPPENU{K^+ \rightarrow \pi^+ \pi^- e^+ \nu_e}
+\def\KPX{K^+ \rightarrow \pi^+ X^0}
+\def\KPNO{K^+ \rightarrow \pi^+ \hspace{3mm} \mbox{nothing}}
+\def\KCEX{K^+ n \rightarrow K^0 p}
+\def\KLDK{K^0_L \rightarrow \pi^+ l^- \bar{\nu}_l}
+\def\KSDK{K^0_L \rightarrow \pi^+ l^- \bar{\nu}_l}
+\def\KLPNN{K^0_L \rightarrow \pi^0 \nu \bar{\nu}}
+\def\KLPMN{K^0_L \rightarrow \pi^+ \mu^- \bar{\nu}_{\mu}}
+\def\KLPEN{K^0_L \rightarrow \pi^+ e^- \bar{\nu}_e}
+\def\KLMM{K^0_L \rightarrow \mu^+ \mu^-}
+\def\KSDK{K^0_S \rightarrow \pi^+ \pi^-}
+
+\def\PIMUE{\pi \rightarrow \mu \rightarrow e}
+\def\PITMU{\pi \rightarrow \mu}
+\def\MUTE{\mu \rightarrow e}
+\def\PIGG{\pi^0 \rightarrow \gamma \gamma}
+\def\KBLIVE{K_{Blive}}
+\def\KB{K_{B}}
+\def\FS{f_{s}}
+\def\TDOTA{\mbox{T} \cdot 2}
+\def\ETA{\epsilon_{T \cdot 2}}
+\def\ETANG{\epsilon_{T \cdot 2}^{ng}}
+\def\CHISQ{\chi^2}
+\def\Andre{Andr\'{e}}
+\def\Cerenkov{\v{C}erenkov}
+\def\ck{\v{C}$_K$}
+\def\cpi{\v{C}$_{\pi}$}
+
+\def\VUD{V_{ud}}
+\def\VCD{V_{cd}}
+\def\VTD{V_{td}}
+\def\VUS{V_{us}}
+\def\VCS{V_{cs}}
+\def\VTS{V_{ts}}
+\def\VUB{V_{ub}}
+\def\VCB{V_{cb}}
+\def\VTB{V_{tb}}
+
+\begin{document}
+
+%``Iteration 5''
+%\begin{itemize}
+%\item 1995-7 Background = $0.0675 \pm 0.0138$
+%\item 1995-7 1/Sensitivity = $(1.496 \pm 5\%) \times 10^{-10}$
+%\item 1998 Background = kp2 + km2t + km2b + bm1 + bm2 + cex
+%$= 0.035 + 0.0245 + 0.0093 + 0.00167 + 0.0001145 + 0.01224 = 0.083 \pm 0.055$
+%\item 1998 1/Sensitivity = $(2.14 \pm 5\%) \times 10^{-10}$
+%\item Number of probability bins between 1\% and 100\%:  scaleplin = 3000
+%\end{itemize}
+%\begin{center}
+%\begin{tabular}[]{|l||c|c|c|c|c|c||} 
+%\hline 
+% & 68\% CL interval
+% & \multicolumn{2}{|c|}{BR central value ($10^{-10}$)}
+% & \multicolumn{3}{|c||}{BR lower limit} \\
+%label
+% & for BR $(10^{-10})$
+% & median (50\% CL) & max likelihood
+% & 90\% CL & 95\% CL & 99\% CL \\
+%\hline
+%\hline 
+%  9597inside & $[0.471,4.842]$ & 1.768 & 1.481 & 0.287 & 0.140 & 0.027 \\ 
+%\hline
+%    98inside & $[0.467,4.666]$ & 1.811 & 1.947 & 0.280 & 0.137 & 0.026 \\ 
+%   98outside & $[0.443,4.626]$ & 1.942 & 2.290 & 0.263 & 0.129 & 0.021 \\ 
+%  98outside0 & $[0.383,3.708]$ & 1.521 & 1.241 & 0.235 & 0.123 & 0.020 \\ 
+%     98total & $[0.440,4.716]$ & 1.977 & 2.440 & 0.262 & 0.131 & 0.021 \\ 
+%\hline
+%  9598inside & $[0.850,3.607]$ & 1.925 & 1.673 & 0.634 & 0.425 & 0.138 \\ 
+% 9598outside & $[0.827,3.448]$ & 1.890 & 1.814 & 0.609 & 0.376 & 0.046 \\ 
+%9598outside0 & $[0.710,3.062]$ & 1.650 & 1.321 & 0.527 & 0.321 & 0.035 \\ 
+%   9598total & $[0.835,3.495]$ & 1.903 & 1.884 & 0.613 & 0.376 & 0.046 \\ 
+%\hline
+%\hline
+%\end{tabular} 
+%\end{center}
+
+%\vspace{2cm}
+
+%``Iteration 6''
+%\begin{itemize}
+%\item 1995-7 Background = $0.0675 \pm 0.0138$
+%\item 1995-7 1/Sensitivity = $(1.496 \pm 5\%) \times 10^{-10}$
+%\item 1998 Background = kp2 + km2t + km2b + bm1 + bm2 + cex
+%$= 0.012 + 0.0245 + 0.0092 + 0.00167 + 0.0001145 + 0.01574 = 0.063 \pm 0.042$
+%\item 1998 1/Sensitivity = $(2.14 \pm 5\%) \times 10^{-10}$
+%\item Number of probability bins between 1\% and 100\%:  scaleplin = 1000
+%\end{itemize}
+%\begin{center}
+%\begin{tabular}[]{|l||c|c|c|c|c|c||} 
+%\hline 
+% & 68\% CL interval
+% & \multicolumn{2}{|c|}{BR central value ($10^{-10}$)}
+% & \multicolumn{3}{|c||}{BR lower limit} \\
+%label
+% & for BR $(10^{-10})$
+% & median (50\% CL) & max likelihood
+% & 90\% CL & 95\% CL & 99\% CL \\
+%\hline
+%\hline 
+%  9597inside & $[0.471,4.842]$ & 1.768 & 1.481 & 0.287 & 0.140 & 0.027 \\ 
+%\hline
+%    98inside & $[0.467,4.591]$ & 1.792 & 1.926 & 0.277 & 0.134 & 0.026 \\ 
+%   98outside & $[0.478,4.454]$ & 1.858 & 2.290 & 0.282 & 0.128 & 0.026 \\ 
+%  98outside0 & $[0.398,3.605]$ & 1.500 & 1.220 & 0.249 & 0.128 & 0.022 \\ 
+%     98total & $[0.478,4.763]$ & 1.949 & 2.675 & 0.282 & 0.136 & 0.025 \\ 
+%\hline
+%  9598inside & $[0.869,3.593]$ & 1.923 & 1.648 & 0.656 & 0.437 & 0.170 \\ 
+% 9598outside & $[0.853,3.466]$ & 1.900 & 1.840 & 0.645 & 0.431 & 0.170 \\ 
+%9598outside0 & $[0.746,3.109]$ & 1.679 & 1.348 & 0.568 & 0.377 & 0.156 \\ 
+%   9598total & $[0.869,3.537]$ & 1.929 & 1.990 & 0.652 & 0.431 & 0.170 \\ 
+%\hline
+%\hline
+%\end{tabular} 
+%\end{center}
+
+%``Iteration 7''
+%\begin{itemize}
+%\item 1995-7 Background = $0.0804 \pm 0.0201$
+%\item 1995-7 1/Sensitivity = $(1.496 \pm 5\%) \times 10^{-10}$,
+%where the 5\% is due to uncertainty in UMC simulation of nuclear interactions.
+%\item 1998 Background = $0.0657 \pm 0.0175$
+%\item 1998 1/Sensitivity = $(2.14 \pm 5\%) \times 10^{-10}$
+%\item Number of probability bins between 1\% and 100\%:  scaleplin = 990
+%\item systematic errors on signal and background not allowed to
+%independently vary in different regions of the box.  Instead, re-run
+%the CL vs BR measurement for
+%\begin{itemize}
+%\item expected background $+ 1\sigma$, expected signal $+ 1\sigma$:  ``insidelo''
+%\item expected background $- 1\sigma$, expected signal $- 1\sigma$:  ``insidehi''
+%\end{itemize}
+%\end{itemize}
+%\begin{tabular}[]{|l||c|c|c|c||} 
+%\hline 
+% & 84\% CL limits & 90\% CL limits 
+% & 95\% CL limits & 99\% CL limits \\ 
+% & (68\% CL interval) & (80\% CL interval) 
+% & (90\% CL interval) & (98\% CL interval) \\ 
+%\hline 
+%\hline 
+%  9597inside & [0.470,4.820] & [0.287,5.719] & [0.140,6.996] & [0.027,9.829] \\ 
+%9597insidelo & [0.452,4.568] & [0.273,5.424] & [0.133,6.640] & [0.026,9.338] \\ 
+%9597insidehi & [0.496,5.099] & [0.302,6.045] & [0.147,7.390] & [0.029,10.372] \\ 
+%    98inside & [0.445,4.620] & [0.269,5.771] & [0.131,7.455] & [0.026,10.5+] \\ 
+%  98insidelo & [0.426,4.401] & [0.258,5.491] & [0.125,7.079] & [0.024,10.5+] \\ 
+%  98insidehi & [0.450,4.870] & [0.266,6.071] & [0.121,7.845] & [0.015,10.5+] \\ 
+%   98outside & [0.446,4.351] & [0.270,5.293] & [0.126,6.692] & [0.026,9.670] \\ 
+%  98outside0 & [0.392,3.640] & [0.252,4.462] & [0.123,5.659] & [0.026,8.387] \\ 
+%     98total & [0.460,4.561] & [0.270,5.565] & [0.126,7.198] & [0.026,10.310] \\ 
+%  9598inside & [0.804,3.511] & [0.600,4.113] & [0.385,4.957] & [0.145,6.802] \\ 
+%9598insidelo & [0.693,3.150] & [0.505,3.715] & [0.322,4.499] & [0.106,6.245] \\ 
+%9598insidehi & [0.850,3.723] & [0.617,4.322] & [0.406,5.221] & [0.047,7.187] \\ 
+% 9598outside & [0.826,3.426] & [0.622,3.987] & [0.412,4.752] & [0.166,6.439] \\ 
+%9598outside0 & [0.719,3.073] & [0.536,3.592] & [0.348,4.311] & [0.130,5.903] \\ 
+%   9598total & [0.833,3.475] & [0.625,4.050] & [0.413,4.850] & [0.167,6.588] \\ 
+%\hline 
+%\hline 
+%\end{tabular}
+%
+%\begin{tabular}[]{|l||c|c|c||} 
+%\hline 
+% & \multicolumn{2}{|c|}{BR central value ($10^{-10}$)} & \\ 
+% & median (50\% CL) & max likelihood & 1 - CLb \\ 
+%\hline 
+%\hline 
+%  9597inside & 1.816 & 1.477 & 0.010483 \\ 
+%9597insidelo & 1.726 & 1.391 & 0.013810 \\ 
+%9597insidehi & 1.709 & 1.562 & 0.007427 \\ 
+%    98inside & 1.795 & 1.905 & 0.021526 \\ 
+%  98insidelo & 1.699 & 1.669 & 0.036209 \\ 
+%  98insidehi & 1.830 & 2.161 & 0.000866 \\ 
+%   98outside & 1.812 & 2.247 & 0.004755 \\ 
+%  98outside0 & 1.484 & 1.198 & 0.039182 \\ 
+%     98total & 1.846 & 2.568 & 0.001746 \\ 
+%  9598inside & 1.869 & 1.648 & 0.000152 \\ 
+%9598insidelo & 1.671 & 1.498 & 0.001560 \\ 
+%9598insidehi & 1.966 & 1.798 & 0.000000 \\ 
+% 9598outside & 1.862 & 1.819 & 0.000150 \\ 
+%9598outside0 & 1.639 & 1.348 & 0.000150 \\ 
+%   9598total & 1.879 & 1.947 & 0.000062 \\ 
+%\hline 
+%\hline 
+%\end{tabular}
+
+%``Iteration 8''
+%\begin{itemize}
+%\item 1995-7 Background = $0.0804 \pm 0.0201$
+%\item 1995-7 1/Sensitivity = $(1.496 \pm 5\%) \times 10^{-10}$,
+%where the 5\% is due to uncertainty in UMC simulation of nuclear interactions.
+%\item 1998 Background = $0.0657 \pm 0.0175$
+%\item 1998 1/Sensitivity = $(1.899 \pm 5\%) \times 10^{-10}$
+%\item Number of probability bins between 1\% and 100\%:  scaleplin = 990
+%\item systematic errors on signal and background not allowed to
+%independently vary in different regions of the box.  Instead, re-run
+%the CL vs BR measurement for
+%\begin{itemize}
+%\item expected background $+ 1\sigma$, expected signal $+ 1\sigma$:  ``insidelo''
+%\item expected background $- 1\sigma$, expected signal $- 1\sigma$:  ``insidehi''
+%\end{itemize}
+%\end{itemize}
+%\begin{tabular}[]{|l||c|c|c|c||} 
+%\hline 
+% & 84\% CL limits & 90\% CL limits 
+% & 95\% CL limits & 99\% CL limits \\ 
+% & (68\% CL interval) & (80\% CL interval) 
+% & (90\% CL interval) & (98\% CL interval) \\ 
+%\hline 
+%\hline 
+%  9597inside & [0.470,4.820] & [0.287,5.719] & [0.140,6.996] & [0.027,0.000] \\ 
+%9597insidelo & [0.451,4.568] & [0.273,5.424] & [0.133,6.640] & [0.026,9.338] \\ 
+%9597insidehi & [0.496,5.099] & [0.302,6.045] & [0.147,7.390] & [0.029,0.000] \\ 
+%    98inside & [0.395,4.100] & [0.239,5.122] & [0.116,6.615] & [0.023,0.000] \\ 
+%  98insidelo & [0.378,3.905] & [0.229,4.872] & [0.111,6.282] & [0.022,0.000] \\ 
+%  98insidehi & [0.399,4.321] & [0.236,5.387] & [0.107,6.962] & [0.014,0.000] \\ 
+%   98outside & [0.396,3.861] & [0.239,4.697] & [0.112,5.938] & [0.023,8.581] \\ 
+%  98outside0 & [0.348,3.230] & [0.224,3.959] & [0.109,5.021] & [0.023,7.443] \\ 
+%     98total & [0.408,4.048] & [0.239,4.939] & [0.112,6.388] & [0.023,9.149] \\ 
+%  9598inside & [0.750,3.330] & [0.561,3.892] & [0.366,4.695] & [0.135,6.471] \\ 
+%9598insidelo & [0.665,2.997] & [0.474,3.536] & [0.302,4.282] & [0.105,5.942] \\ 
+%9598insidehi & [0.776,3.515] & [0.578,4.127] & [0.378,4.925] & [0.042,6.805] \\ 
+% 9598outside & [0.782,3.233] & [0.579,3.754] & [0.387,4.503] & [0.151,6.072] \\ 
+%9598outside0 & [0.679,2.902] & [0.508,3.388] & [0.329,4.070] & [0.123,5.560] \\ 
+%   9598total & [0.789,3.286] & [0.587,3.833] & [0.387,4.581] & [0.151,6.276] \\ 
+%\hline 
+%\hline 
+%\end{tabular}
+
+%\begin{tabular}[]{|l||c|c|c||} 
+%\hline 
+% & \multicolumn{2}{|c|}{BR central value ($10^{-10}$)} & \\ 
+% & median (50\% CL) & max likelihood & 1 - CLb \\ 
+%\hline 
+%\hline 
+%  9597inside & 1.816 & 1.481 & 0.010483 \\ 
+%9597insidelo & 1.726 & 1.405 & 0.013810 \\ 
+%9597insidehi & 1.724 & 1.557 & 0.007427 \\ 
+%    98inside & 1.593 & 1.690 & 0.021526 \\ 
+%  98insidelo & 1.508 & 1.481 & 0.036209 \\ 
+%  98insidehi & 1.624 & 1.918 & 0.000866 \\ 
+%   98outside & 1.608 & 1.994 & 0.004587 \\ 
+%  98outside0 & 1.317 & 1.063 & 0.039743 \\ 
+%     98total & 1.638 & 2.279 & 0.001324 \\ 
+%  9598inside & 1.761 & 1.557 & 0.000213 \\ 
+%9598insidelo & 1.543 & 1.424 & 0.001588 \\ 
+%9598insidehi & 1.847 & 1.709 & 0.000000 \\ 
+% 9598outside & 1.757 & 1.728 & 0.000187 \\ 
+%9598outside0 & 1.556 & 1.272 & 0.000187 \\ 
+%   9598total & 1.781 & 1.842 & 0.000028 \\ 
+%\hline 
+%\hline 
+%\end{tabular}
+
+%``Iteration 9''
+%\begin{itemize}
+%\item 1995-7 Background = $0.0804 \pm 0.0201$
+%\item 1995-7 1/Sensitivity = $(1.496 \pm 5\%) \times 10^{-10}$,
+%where the 5\% is due to uncertainty in UMC simulation of nuclear interactions.
+%\item 1998 Background = $0.0657 \pm 0.0175$
+%\item 1998 1/Sensitivity = $(1.902 \pm 5\%) \times 10^{-10}$
+%\item Number of probability bins between 1\% and 100\%:  scaleplin = 990
+%\item systematic errors on signal and background not allowed to
+%independently vary in different regions of the box.  Instead, re-run
+%the CL vs BR measurement for
+%\begin{itemize}
+%\item expected background $+ 1\sigma$, expected signal $+ 1\sigma$:  ``insidelo''
+%\item expected background $- 1\sigma$, expected signal $- 1\sigma$:  ``insidehi''
+%\end{itemize}
+%\end{itemize}
+%\begin{tabular}[]{|l||c|c|c|c||} 
+%\hline 
+% & 84\% CL limits & 90\% CL limits 
+% & 95\% CL limits & 99\% CL limits \\ 
+% & (68\% CL interval) & (80\% CL interval) 
+% & (90\% CL interval) & (98\% CL interval) \\ 
+%\hline 
+%\hline 
+%  9597inside & [0.470,4.812] & [0.286,5.710] & [0.139,6.985] & [0.027,0.000] \\ 
+%9597insidelo & [0.451,4.561] & [0.273,5.415] & [0.133,6.629] & [0.026,9.323] \\ 
+%9597insidehi & [0.495,5.091] & [0.301,6.036] & [0.147,7.378] & [0.029,0.000] \\ 
+%    98inside & [0.395,4.100] & [0.239,5.122] & [0.116,6.615] & [0.023,0.000] \\ 
+%  98insidelo & [0.378,3.905] & [0.229,4.872] & [0.111,6.282] & [0.022,0.000] \\ 
+%  98insidehi & [0.399,4.321] & [0.236,5.387] & [0.107,6.962] & [0.014,0.000] \\ 
+%   98outside & [0.396,3.861] & [0.239,4.697] & [0.112,5.938] & [0.023,8.581] \\ 
+%  98outside0 & [0.348,3.230] & [0.224,3.959] & [0.109,5.021] & [0.023,7.443] \\ 
+%     98total & [0.408,4.048] & [0.239,4.939] & [0.112,6.388] & [0.023,9.149] \\ 
+%  9598inside & [0.750,3.324] & [0.559,3.892] & [0.366,4.696] & [0.134,6.471] \\ 
+%9598insidelo & [0.664,2.995] & [0.474,3.532] & [0.307,4.279] & [0.105,5.926] \\ 
+%9598insidehi & [0.776,3.509] & [0.576,4.118] & [0.378,4.923] & [0.042,6.802] \\ 
+% 9598outside & [0.778,3.230] & [0.580,3.754] & [0.386,4.488] & [0.151,6.073] \\ 
+%9598outside0 & [0.679,2.902] & [0.507,3.393] & [0.329,4.074] & [0.123,5.562] \\ 
+%   9598total & [0.788,3.280] & [0.587,3.825] & [0.386,4.563] & [0.151,6.226] \\ 
+%\hline 
+%\hline 
+%\end{tabular}
+
+%\begin{tabular}[]{|l||c|c|c||} 
+%\hline 
+% & \multicolumn{2}{|c|}{BR central value ($10^{-10}$)} & \\ 
+% & median (50\% CL) & max likelihood & 1 - CLb \\ 
+%\hline 
+%\hline 
+%  9597inside & 1.814 & 1.481 & 0.010483 \\ 
+%9597insidelo & 1.723 & 1.405 & 0.013810 \\ 
+%9597insidehi & 1.707 & 1.557 & 0.007427 \\ 
+%    98inside & 1.593 & 1.690 & 0.021526 \\ 
+%  98insidelo & 1.508 & 1.481 & 0.036209 \\ 
+%  98insidehi & 1.624 & 1.918 & 0.000866 \\ 
+%   98outside & 1.608 & 1.994 & 0.004595 \\ 
+%  98outside0 & 1.317 & 1.063 & 0.039719 \\ 
+%     98total & 1.638 & 2.279 & 0.001329 \\ 
+%  9598inside & 1.761 & 1.557 & 0.000213 \\ 
+%9598insidelo & 1.542 & 1.424 & 0.001587 \\ 
+%9598insidehi & 1.846 & 1.709 & 0.000000 \\ 
+% 9598outside & 1.755 & 1.728 & 0.000187 \\ 
+%9598outside0 & 1.554 & 1.272 & 0.000187 \\ 
+%   9598total & 1.780 & 1.842 & 0.000028 \\ 
+%\hline 
+%\hline 
+%\end{tabular}
+
+``Iteration 10''
+\begin{itemize}
+\item 1995-7 Background = $0.0804 \pm 0.0201$
+\item 1995-7 1/Sensitivity = $(1.496 \pm 5\%) \times 10^{-10}$,
+where the 5\% is due to uncertainty in UMC simulation of nuclear interactions.
+\item 1998 Background = $0.0657 \pm 0.0175$
+\item 1998 1/Sensitivity = $(1.892 \pm 5\%) \times 10^{-10}$
+\item Number of probability bins between 1\% and 100\%:  scaleplin = 990
+\item systematic errors on signal and background not allowed to
+independently vary in different regions of the box.  Instead, re-run
+the CL vs BR measurement for
+\begin{itemize}
+\item expected background $+ 1\sigma$, expected signal $+ 1\sigma$:  ``insidelo''
+\item expected background $- 1\sigma$, expected signal $- 1\sigma$:  ``insidehi''
+\end{itemize}
+\end{itemize}
+\begin{tabular}[]{|l||c|c|c|c||} 
+\hline 
+ & 84\% CL limits & 90\% CL limits 
+ & 95\% CL limits & 99\% CL limits \\ 
+ & (68\% CL interval) & (80\% CL interval) 
+ & (90\% CL interval) & (98\% CL interval) \\ 
+\hline 
+\hline 
+  9597inside & [0.472,4.838] & [0.288,5.740] & [0.140,7.022] & [0.027,0.000] \\ 
+9597insidelo & [0.453,4.585] & [0.274,5.444] & [0.133,6.664] & [0.026,9.372] \\ 
+9597insidehi & [0.498,5.118] & [0.303,6.067] & [0.147,7.417] & [0.029,0.000] \\ 
+    98inside & [0.395,4.100] & [0.239,5.122] & [0.116,6.615] & [0.023,0.000] \\ 
+  98insidelo & [0.378,3.905] & [0.229,4.872] & [0.111,6.282] & [0.022,0.000] \\ 
+  98insidehi & [0.399,4.321] & [0.236,5.387] & [0.107,6.962] & [0.014,0.000] \\ 
+   98outside & [0.396,3.861] & [0.239,4.697] & [0.112,5.938] & [0.023,8.581] \\ 
+  98outside0 & [0.348,3.230] & [0.224,3.959] & [0.109,5.021] & [0.023,7.443] \\ 
+     98total & [0.408,4.048] & [0.239,4.939] & [0.112,6.388] & [0.023,9.149] \\ 
+  9598inside & [0.752,3.335] & [0.562,3.900] & [0.367,4.711] & [0.133,6.475] \\ 
+9598insidelo & [0.665,3.003] & [0.475,3.543] & [0.302,4.293] & [0.104,5.941] \\ 
+9598insidehi & [0.777,3.522] & [0.581,4.132] & [0.379,4.950] & [0.042,6.816] \\ 
+ 9598outside & [0.781,3.237] & [0.580,3.768] & [0.382,4.506] & [0.151,6.125] \\ 
+9598outside0 & [0.679,2.905] & [0.511,3.406] & [0.332,4.086] & [0.123,5.562] \\ 
+   9598total & [0.792,3.294] & [0.592,3.838] & [0.390,4.583] & [0.151,6.261] \\ 
+\hline 
+\hline 
+\end{tabular} 
+
+\begin{tabular}[]{|l||c|c|c||} 
+\hline 
+ & \multicolumn{2}{|c|}{BR central value ($10^{-10}$)} & \\ 
+ & median (50\% CL) & max likelihood & 1 - CLb \\ 
+\hline 
+\hline 
+  9597inside & 1.823 & 1.481 & 0.010483 \\ 
+9597insidelo & 1.732 & 1.405 & 0.013810 \\ 
+9597insidehi & 1.725 & 1.557 & 0.007427 \\ 
+    98inside & 1.593 & 1.690 & 0.021526 \\ 
+  98insidelo & 1.508 & 1.481 & 0.036209 \\ 
+  98insidehi & 1.624 & 1.918 & 0.000866 \\ 
+   98outside & 1.608 & 1.994 & 0.004587 \\ 
+  98outside0 & 1.317 & 1.063 & 0.039743 \\ 
+     98total & 1.638 & 2.279 & 0.001324 \\ 
+  9598inside & 1.764 & 1.576 & 0.000213 \\ 
+9598insidelo & 1.549 & 1.424 & 0.001591 \\ 
+9598insidehi & 1.854 & 1.728 & 0.000000 \\ 
+ 9598outside & 1.759 & 1.728 & 0.000186 \\ 
+9598outside0 & 1.559 & 1.272 & 0.000186 \\ 
+   9598total & 1.785 & 1.842 & 0.000028 \\ 
+\hline 
+\hline 
+\end{tabular} 
+
+\pagebreak
+
+\begin{table}[t]
+\begin{center}
+\begin{tabular}[]{|l|rl|} 
+\hline 
+label & \multicolumn{2}{|c|}{events and dA/dN cells used to calculate BR} \\
+\hline
+\hline
+9597inside   & events: & 1 (1995 inside-the-box event) \\
+             & cells:  & 2 (inside the 1995-7 box:  ``golden'' + ``non-golden'') \\
+\hline
+98inside     & events: & 1 (1998 inside-the-box event) \\
+             & cells:  & 486 (inside the 1998 box) \\
+\hline
+98outside    & events: & 2 (1998 inside-the-box event + 1998 TD-failed event) \\
+             & cells:  & 7500 (inside and outside the 1998 box) \\
+\hline
+98outside0   & events: & 1 (1998 inside-the-box event) \\
+             & cells:  & 7500 (inside and outside the 1998 box) \\
+\hline
+98total      & events: & 3 (1998 inside-the-box event + 1998 Ntd=3.1 event + 1998 L/R amb. event) \\
+             & cells:  & 7500 (inside and outside the 1998 box) \\
+\hline
+9598inside   & events: & 2 (1995 and 1998 inside-the-box events) \\
+             & cells:  & 488 (2 inside the 1995-7 box, 486 inside the 1998 box) \\
+\hline
+9598outside  & events: & 3 (1995 and 1998 inside-the-box events + 1998 Ntd=3.1 event) \\
+             & cells:  & 7502 (2 inside the 1995-7 box, 7500 inside and outside the 1998 box) \\
+\hline
+9598outside0 & events: & 2 (1995 and 1998 inside-the-box events) \\
+             & cells:  & 7502 (2 inside the 1995-7 box, 7500 inside and outside the 1998 box) \\
+\hline
+9598total    & events: & 4 (1995 and 1998 inside-the-box events + 1998 Ntd=3.1 event + 1998 L/R amb. event) \\
+             & cells:  & 7502 (2 inside the 1995-7 box, 7500 inside and outside the 1998 box) \\
+\hline
+\hline
+\end{tabular} 
+\caption[]
+{
+   \label{t:likedesc} }
+\end{center}
+\end{table}
+
+\begin{table}[b]
+\begin{center}
+\begin{tabular}{|l||c|c|c|c|c||}
+\hline 
+ & 1995-7 & 1998 \\ 
+\hline 
+\hline 
+$\KPI$ & $0.0216 \pm 0.0050$ & $0.012 \pm 0.003 ^{+0.001} _{-0.003}$ \\
+\hline 
+$\KMU$ & $0.0282 \pm 0.0098$ & $0.0092 \pm 0.0067$ ($R$-tail) \\
+       &                     & $0.0245 \pm 0.0155$ (band) \\
+       &                     & $0.034 \pm 0.017 ^{+0.040} _{-0.017}$ (total) \\
+\hline 
+BM1    & $0.0054 \pm 0.0042$ & $0.0039 \pm 0.0012$ \\
+\hline 
+BM2    & $0.0157 \pm 0.0149$ & $0.0004 \pm 0.0001$ \\
+\hline 
+CEX    & $0.0096 \pm 0.0068$ & $0.0157 \pm 0.0030 ^{+0.0040} _{-0.0032}$ \\
+\hline 
+\hline 
+total  & $0.0804 \pm 0.0201$ & $0.0657 \pm 0.0175 ^{+0.0402} _{-0.0176}$ \\
+\hline
+\end{tabular} 
+\caption[Number of background events expected in the $\PNN (1)$ signal region.]
+{Number of background events expected in the $\PNN (1)$ signal region
+for the 1995-7 and 1998 data sets.  The first quoted uncertainties are
+statistical, and any additional quoted uncertainties are systematic.
+   \label{t:bg} }
+\end{center}
+\end{table}
+
+\begin{table}[b]
+\begin{center}
+\begin{tabular}{|l||c|c|}
+\hline 
+ & 1995-7 & 1998 \\ 
+\hline 
+1/s.e.s. $(10^{-10})$ &$1.496 \pm 0.036 \pm 0.051$ &$1.899 \pm 0.06 \pm 0.08$ \\
+\hline
+\end{tabular} 
+\caption[$\KPNN$ single-event sensitivities of the 1995-7 and 1998 analyses.]
+{$\KPNN$ single-event sensitivities of the 1995-7 and 1998 analyses.
+The first quoted uncertainties are
+statistical, and any additional quoted uncertainties are systematic.
+   \label{t:sens} }
+\end{center}
+\end{table}
+
+\end{document}
+
+
+
+
+
+
+

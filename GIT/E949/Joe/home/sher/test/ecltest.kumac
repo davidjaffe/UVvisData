@@ -1,0 +1,83 @@
+macro read
+
+do i = 1,9
+   vec/read sclbin[i],clsbin[i] eclbintest[i].vect
+enddo
+do i = 1,9
+   vec/read sclbg[i],clsbg[i] eclbgtest[i].vect
+enddo
+
+return
+
+macro plot
+
+opt date
+opt grid
+opt linx
+opt liny
+opt zfl1
+set lwid 6
+
+nmax = 100
+vec/cre dum([nmax]) r [nmax]*0.0000000001
+
+zon 1 1
+title 'BR limits for a signal event in different S/N bins'
+
+null 0.0 1.0 0.0 3.5
+do i = 1,9
+   gra/hplot/err clsbin[i] sclbin[i] dum dum [nmax] 19+[i] 0.2
+enddo
+dline 0.16 0.16 0.0 3.5
+dline 0.84 0.84 0.0 3.5
+dline 0.50 0.50 0.0 3.5
+text 0.15 0.1 '68"Y# CL upper limit' 0.3 90
+text 0.49 0.1 'mean' 0.3 90
+text 0.83 1.2 '68"Y# CL lower limit' 0.3 90
+key 0.55 3.2 20 'S/N = 7.4 (max)'
+key 0.55 3.1 21 'S/N = 3.2'
+key 0.55 3.0 22 'S/N = 1.9'
+key 0.55 2.9 23 'S/N = 1.0'
+key 0.55 2.8 24 'S/N = 0.51'
+key 0.55 2.7 25 'S/N = 0.25'
+key 0.55 2.6 26 'S/N = 0.13'
+key 0.55 2.5 27 'S/N = 0.045'
+key 0.55 2.4 28 'S/N = 0.029 (min)'
+text 0.51 3.3 'integrated box S/N = 1.0' 0.28
+atitle 'CLs' 'BR (units of s.e.s.)'
+
+wait
+pic/pri eclbintest.ps
+pic/pri eclbintest.eps
+
+zon 1 1
+title 'BR limits for 0 observed events, as a fn. of background level'
+
+null 0.0 1.0 0.0 3.5
+do i = 1,10
+   gra/hplot/err clsbg[i] sclbg[i] dum dum [nmax] 19+[i] 0.2
+enddo
+dline 0.16 0.16 0.0 3.5
+dline 0.84 0.84 0.0 3.5
+dline 0.50 0.50 0.0 3.5
+text 0.15 0.1 '68"Y# CL upper limit' 0.3 90
+text 0.49 0.1 'mean' 0.3 90
+text 0.83 1.2 '68"Y# CL lower limit' 0.3 90
+key 0.55 3.2 20 'bg = 0.02'
+key 0.55 3.1 21 'bg = 0.04'
+key 0.55 3.0 22 'bg = 0.06'
+key 0.55 2.9 23 'bg = 0.08'
+key 0.55 2.8 24 'bg = 0.10
+key 0.55 2.7 25 'bg = 0.12'
+key 0.55 2.6 26 'bg = 0.14'
+key 0.55 2.5 27 'bg = 0.16'
+key 0.55 2.5 28 'bg = 0.18'
+key 0.55 2.5 29 'bg = 0.20'
+atitle 'CLs' 'BR (units of s.e.s.)'
+
+wait
+pic/pri eclbgtest.ps
+pic/pri eclbgtest.eps
+
+return
+

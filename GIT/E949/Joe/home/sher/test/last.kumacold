@@ -1,0 +1,53 @@
+*** Begin of history file: Mon Feb 18 14:33:51 2002
+h/fil 1 ecl_all.rz
+nt/print 1
+nt/pl 1.lk%br
+nt/pl 1.lkn.f%br
+nt/pl 1.lklon.f%br ! ! ! ! s
+nt/pl 1.lkhin.f%br ! ! ! ! s
+nt/pl 1.cl%br abs(cl-0.68)<0.5
+nt/pl 1.cl%br abs(cl-0.68)<0.05
+set mtyp 27
+nt/pl 1.cl%br abs(cl-0.68)<0.05
+nt/pl 1.cl%br abs(cl-0.84)<0.05
+nt/pl 1.cllo%br ! ! ! ! s
+nt/pl 1.clhi%br ! ! ! ! s
+locate
+nt/pl 1.cl%br abs(cl-0.16)<0.05
+locate
+nt/pl 1.cl%br abs(cl-0.84)<0.05
+locate
+nt/pl 1.cllo%br abs(cl-0.84)<0.05
+locate
+nt/pl 1.lklo%br abs(cl-0.84)<0.05
+nt/pl 1.lklo%br
+nt/pl 1.lklo%br abs(lklo-1.6)<0.3
+nt/pl 1.lklo%br abs(br-1.6)<0.3
+nt/pl 1.lklo%br abs(br-1.4)<0.3
+nt/pl 1.lklo%br abs(br-1.4)<0.1
+nt/pl 1.lklo%br abs(br-1.4)<0.05
+nt/pl 1.lklo%br abs(br-1.43)<0.05
+locate
+nt/pl 1.lklo%br abs(cl-0.16)<0.05
+locate
+nt/pl 1.cllo%br abs(cl-0.16)<0.05
+locate
+nt/pl 1.cllo%br abs(cllo-0.16)<0.05
+locate
+nt/pl 1.cllo%br abs(cllo-0.84)<0.05
+locate
+nt/pl 1.clhi%br abs(clhi-0.84)<0.05
+locate
+nt/pl 1.lklo%br
+locate
+nt/pl 1.lkhi%br
+locate
+nt/pl 1.lkhi%br abs(br-1.66)<0.05
+nt/pl 1.lkhi%br abs(br-1.70)<0.05
+locate
+nt/pl 1.clhi%br abs(clhi-0.84)<0.05
+locate
+nt/pl 1.clhi%br abs(clhi-0.16)<0.05
+locate
+quit
+*** End   of history file: Mon Feb 18 16:22:17 2002

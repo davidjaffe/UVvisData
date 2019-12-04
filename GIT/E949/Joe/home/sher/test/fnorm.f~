@@ -1,0 +1,17 @@
+      REAL FUNCTION fnorm()
+      REAL
+     +BR      ,LKLO    ,CLLO    ,LK      ,CL      ,LKHI    ,
+     +CLHI     
+*
+      LOGICAL         CHAIN
+      CHARACTER*128   CFILE
+*
+      COMMON /PAWCHN/ CHAIN, NCHEVT, ICHEVT
+      COMMON /PAWCHC/ CFILE
+*
+      COMMON/PAWIDN/IDNEVT,OBS(13),
+     +BR      ,LKLO    ,CLLO    ,LK      ,CL      ,LKHI    ,
+     +CLHI     
+*
+      fnorm=1.
+      END

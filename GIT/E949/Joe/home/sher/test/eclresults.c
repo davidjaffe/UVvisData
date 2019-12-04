@@ -1,0 +1,147 @@
+/*
+ *    File:  eclresults.c
+ * Purpose:  read in the ecl{label}.vect files,
+ *           and make latex tables
+ *   Usage:  > eclresults
+ *
+ * History:  2001 Sep  PB  created
+ *
+ */
+
+#include <stdlib.h>
+#include <stdio.h>
+
+#define NFILES 15
+#define NSTEPS 501
+
+int main(void)
+{
+   int i,n;
+   float Xobs[NSTEPS],BR[NSTEPS],CLs[NSTEPS],diff[NSTEPS],CLb[NSTEPS];
+   float LL99[NFILES] = {0};
+   float LL95[NFILES] = {0};
+   float LL90[NFILES] = {0};
+   float LL84[NFILES] = {0};
+   float mdn[NFILES] = {0};
+   float max[NFILES] = {0};
+   float UL84[NFILES] = {0};
+   float UL90[NFILES] = {0};
+   float UL95[NFILES] = {0};
+   float UL99[NFILES] = {0};
+   float CLbav[NFILES] = {0};
+   float nav[NFILES] = {0};
+   char file[25];
+   char files[NFILES][20] = {"9597inside",
+                             "9597insidelo",
+                             "9597insidehi",
+                             "98inside",
+                             "98insidelo",
+                             "98insidehi",
+                             "98outside",
+                             "98outside0",
+                             "98total",
+                             "9598inside",
+                             "9598insidelo",
+                             "9598insidehi",
+                             "9598outside",
+                             "9598outside0",
+                             "9598total"};
+   FILE *ifp;
+
+   for (n = 0; n < NFILES; n++) {
+      sprintf(file, "%s%s%s", "ecl", files[n], ".vect");
+
+      CLbav[n] = 0;
+      nav[n] = 0;
+
+      if ((ifp = fopen(file,"r")) != NULL) {
+         printf("Reading %s... \n",file);
+
+         for (i = 0; fscanf(ifp,"%f %f %f %f %f",
+                        &Xobs[i],&BR[i],&CLs[i],&diff[i],&CLb[i]) == 5; i++) {
+
+            if ((CLs[i] < 0.99)&&(LL99[n] == 0)&&(i > 0)) {
+               LL99[n] = BR[i-1] + (BR[i]-BR[i-1])*(CLs[i-1]-0.99)/(CLs[i-1]-CLs[i]);
+	    }
+            if ((CLs[i] < 0.95)&&(LL95[n] == 0)&&(i > 0)) {
+               LL95[n] = BR[i-1] + (BR[i]-BR[i-1])*(CLs[i-1]-0.95)/(CLs[i-1]-CLs[i]);
+	    }
+            if ((CLs[i] < 0.90)&&(LL90[n] == 0)&&(i > 0)) {
+               LL90[n] = BR[i-1] + (BR[i]-BR[i-1])*(CLs[i-1]-0.90)/(CLs[i-1]-CLs[i]);
+	    }
+            if ((CLs[i] < 0.84)&&(LL84[n] == 0)&&(i > 0)) {
+               LL84[n] = BR[i-1] + (BR[i]-BR[i-1])*(CLs[i-1]-0.84)/(CLs[i-1]-CLs[i]);
+	    }
+            if ((CLs[i] < 0.50)&&(mdn[n] == 0)&&(i > 0)) {
+               mdn[n] = BR[i-1] + (BR[i]-BR[i-1])*(CLs[i-1]-0.50)/(CLs[i-1]-CLs[i]);
+	    }
+            if ((Xobs[i] < Xobs[i-1])&&(max[n] == 0)&&(i > 0)) {
+               max[n] = BR[i-1];
+	    }
+            if ((CLs[i] < 0.16)&&(UL84[n] == 0)&&(i > 0)) {
+               UL84[n] = BR[i-1] + (BR[i]-BR[i-1])*(CLs[i-1]-0.16)/(CLs[i-1]-CLs[i]);
+	    }
+            if ((CLs[i] < 0.10)&&(UL90[n] == 0)&&(i > 0)) {
+               UL90[n] = BR[i-1] + (BR[i]-BR[i-1])*(CLs[i-1]-0.10)/(CLs[i-1]-CLs[i]);
+	    }
+            if ((CLs[i] < 0.05)&&(UL95[n] == 0)&&(i > 0)) {
+               UL95[n] = BR[i-1] + (BR[i]-BR[i-1])*(CLs[i-1]-0.05)/(CLs[i-1]-CLs[i]);
+	    }
+            if ((CLs[i] < 0.01)&&(UL99[n] == 0)&&(i > 0)) {
+               UL99[n] = BR[i-1] + (BR[i]-BR[i-1])*(CLs[i-1]-0.01)/(CLs[i-1]-CLs[i]);
+	    }
+
+	    /*  Require large expected signal to get value of CLb */
+            if (BR[i] > 5.0) {
+               nav[n] += 1;
+               CLbav[n] += CLb[i];
+	    }
+	 }
+
+         CLbav[n] /= nav[n];
+
+         fclose(ifp);
+
+      } else {
+         printf("\n %s does not exist. \n");
+      }
+   }
+
+   printf("\n");
+
+   printf("\\begin{tabular}[]{|l||c|c|c|c||} \n");
+   printf("\\hline \n");
+   printf(" & 84\\%% CL limits & 90\\%% CL limits \n"); 
+   printf(" & 95\\%% CL limits & 99\\%% CL limits \\\\ \n");
+   printf(" & (68\\%% CL interval) & (80\\%% CL interval) \n");
+   printf(" & (90\\%% CL interval) & (98\\%% CL interval) \\\\ \n");
+   printf("\\hline \n");
+   printf("\\hline \n");
+   for (n = 0; n < NFILES; n++) {
+      printf("%12s & [%5.3f,%5.3f] & [%5.3f,%5.3f] & [%5.3f,%5.3f] & [%5.3f,%5.3f] \\\\ \n",
+             files[n],LL84[n],UL84[n],LL90[n],UL90[n],LL95[n],UL95[n],LL99[n],UL99[n]);
+   }
+   printf("\\hline \n");
+   printf("\\hline \n");
+   printf("\\end{tabular} \n");
+
+   printf("\n");
+
+   printf("\\begin{tabular}[]{|l||c|c|c||} \n");
+   printf("\\hline \n");
+   printf(" & \\multicolumn{2}{|c|}{BR central value ($10^{-10}$)} & \\\\ \n");
+   printf(" & median (50\\%% CL) & max likelihood & 1 - CLb \\\\ \n");
+   printf("\\hline \n");
+   printf("\\hline \n");
+   for (n = 0; n < NFILES; n++) {
+      printf("%12s & %5.3f & %5.3f & %8.6f \\\\ \n",
+             files[n],mdn[n],max[n],1.0-CLbav[n]);
+   }
+   printf("\\hline \n");
+   printf("\\hline \n");
+   printf("\\end{tabular} \n");
+
+   printf("\n");
+
+   exit(0);
+}

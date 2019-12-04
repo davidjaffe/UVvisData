@@ -1,0 +1,925 @@
+/*
+ *    File:  bglike.c
+ * Purpose:  define the inside-the-box (and outside-the-box)
+ *           global background function
+ *   Usage:  > bglike
+ *
+ * History:  2001 Jul 25  PB  created
+ *
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include "bglike.h"
+
+/*
+ *  Create the total function.
+ */
+int main(void)
+{
+   FILE *ifp,*ofp;
+   DKFUNC bgpv,bgkp2,bgtd,bgkm2t,bgkm2b;
+   CBFUNC bgkp2tot,bgkm2tot;
+   BMFUNC bgbm1,bgbm2;
+   TOTFUNC bgtotal;
+   PTRDKVALUE p,p1,p2,p3,fn1,fn2,fn3,fn1t,fn2t,fn3t;
+   PTRCBVALUE q,qdel;
+   PTRBMVALUE b;
+   PTRTOTVALUE t;
+   float kp2old,km2told,km2bold,bm1kold,bm1pold,cexold,bm2kold,bm2pold;
+   float kp2new,km2tnew,km2bnew,bm1knew,bm1pnew,cexnew,bm2knew,bm2pnew;
+   float totold,totnew,accold,accnew;
+   float Rpv,Apv,Rkp2,Akp2,Rtd,Atd,Rkm2t,Akm2t,Rkm2b,Akm2b;
+   float Rbm1k,Rbm1p,Rcex,Abm1,Rbm2k,Rbm2p,Abm2;
+   float RA,RAmax;
+   float d,tot;
+   int i,j,k,ndel;
+   float nt,at;
+
+   /*
+    *  Initialize.
+    */
+   bgpv.nvalues = 0;
+   bgpv.head = bgpv.box = bgpv.tail = NULL;
+   bgkp2.nvalues = 0;
+   bgkp2.head = bgkp2.box = bgkp2.tail = NULL;
+   bgkp2tot.nvalues = 0;
+   bgkp2tot.head = bgkp2tot.tail = NULL;
+   bgtd.nvalues = 0;
+   bgtd.head = bgtd.box = bgtd.tail = NULL;
+   bgkm2t.nvalues = 0;
+   bgkm2t.head = bgkm2t.box = bgkm2t.tail = NULL;
+   bgkm2b.nvalues = 0;
+   bgkm2b.head = bgkm2b.box = bgkm2b.tail = NULL;
+   bgkm2tot.nvalues = 0;
+   bgkm2tot.head = bgkm2tot.tail = NULL;
+   bgbm1.nvalues = 0;
+   bgbm1.head = bgbm1.box = bgbm1.tail = NULL;
+   bgbm2.nvalues = 0;
+   bgbm2.head = bgbm2.box = bgbm2.tail = NULL;
+   bgtotal.nvalues = 0;
+   bgtotal.head = bgtotal.tail = NULL;
+
+   /*
+    *  Read the PV function into a structure.
+    */
+   if ((ifp = fopen(FilePv,"r")) == NULL) {
+      printf("Not using PV function, because %s does not exist. \n",FilePv);
+   } else {
+      bgpv.head = malloc(sizeof(DKVALUE));
+      bgpv.head -> prev = NULL;
+      bgpv.tail = bgpv.head;
+      p = bgpv.head;
+      while (fscanf(ifp,"%f %f",&(p->n),&(p->a)) == 2) {
+         (p -> n) = 46.918/(p -> n);
+         bgpv.nvalues += 1;
+         if ((p -> n) == BoxNPv) {
+            bgpv.box = p;
+         }
+         bgpv.tail = p;
+         bgpv.tail -> next = malloc(sizeof(DKVALUE));
+         bgpv.tail -> next -> prev = bgpv.tail;
+         p = bgpv.tail -> next;
+      }
+      free(p);
+      if (bgpv.nvalues == 0) {
+         bgpv.head = NULL;
+         bgpv.tail = NULL;
+      } else {
+         bgpv.tail -> next = NULL;
+      }
+   }
+
+   /*
+    *  Read the Kp2 kinematic function into a structure.
+    */
+   if ((ifp = fopen(FileKp2,"r")) == NULL) {
+      printf("Not using Kp2 function, because %s does not exist. \n",FileKp2);
+   } else {
+      bgkp2.head = malloc(sizeof(DKVALUE));
+      bgkp2.head -> prev = NULL;
+      bgkp2.tail = bgkp2.head;
+      p = bgkp2.head;
+      while (fscanf(ifp,"%f %f %f %f %f",&d,&d,&d,&(p->a),&(p->n)) == 5) {
+         bgkp2.nvalues += 1;
+         if ((p -> n) == BoxNKp2) {
+            bgkp2.box = p;
+         }
+         bgkp2.tail = p;
+         bgkp2.tail -> next = malloc(sizeof(DKVALUE));
+         bgkp2.tail -> next -> prev = bgkp2.tail;
+         p = bgkp2.tail -> next;
+      }
+      free(p);
+      if (bgkp2.nvalues == 0) {
+         bgkp2.head = NULL;
+         bgkp2.tail = NULL;
+      } else {
+         bgkp2.tail -> next = NULL;
+      }
+   }
+
+   /*
+    *  Read the TD function into a structure.
+    */
+   if ((ifp = fopen(FileTd,"r")) == NULL) {
+      printf("Not using TD function, because %s does not exist. \n",FileTd);
+   } else {
+      bgtd.head = malloc(sizeof(DKVALUE));
+      bgtd.head -> prev = NULL;
+      bgtd.tail = bgtd.head;
+      p = bgtd.head;
+      while (fscanf(ifp,"%f %f %f",&(p->n),&(p->a),&d) == 3) {
+         (p -> n) /= 39;
+         bgtd.nvalues += 1;
+         if ((p -> n) == BoxNTd) {
+            bgtd.box = p;
+         }
+         bgtd.tail = p;
+         bgtd.tail -> next = malloc(sizeof(DKVALUE));
+         bgtd.tail -> next -> prev = bgtd.tail;
+         p = bgtd.tail -> next;
+      }
+      free(p);
+      if (bgtd.nvalues == 0) {
+         bgtd.head = NULL;
+         bgtd.tail = NULL;
+      } else {
+         bgtd.tail -> next = NULL;
+      }
+   }
+
+   /*
+    *  Read the Km2 range-tail kinematic function into a structure.
+    */
+   if ((ifp = fopen(FileKm2t,"r")) == NULL) {
+      printf("Not using Km2 range-tail function, because %s does not exist. \n",FileKm2t);
+   } else {
+      bgkm2t.head = malloc(sizeof(DKVALUE));
+      bgkm2t.head -> prev = NULL;
+      bgkm2t.tail = bgkm2t.head;
+      p = bgkm2t.head;
+      while (fscanf(ifp,"%f %f",&(p->n),&(p->a)) == 2) {
+         bgkm2t.nvalues += 1;
+         if ((p -> n) == BoxNKm2t) {
+            bgkm2t.box = p;
+         }
+         bgkm2t.tail = p;
+         bgkm2t.tail -> next = malloc(sizeof(DKVALUE));
+         bgkm2t.tail -> next -> prev = bgkm2t.tail;
+         p = bgkm2t.tail -> next;
+      }
+      free(p);
+      if (bgkm2t.nvalues == 0) {
+         bgkm2t.head = NULL;
+         bgkm2t.tail = NULL;
+      } else {
+         bgkm2t.tail -> next = NULL;
+      }
+   }
+
+   /*
+    *  Read the muon-band kinematic function into a structure.
+    */
+   if ((ifp = fopen(FileKm2b,"r")) == NULL) {
+      printf("Not using muon-band function, because %s does not exist. \n",FileKm2b);
+   } else {
+      bgkm2b.head = malloc(sizeof(DKVALUE));
+      bgkm2b.head -> prev = NULL;
+      bgkm2b.tail = bgkm2b.head;
+      p = bgkm2b.head;
+      while (fscanf(ifp,"%f %f",&(p->n),&(p->a)) == 2) {
+         bgkm2b.nvalues += 1;
+         if ((p -> n) == BoxNKm2b) {
+            bgkm2b.box = p;
+         }
+         bgkm2b.tail = p;
+         bgkm2b.tail -> next = malloc(sizeof(DKVALUE));
+         bgkm2b.tail -> next -> prev = bgkm2b.tail;
+         p = bgkm2b.tail -> next;
+      }
+      free(p);
+      if (bgkm2b.nvalues == 0) {
+         bgkm2b.head = NULL;
+         bgkm2b.tail = NULL;
+      } else {
+         bgkm2b.tail -> next = NULL;
+      }
+   }
+
+   /*
+    *  Read the single-beam function into a structure.
+    */
+   if ((ifp = fopen(FileBm1,"r")) == NULL) {
+      printf("Not using Bm1 function, because %s does not exist. \n",FileBm1);
+   } else {
+      bgbm1.head = malloc(sizeof(BMVALUE));
+      bgbm1.head -> prev = NULL;
+      bgbm1.tail = bgbm1.head;
+      b = bgbm1.head;
+      while (fscanf(ifp,"%f %f %f %f %f %f %f",&d, \
+             &(b->kaon),&(b->pion),&(b->cex),&d,&(b->n),&(b->a)) == 7) {
+         b -> kaon *= 0.01;
+         b -> pion *= 0.01;
+         b -> cex *= 0.01;
+         bgbm1.nvalues += 1;
+         if ((b -> n) == BoxNBm1) {
+            bgbm1.box = b;
+         }
+         bgbm1.tail = b;
+         bgbm1.tail -> next = malloc(sizeof(BMVALUE));
+         bgbm1.tail -> next -> prev = bgbm1.tail;
+         b = bgbm1.tail -> next;
+      }
+      free(b);
+      if (bgbm1.nvalues == 0) {
+         bgbm1.head = NULL;
+         bgbm1.tail = NULL;
+      } else {
+         bgbm1.tail -> next = NULL;
+      }
+   }
+
+   /*
+    *  Read the double-beam function into a structure.
+    */
+   if ((ifp = fopen(FileBm2,"r")) == NULL) {
+      printf("Not using Bm2 function, because %s does not exist. \n",FileBm2);
+   } else {
+      bgbm2.head = malloc(sizeof(BMVALUE));
+      bgbm2.head -> prev = NULL;
+      bgbm2.tail = bgbm2.head;
+      b = bgbm2.head;
+      while (fscanf(ifp,"%f %f %f %f %f %f",&d, \
+             &(b->kaon),&(b->pion),&d,&(b->n),&(b->a)) == 6) {
+         b -> cex = 0.;
+         b -> kaon *= 0.01;
+         b -> pion *= 0.01;
+         bgbm2.nvalues += 1;
+         if ((b -> n) == BoxNBm2) {
+            bgbm2.box = b;
+         }
+         bgbm2.tail = b;
+         bgbm2.tail -> next = malloc(sizeof(BMVALUE));
+         bgbm2.tail -> next -> prev = bgbm2.tail;
+         b = bgbm2.tail -> next;
+      }
+      free(b);
+      if (bgbm2.nvalues == 0) {
+         bgbm2.head = NULL;
+         bgbm2.tail = NULL;
+      } else {
+         bgbm2.tail -> next = NULL;
+      }
+   }
+
+   /*
+    *  Combine the PV and Kp2 kinematic functions into a single Kp2
+    *  function.
+    *
+    *  Loop over all possible combinations of PV and Kp2 function values,
+    *  and calculate the resulting Kp2 background level and acceptance.
+    */
+   printf("Scanning the PV-Kp2 space... \n");
+   for (i = 0; i < bgpv.nvalues; i++) {
+      if (i == 0) {
+         p1 = bgpv.head;
+      } else {
+         p1 = p1 -> next;
+      }
+      for (j = 0; j < bgkp2.nvalues; j++) {
+         if (j == 0) {
+            p2 = bgkp2.head;
+         } else {
+            p2 = p2 -> next;
+         }
+         if ((i == 0)&&(j == 0)) {
+            bgkp2tot.head = malloc(sizeof(CBVALUE));
+            q = bgkp2tot.head;
+            q -> n = ((p1 -> n)/BoxNPv)*((p2 -> n)/BoxNKp2);
+            q -> a = ((p1 -> a)/BoxAPv)*((p2 -> a)/BoxAKp2);
+            q -> fn1 = p1;
+            q -> fn2 = p2;
+            q -> fn3 = p2;
+            q -> next = NULL;
+            q -> prev = NULL;
+            bgkp2tot.tail = q;
+            bgkp2tot.nvalues += 1;
+         } else {
+            q -> next = malloc(sizeof(CBVALUE));
+            q -> next -> n = ((p1 -> n)/BoxNPv)*((p2 -> n)/BoxNKp2);
+            q -> next -> a = ((p1 -> a)/BoxAPv)*((p2 -> a)/BoxAKp2);
+            q -> next -> fn1 = p1;
+            q -> next -> fn2 = p2;
+            q -> next -> fn3 = p2;
+            q -> next -> next = NULL;
+            q -> next -> prev = q;
+            bgkp2tot.tail = q -> next;
+            bgkp2tot.nvalues += 1;
+            q = q -> next;
+	 }
+      }
+   }
+
+   /*
+    *  Do a "bubble sort" on each combination of PV and Kp2 function values,
+    *  so that the combined Kp2 function is ordered from largest Kp2
+    *  background level to smallest,
+    */
+   printf("Ordering the PV-Kp2 space (double loop over %d values) \n",
+          bgkp2tot.nvalues);
+   for (i = 0; i < bgkp2tot.nvalues; i++) {
+      for (q = bgkp2tot.tail; q -> prev != NULL; q = q -> prev) {
+         if (q -> prev -> n < q -> n) {
+            nt = q -> n;
+            at = q -> a;
+            fn1t = q -> fn1;
+            fn2t = q -> fn2;
+            fn3t = q -> fn3;
+
+            q -> n = q -> prev -> n;
+            q -> a = q -> prev -> a;
+            q -> fn1 = q -> prev -> fn1;
+            q -> fn2 = q -> prev -> fn2;
+            q -> fn3 = q -> prev -> fn3;
+
+            q -> prev -> n = nt;
+            q -> prev -> a = at;
+            q -> prev -> fn1 = fn1t;
+            q -> prev -> fn2 = fn2t;
+            q -> prev -> fn3 = fn3t;
+         }
+      }
+   }
+
+   /*
+    *  Now do a "bubble optimization" of the combined Kp2 function.
+    *  That is, loop through the combined Kp2 function in order of
+    *  decreasing Kp2 background level, and check that acceptance
+    *  is also decreasing.  If acceptance increases at any point,
+    *  remove the point before it, as this previous point is not
+    *  "optimal" in terms of background level and acceptance.  Repeat
+    *  the loop until no more "non-optimal" points are found.
+    */
+   printf("Optimizing the PV-Kp2 space... \n");
+   ndel = 1;
+   while (ndel > 0) {
+      ndel = 0;
+      for (q = bgkp2tot.head; q -> next != NULL; q = q -> next) {
+         if (q -> next -> a > q -> a) {
+            qdel = q;
+            if (q == bgkp2tot.head) {
+               bgkp2tot.head = q -> next;
+            } else {
+               q -> prev -> next = q -> next;
+	    }
+            q -> next -> prev = q -> prev;
+            free(qdel);
+            bgkp2tot.nvalues--;
+            ndel += 1;
+         }
+      }
+   }
+   ofp = fopen("bgkp2tot.dat","w");
+   q = bgkp2tot.head;
+   while (q != NULL) {
+      fprintf(ofp,"%12.5f %8.5f %9.5f %8.5f \n",q->n,q->a,q->fn1->n,q->fn2->n);
+      q = q -> next;
+   }
+   fclose(ofp);
+
+   /*
+    *  Combine the TD and Km2 kinematic functions into a single Km2
+    *  function.
+    *
+    *  Loop over all possible combinations of TD and Km2 range-tail
+    *  and muon-band function values, and calculate the resulting Km2
+    *  background level and acceptance.
+    */
+   printf("Scanning the TD-Km2 space... \n");
+   for (i = 0; i < bgtd.nvalues; i++) {
+      if (i == 0) {
+         p1 = bgtd.head;
+      } else {
+         p1 = p1 -> next;
+      }
+      for (j = 0; j < bgkm2t.nvalues; j++) {
+         if (j == 0) {
+            p2 = bgkm2t.head;
+         } else {
+            p2 = p2 -> next;
+         }
+         for (k = 0; k < bgkm2b.nvalues; k++) {
+            if (k == 0) {
+               p3 = bgkm2b.head;
+            } else {
+               p3 = p3 -> next;
+            }
+            if ((i == 0)&&(j == 0)&&(k ==0)) {
+               bgkm2tot.head = malloc(sizeof(CBVALUE));
+               q = bgkm2tot.head;
+               q -> n = (((p1 -> n)/BoxNTd)*((p2 -> n)/BoxNKm2t)*
+                         BoxBgKm2t +
+                         ((p1 -> n)/BoxNTd)*((p3 -> n)/BoxNKm2b)*
+                         BoxBgKm2b)/
+                        (BoxBgKm2t + BoxBgKm2b);
+               q -> a = ((p1 -> a)/BoxATd)*
+                        ((p2 -> a)/BoxAKm2t)*
+                        ((p3 -> a)/BoxAKm2b);
+               q -> fn1 = p1;
+               q -> fn2 = p2;
+               q -> fn3 = p3;
+               q -> next = NULL;
+               q -> prev = NULL;
+               bgkm2tot.tail = q;
+               bgkm2tot.nvalues += 1;
+            } else {
+               q -> next = malloc(sizeof(CBVALUE));
+               q -> next -> n = (((p1 -> n)/BoxNTd)*((p2 -> n)/BoxNKm2t)*
+                                 BoxBgKm2t +
+                                 ((p1 -> n)/BoxNTd)*((p3 -> n)/BoxNKm2b)*
+                                 BoxBgKm2b)/
+                                (BoxBgKm2t + BoxBgKm2b);
+               q -> next -> a = ((p1 -> a)/BoxATd)*
+                                ((p2 -> a)/BoxAKm2t)*
+                                ((p3 -> a)/BoxAKm2b);
+               q -> next -> fn1 = p1;
+               q -> next -> fn2 = p2;
+               q -> next -> fn3 = p3;
+               q -> next -> next = NULL;
+               q -> next -> prev = q;
+               bgkm2tot.tail = q -> next;
+               bgkm2tot.nvalues += 1;
+               q = q -> next;
+	    }
+	 }
+      }
+   }
+
+   /*
+    *  Do a "bubble sort" on each combination of TD and Km2 range-tail
+    *  and muon-band function values, so that the combined Km2 function
+    *  is ordered from largest Km2 background level to smallest,
+    */
+   printf("Ordering the TD-Km2 space (double loop over %d values) \n",
+          bgkm2tot.nvalues);
+   for (i = 0; i < bgkm2tot.nvalues; i++) {
+      for (q = bgkm2tot.tail; q -> prev != NULL; q = q -> prev) {
+         if (q -> prev -> n < q -> n) {
+            nt = q -> n;
+            at = q -> a;
+            fn1t = q -> fn1;
+            fn2t = q -> fn2;
+            fn3t = q -> fn3;
+
+            q -> n = q -> prev -> n;
+            q -> a = q -> prev -> a;
+            q -> fn1 = q -> prev -> fn1;
+            q -> fn2 = q -> prev -> fn2;
+            q -> fn3 = q -> prev -> fn3;
+
+            q -> prev -> n = nt;
+            q -> prev -> a = at;
+            q -> prev -> fn1 = fn1t;
+            q -> prev -> fn2 = fn2t;
+            q -> prev -> fn3 = fn3t;
+         }
+      }
+   }
+
+   /*
+    *  Now do a "bubble optimization" of the combined Km2 function.
+    *  That is, loop through the combined Km2 function in order of
+    *  decreasing Km2 background level, and check that acceptance
+    *  is also decreasing.  If acceptance increases at any point,
+    *  remove the point before it, as this previous point is not
+    *  "optimal" in terms of background level and acceptance.  Repeat
+    *  the loop until no more "non-optimal" points are found.
+    */
+   printf("Optimizing the TD-Km2 space... \n");
+   ndel = 1;
+   while (ndel > 0) {
+      ndel = 0;
+      for (q = bgkm2tot.head; q -> next != NULL; q = q -> next) {
+         if (q -> next -> a > q -> a) {
+            qdel = q;
+            if (q == bgkm2tot.head) {
+               bgkm2tot.head = q -> next;
+            } else {
+               q -> prev -> next = q -> next;
+	    }
+            q -> next -> prev = q -> prev;
+            free(qdel);
+            bgkm2tot.nvalues--;
+            ndel += 1;
+         }
+      }
+   }
+   ofp = fopen("bgkm2tot.dat","w");
+   q = bgkm2tot.head;
+   while (q != NULL) {
+      fprintf(ofp,"%12.5f %8.5f %9.5f %8.5f %8.5f \n",q->n,q->a,q->fn1->n,q->fn2->n,q->fn3->n);
+      q = q -> next;
+   }
+   fclose(ofp);
+
+   /*
+    *  We now have 4 "uncorrelated" functions:  a total Kp2 function,
+    *  a total Km2 function, a Bm1 function, and a Bm2 function.  We can
+    *  now start at the loosest cut position and tighten these independently
+    *  in order to define the total background function.
+    *
+    *  First define the total background at the loosest cut position.
+    */
+   bgtotal.head = malloc(sizeof(TOTVALUE));
+   bgtotal.tail = bgtotal.head;
+   t = bgtotal.head;
+   t -> ptrkp2tot = bgkp2tot.head;
+   t -> ptrkm2tot = bgkm2tot.head;
+   t -> ptrbm1 = bgbm1.head;
+   t -> ptrbm2 = bgbm2.head;
+   t -> next = NULL;
+   t -> prev = NULL;
+
+   Rpv = BoxNPv/(t -> ptrkp2tot -> fn1 -> n);
+   Apv = (t -> ptrkp2tot -> fn1 -> a)/BoxAPv;
+   Rkp2 = BoxNKp2/(t -> ptrkp2tot -> fn2 -> n);
+   Akp2 = (t -> ptrkp2tot -> fn2 -> a)/BoxAKp2;
+   Rtd = BoxNTd/(t -> ptrkm2tot -> fn1 -> n);
+   Atd = (t -> ptrkm2tot -> fn1 -> a)/BoxATd;
+   Rkm2t = BoxNKm2t/(t -> ptrkm2tot -> fn2 -> n);
+   Akm2t = (t -> ptrkm2tot -> fn2 -> a)/BoxAKm2t;
+   Rkm2b = BoxNKm2b/(t -> ptrkm2tot -> fn3 -> n);
+   Akm2b = (t -> ptrkm2tot -> fn3 -> a)/BoxAKm2b;
+   Rbm1k = BoxNBm1k/(t -> ptrbm1 -> kaon);
+   Rbm1p = BoxNBm1p/(t -> ptrbm1 -> pion);
+   Rcex = BoxNCex/(t -> ptrbm1 -> cex);
+   Abm1 = (t -> ptrbm1 -> a)/BoxABm1;
+   Rbm2k = BoxNBm2k/(t -> ptrbm2 -> kaon);
+   Rbm2p = BoxNBm2p/(t -> ptrbm2 -> pion);
+   Abm2 = (t -> ptrbm2 -> a)/BoxABm2;
+
+   kp2old = BoxBgKp2;
+   km2told = BoxBgKm2t;
+   km2bold = BoxBgKm2b;
+   bm1kold = BoxBgBm1k;
+   bm1pold = BoxBgBm1p;
+   cexold =  BoxBgCex;
+   bm2kold = BoxBgBm2k;
+   bm2pold = BoxBgBm2p;
+   totold = kp2old + km2told + km2bold +
+            bm1kold + bm1pold + cexold +
+            bm2kold + bm2pold;
+   accold = BoxAPv*BoxAKp2*BoxATd*BoxAKm2t*BoxAKm2b*BoxABm1*BoxABm2;
+
+   kp2new = (kp2old/(Rpv*Rkp2))*Atd*Abm1*Abm2;
+   km2tnew = (km2told/(Rkm2t*Rtd))*Apv*Abm1*Abm2;
+   km2bnew = (km2bold/(Rkm2b*Rtd))*Apv*Abm1*Abm2;
+   bm1knew = (bm1kold/Rbm1k)*
+             Apv*Akp2*Atd*Akm2t*Akm2b*Abm2;
+   bm1pnew = (bm1pold/Rbm1p)*
+             Apv*Akp2*Atd*Akm2t*Akm2b*Abm2;
+   cexnew = (cexold/Rcex)*
+             Apv*Akp2*Atd*Akm2t*Akm2b*Abm2;
+   bm2knew = (bm2kold/Rbm2k)*
+             Apv*Akp2*Atd*Akm2t*Akm2b*Abm1;
+   bm2pnew = (bm2pold/Rbm2p)*
+             Apv*Akp2*Atd*Akm2t*Akm2b*Abm1;
+   totnew = kp2new + km2tnew + km2bnew + 
+            bm1knew + bm1pnew + cexnew + 
+            bm2knew + bm2pnew;
+   accnew = accold*Apv*Akp2*Atd*Akm2t*Akm2b*Abm1*Abm2;
+
+   t -> n = totnew/totold;
+   t -> a = accnew/accold;
+   t -> kp2 = kp2new;
+   t -> km2t = km2tnew;
+   t -> km2b = km2bnew;
+   t -> bm1k = bm1knew;
+   t -> bm1p = bm1pnew;
+   t -> cex = cexnew;
+   t -> bm2k = bm2knew;
+   t -> bm2p = bm2pnew;
+
+   bgtotal.nvalues += 1;
+
+   /*
+    *  Now loop over the 4 functions, and tighten them one at a time
+    *  to define the global background function inside the box.
+    *  The one function which gives the largest absolute decrease in
+    *  total background level per absolute decrease in total acceptance
+    *  is the function that is tightened at each step.
+    */
+   printf("Stepping through the 4 functions to create the total background function... \n");
+
+   while (((t -> ptrkp2tot -> next) != NULL) || \
+          ((t -> ptrkm2tot -> next) != NULL) || \
+          ((t -> ptrbm1 -> next) != NULL) || \
+          ((t -> ptrbm2 -> next) != NULL)) {
+     
+      t -> next = malloc(sizeof(TOTVALUE));
+
+      kp2old = (t -> kp2);
+      km2told = (t -> km2t);
+      km2bold = (t -> km2b);
+      bm1kold = (t -> bm1k);
+      bm1pold = (t -> bm1p);
+      cexold = (t -> cex);
+      bm2kold = (t -> bm2k);
+      bm2pold = (t -> bm2p);
+      totold = kp2old + km2told + km2bold +
+               bm1kold + bm1pold + cexold +
+               bm2kold + bm2pold;
+      accold = (t -> a);
+
+      RAmax = -99999.;
+
+      /*
+       *  Get the new background level and acceptance
+       *  by tightening the combined Kp2 function.
+       */
+      if ((t -> ptrkp2tot -> next) != NULL) {
+         Rpv = 1;
+         if (t -> ptrkp2tot -> next -> fn1 -> n != 0)
+            Rpv = (t -> ptrkp2tot -> fn1 -> n)/
+                  (t -> ptrkp2tot -> next -> fn1 -> n);
+         Apv = 0;
+         if (t -> ptrkp2tot -> fn1 -> a != 0)
+            Apv = (t -> ptrkp2tot -> next -> fn1 -> a)/
+                  (t -> ptrkp2tot -> fn1 -> a);
+
+         Rkp2 = 1;
+         if (t -> ptrkp2tot -> next -> fn2 -> n != 0)
+            Rkp2 = (t -> ptrkp2tot -> fn2 -> n)/
+                   (t -> ptrkp2tot -> next -> fn2 -> n);
+         Akp2 = 0;
+         if (t -> ptrkp2tot -> fn2 -> a != 0)
+            Akp2 = (t -> ptrkp2tot -> next -> fn2 -> a)/
+                   (t -> ptrkp2tot -> fn2 -> a);
+
+         kp2new = kp2old/(Rpv*Rkp2);
+         km2tnew = km2told*Apv;
+         km2bnew = km2bold*Apv;
+         bm1knew = bm1kold*Apv;
+         bm1pnew = bm1pold*Apv;
+         cexnew = cexold*Apv;
+         bm2knew = bm2kold*Apv;
+         bm2pnew = bm2pold*Apv;
+         totnew = kp2new + km2tnew + km2bnew +
+                  bm1knew + bm1pnew + cexnew +
+                  bm2knew + bm2pnew;
+         accnew = accold*Apv*Akp2;
+
+         if (accnew == accold) {
+            RA = 99999.;
+         } else {
+            RA = (1 - totnew/totold)/(1 - accnew/accold);
+	 }
+         printf("Kp2 %f ",RA);
+
+         if (RA > RAmax) {
+            RAmax = RA;
+            t -> next -> n = (totnew/totold)*(t -> n);
+            t -> next -> a = (accnew/accold)*(t -> a);
+            t -> next -> kp2 = kp2new;
+            t -> next -> km2t = km2tnew;
+            t -> next -> km2b = km2bnew;
+            t -> next -> bm1k = bm1knew;
+            t -> next -> bm1p = bm1pnew;
+            t -> next -> cex = cexnew;
+            t -> next -> bm2k = bm2knew;
+            t -> next -> bm2p = bm2pnew;
+            t -> next -> ptrkp2tot = t -> ptrkp2tot -> next;
+            t -> next -> ptrkm2tot = t -> ptrkm2tot;
+            t -> next -> ptrbm1 = t -> ptrbm1;
+            t -> next -> ptrbm2 = t -> ptrbm2;
+         }
+      } 
+
+      /*
+       *  Get the new background level and acceptance
+       *  by tightening the combined Km2 function.
+       */
+      if ((t -> ptrkm2tot -> next) != NULL) {
+         Rtd = 1;
+         if (t -> ptrkm2tot -> next -> fn1 -> n != 0)
+            Rtd = (t -> ptrkm2tot -> fn1 -> n)/
+                  (t -> ptrkm2tot -> next -> fn1 -> n);
+         Atd = 0;
+         if (t -> ptrkm2tot -> fn1 -> a != 0)
+            Atd = (t -> ptrkm2tot -> next -> fn1 -> a)/
+                  (t -> ptrkm2tot -> fn1 -> a);
+
+         Rkm2t = 1;
+         if (t -> ptrkm2tot -> next -> fn2 -> n != 0)
+            Rkm2t = (t -> ptrkm2tot -> fn2 -> n)/
+                    (t -> ptrkm2tot -> next -> fn2 -> n);
+         Akm2t = 0;
+         if (t -> ptrkm2tot -> fn2 -> a != 0)
+            Akm2t = (t -> ptrkm2tot -> next -> fn2 -> a)/
+                    (t -> ptrkm2tot -> fn2 -> a);
+
+         Rkm2b = 1;
+         if (t -> ptrkm2tot -> next -> fn3 -> n != 0)
+            Rkm2b = (t -> ptrkm2tot -> fn3 -> n)/
+                    (t -> ptrkm2tot -> next -> fn3 -> n);
+         Akm2b = 0;
+         if (t -> ptrkm2tot -> fn3 -> a != 0)
+            Akm2b = (t -> ptrkm2tot -> next -> fn3 -> a)/
+                    (t -> ptrkm2tot -> fn3 -> a);
+
+         kp2new = kp2old*Atd;
+         km2tnew = km2told/(Rtd*Rkm2t);
+         km2bnew = km2bold/(Rtd*Rkm2b);
+         bm1knew = bm1kold*Atd*Akm2t*Akm2b;
+         bm1pnew = bm1pold*Atd*Akm2t*Akm2b;
+         cexnew = cexold*Atd*Akm2t*Akm2b;
+         bm2knew = bm2kold*Atd*Akm2t*Akm2b;
+         bm2pnew = bm2pold*Atd*Akm2t*Akm2b;
+         totnew = kp2new + km2tnew + km2bnew +
+                  bm1knew + bm1pnew + cexnew +
+                  bm2knew + bm2pnew;
+         accnew = accold*Atd*Akm2t*Akm2b;
+
+         if (accnew == accold) {
+            RA = 99999.;
+         } else {
+            RA = (1 - totnew/totold)/(1 - accnew/accold);
+	 }
+         printf("Km2 %f ",RA);
+
+         if (RA > RAmax) {
+            RAmax = RA;
+            t -> next -> n = (totnew/totold)*(t -> n);
+            t -> next -> a = (accnew/accold)*(t -> a);
+            t -> next -> kp2 = kp2new;
+            t -> next -> km2t = km2tnew;
+            t -> next -> km2b = km2bnew;
+            t -> next -> bm1k = bm1knew;
+            t -> next -> bm1p = bm1pnew;
+            t -> next -> cex = cexnew;
+            t -> next -> bm2k = bm2knew;
+            t -> next -> bm2p = bm2pnew;
+            t -> next -> ptrkp2tot = t -> ptrkp2tot;
+            t -> next -> ptrkm2tot = t -> ptrkm2tot -> next;
+            t -> next -> ptrbm1 = t -> ptrbm1;
+            t -> next -> ptrbm2 = t -> ptrbm2;
+         }
+      } 
+
+      /*
+       *  Get the new background level and acceptance
+       *  by tightening the single-beam function.
+       */
+      if ((t -> ptrbm1 -> next) != NULL) {
+         Rbm1k = 1;
+         if (t -> ptrbm1 -> next -> kaon != 0)
+            Rbm1k = (t -> ptrbm1 -> kaon)/
+                    (t -> ptrbm1 -> next -> kaon);
+         Rbm1p = 1;
+         if (t -> ptrbm1 -> next -> pion != 0)
+            Rbm1p = (t -> ptrbm1 -> pion)/
+                    (t -> ptrbm1 -> next -> pion);
+         Rcex = 1;
+         if (t -> ptrbm1 -> next -> cex != 0)
+            Rcex = (t -> ptrbm1 -> cex)/
+                   (t -> ptrbm1 -> next -> cex);
+         Abm1 = 0;
+         if (t -> ptrbm1 -> a != 0)
+            Abm1 = (t -> ptrbm1 -> next -> a)/
+                   (t -> ptrbm1 -> a);
+
+         kp2new = kp2old*Abm1;
+         km2tnew = km2told*Abm1;
+         km2bnew = km2bold*Abm1;
+         bm1knew = bm1kold/Rbm1k;
+         bm1pnew = bm1pold/Rbm1p;
+         cexnew = cexold/Rcex;
+         bm2knew = bm2kold*Abm1;
+         bm2pnew = bm2pold*Abm1;
+         totnew = kp2new + km2tnew + km2bnew +
+                  bm1knew + bm1pnew + cexnew +
+                  bm2knew + bm2pnew;
+         accnew = accold*Abm1;
+
+         if (accnew == accold) {
+            RA = 99999.;
+         } else {
+            RA = (1 - totnew/totold)/(1 - accnew/accold);
+	 }
+         printf("Bm1 %f ",RA);
+
+         if (RA > RAmax) {
+            RAmax = RA;
+            t -> next -> n = (totnew/totold)*(t -> n);
+            t -> next -> a = (accnew/accold)*(t -> a);
+            t -> next -> kp2 = kp2new;
+            t -> next -> km2t = km2tnew;
+            t -> next -> km2b = km2bnew;
+            t -> next -> bm1k = bm1knew;
+            t -> next -> bm1p = bm1pnew;
+            t -> next -> cex = cexnew;
+            t -> next -> bm2k = bm2knew;
+            t -> next -> bm2p = bm2pnew;
+            t -> next -> ptrkp2tot = t -> ptrkp2tot;
+            t -> next -> ptrkm2tot = t -> ptrkm2tot;
+            t -> next -> ptrbm1 = t -> ptrbm1 -> next;
+            t -> next -> ptrbm2 = t -> ptrbm2;
+         }
+      } 
+
+      /*
+       *  Get the new background level and acceptance
+       *  by tightening the double-beam function.
+       */
+      if ((t -> ptrbm2 -> next) != NULL) {
+         Rbm2k = 1;
+         if (t -> ptrbm2 -> next -> kaon != 0)
+            Rbm2k = (t -> ptrbm2 -> kaon)/
+                    (t -> ptrbm2 -> next -> kaon);
+         Rbm2p = 1;
+         if (t -> ptrbm2 -> next -> pion != 0)
+            Rbm2p = (t -> ptrbm2 -> pion)/
+                    (t -> ptrbm2 -> next -> pion);
+         Abm2 = 0;
+         if (t -> ptrbm2 -> a != 0)
+            Abm2 = (t -> ptrbm2 -> next -> a)/
+                   (t -> ptrbm2 -> a);
+
+         kp2new = kp2old*Abm2;
+         km2tnew = km2told*Abm2;
+         km2bnew = km2bold*Abm2;
+         bm1knew = bm1kold*Abm2;
+         bm1pnew = bm1pold*Abm2;
+         cexnew = cexold*Abm2;
+         bm2knew = bm2kold/Rbm2k;
+         bm2pnew = bm2pold/Rbm2p;
+         totnew = kp2new + km2tnew + km2bnew +
+                  bm1knew + bm1pnew + cexnew +
+                  bm2knew + bm2pnew;
+         accnew = accold*Abm2;
+
+         if (accnew == accold) {
+            RA = 99999.;
+         } else {
+            RA = (1 - totnew/totold)/(1 - accnew/accold);
+	 }
+         printf("Bm2 %f ",RA);
+
+         if (RA > RAmax) {
+            RAmax = RA;
+            t -> next -> n = (totnew/totold)*(t -> n);
+            t -> next -> a = (accnew/accold)*(t -> a);
+            t -> next -> kp2 = kp2new;
+            t -> next -> km2t = km2tnew;
+            t -> next -> km2b = km2bnew;
+            t -> next -> bm1k = bm1knew;
+            t -> next -> bm1p = bm1pnew;
+            t -> next -> cex = cexnew;
+            t -> next -> bm2k = bm2knew;
+            t -> next -> bm2p = bm2pnew;
+            t -> next -> ptrkp2tot = t -> ptrkp2tot;
+            t -> next -> ptrkm2tot = t -> ptrkm2tot;
+            t -> next -> ptrbm1 = t -> ptrbm1;
+            t -> next -> ptrbm2 = t -> ptrbm2 -> next;
+         }
+      } 
+
+      printf("\n ");
+
+      /*
+       *  We've chosen the next-tighter point on the total background
+       *  function by tightening the one background function which
+       *  gives the maximum value of (totold-totnew)/(accold-accnew).
+       *  Now we update the total background function structure, and
+       *  continue the loop over individual function values until we've
+       *  exhausted all possible sources of background rejection.
+       */
+      bgtotal.tail = t -> next;
+      bgtotal.nvalues += 1;
+      t -> next -> next = NULL;
+      t -> next -> prev = t;
+      t = t -> next;
+   }
+   ofp = fopen("bgtotal.dat","w");
+   t = bgtotal.head;
+   while (t != NULL) {
+      fprintf(ofp,"%f %f %f %f %f %f %f %f %f %f %f \n",
+              t -> n, t -> a,
+              t -> ptrkp2tot -> n,
+              t -> ptrkp2tot -> fn1 -> n,
+              t -> ptrkp2tot -> fn2 -> n,
+              t -> ptrkm2tot -> n,
+              t -> ptrkm2tot -> fn1 -> n,
+              t -> ptrkm2tot -> fn2 -> n,
+              t -> ptrkm2tot -> fn3 -> n,
+              t -> ptrbm1 -> n,
+              t -> ptrbm2 -> n);
+      t = t -> next;
+   }
+   fclose(ofp);
+
+   printf("Done. \n");
+   exit(0);
+}
