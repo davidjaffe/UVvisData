@@ -20,7 +20,14 @@ class combiner():
 
         self.debug = 1
 
-        self.AssumedBR = 1.73e-10 # PRD79, 092004 (2009) Table VIII
+        # directory with Joe's stuff
+        self.JoeDir = '/Users/djaffe/work/GIT/E949/Joe/home/sher/test/'
+        self.bogus_eclnames = ['ecl9598inside_x.dat','ecl.probbr.dat']
+        
+
+        self.AssumedBr = self.AssumedBR = 1.73e-10 # PRD79, 092004 (2009) Table VIII
+        #self.AssumedBR /= 0.70 # TEST TEST TEST
+        #print 'combiner.__init__ TEST TEST TEST TEST AssumedBR rescaled *****************'
         self.E949data = 'DATA/E949_data_PRD79_092004.txt'
         # acceptance factors for tight cuts from Table IX of PRD79, 092004
         self.E949AccFac = {'KINT':0.812, 'TDT':0.812, 'DCT':0.911, 'PVT':0.522}
@@ -30,9 +37,10 @@ class combiner():
             AccT = self.E949AccFac[cutT]
             cutR = cutT[:-1] + 'R'
             self.E949AccFac[cutR] = 1. - AccT
-        print '{0:>6} {1:>6} Relative acceptance of each cut combiner.__init__'.format('Cut','Acc')
-        for cut in sorted(self.E949AccFac):
-            print '{0:>6} {1:>6.3f}'.format(cut,self.E949AccFac[cut])
+        if 0:
+            print '{0:>6} {1:>6} Relative acceptance of each cut combiner.__init__'.format('Cut','Acc')
+            for cut in sorted(self.E949AccFac):
+                print '{0:>6} {1:>6.3f}'.format(cut,self.E949AccFac[cut])
         
         print 'combiner.__init__ Did something'
         return
@@ -40,42 +48,51 @@ class combiner():
         '''
         try to reproduce the E949/E787 likelihood vs Br
         '''
-        E949cells = self.readE949()
-        Acc = {}
-        for cell in E949cells:
-            defn = E949cells[cell][0]
-            cutlist = defn.split('.')
-            acc = 1.
-            for cutn in cutlist:
-                if cutn in self.E949AccFac: acc *= self.E949AccFac[cutn] 
-            Acc[cell] = acc
+        E949cells = self.readE949(debug=1)
+        if 0: # acceptance numbers not used
+            Acc = {}
+            for cell in E949cells:
+                defn = E949cells[cell][0]
+                cutlist = defn.split('.')
+                acc = 1.
+                for cutn in cutlist:
+                    if cutn in self.E949AccFac: acc *= self.E949AccFac[cutn] 
+                Acc[cell] = acc
         
         
-        print '{0:>6} {1:>18} {2:>6} {3:>6} {4:>10}'.format('cell','Defintion','b','s/b','Sacc')
+        print '{0:>6} {1:>18} {2:>6} {3:>6} {4:>6}'.format('cell','Definition','b','s/b','d')
         for cell in sorted(E949cells):
-            print '{0:>6} {1:>18} {2:>6.3f} {3:>6.2f} {4:>10.4f}'.format(cell,E949cells[cell][0],E949cells[cell][1],E949cells[cell][2],Acc[cell])
+            if cell!='SES':
+                print '{0:>6} {1:>18} {2:>6.3f} {3:>6.2f} {4:>6.0f}'.format(cell,E949cells[cell][0],E949cells[cell][1],E949cells[cell][2],E949cells[cell][3])
+        if 'SES' in E949cells: print 'SES = {0:.2e} +- {1:.2e}'.format(E949cells['SES'][0],E949cells['SES'][1])
 
-        useE949 = False
+        useE949 = True
         if useE949:
             title = 'E949 combined result'
         else:
             title = 'E949 pnn1 only'
-        
             
         x,y = [],[]
-        for iratio in range(0,210,10):
-            ratio = float(iratio)/100.
+        rmi,rma,steps = 0.,10.,1001
+        dr = (rma-rmi)/float(steps-1)
+        ratio = rmi
+        while ratio<rma: 
+
             if useE949:
                 like = self.likeE949(ratio,E949cells)
             else:
                 like = self.likepnn1(ratio)
             x.append(ratio)
             y.append(like)
+            ratio += dr 
         ymi = min(y)
+        ratmin = x[y.index(ymi)]
         y = [z-ymi for z in y]
         
         if useE949:
-            print 'combiner.reproE949 SES={0:.2e} AssumedBR/SES={1:.2e}'.format(self.SES,self.AssumedBR/self.SES)
+            print 'combiner.reproE949 SES={0:.2e} All. AssumedBR/SES={1:.2e}, AssumedBR={2:.2e} BRatmin={3:.2e}'.format(self.SES,self.AssumedBR/self.SES,self.AssumedBR,ratmin*self.AssumedBR)
+            for key in sorted(self.SEStable):
+                print 'combiner.reproE949 SES={0:.2e} {1}'.format(self.SEStable[key],key)
 
         xtitle = 'Branching fraction/'+str(self.AssumedBR)
             
@@ -97,31 +114,46 @@ class combiner():
         s    = NK*Atot*Ai*B
         likeA = 2.*NK*Atot*B
         likeB = -2.*math.log(1. + s/b)
-        print 'combiner.likepnn1 ratio,likeA,likeB',ratio,likeA,likeB
         like = likeA+likeB
+        print 'combiner.likepnn1 ratio,BF,likeA,likeB,like',ratio,B,likeA,likeB,like
         return like
     def likeE949(self,ratio,cells):
         '''
         calculate -2 * log likelihood from s/b in cells for ratio = BR/self.AssumedBR
         '''
+        debug = 0
+        pnn2_E949_only = True
+        
+        SES = {}
+        SES['pnn2_E949'] = 4.28e-10 # PRD79, 092004    # Omit this and likeE949 minimized at ratio=1.!?!?!?!
+        if not pnn2_E949_only:
+            SES['pnn1_E787_9597'] = 1./3.2e12/2.1e-3 # PRL88,041803 Tables I,II
+            SES['pnn1_E787_98']   = 1./2.7e12/1.96e-3# PRL88,041803 Table I,II
+            SES['pnn1_E949'] = 2.55e-10 # PRD77, 052003
+            SES['pnn2_E787_96'] = 11.7e-10 # PLB537(2002)211
+            SES['pnn2_E787_97'] = 16.9e-10 # PRD70(2004)037102
 
-        SESpnn2b = 4.28e-10
-        SESpnn1  = 2.55e-10
-        SESpnn2a = 6.87e-10
-        SES = self.SES = 1./( 1./SESpnn2b + 1./SESpnn1 + 1./SESpnn2a )
+        self.SEStable = SES
+        P = 0.
+        for x in SES: P += 1./SES[x]
+        P = 1./P
+        SES = self.SES = P
         likeA = ratio*self.AssumedBR/SES
         likeB = 0.
-        for cell in cells:
-            soverb = cells[cell][2]
-            if cell==1: likeB -= math.log(1. + ratio*soverb)
+        for cell in sorted(cells):
+            if cell!='SES':
+                soverb = cells[cell][2]
+                d = cells[cell][3] # events observed
+                likeB -= d*math.log(1. + ratio*soverb)
+                if debug>1 and ratio==0. : print 'combiner.likeE949 cell,soverb',cell,soverb
         likeA = 2.*likeA
         likeB = 2.*likeB
-        print ratio,likeA,likeB
         like = likeA+likeB
+        if debug>0 : print 'combiner.likeE949 ratio,likeA,likeB,like',ratio,likeA,likeB,like
         return like
     def readE949(self,debug=0):
         '''
-        read cell, b, s/b for E949/E787 data
+        read cell, b, s/b, d for E949/E787 data
         '''
         f = open(self.E949data,'r')
         E949cells = {}
@@ -134,16 +166,191 @@ class combiner():
                     q = x.strip()
                     if q!='': s.append(q)
                 if debug>0: print 'combiner.readE949 s',s
-                cell = int(s[0])
-                defn = s[1]
-                b    = float(s[2])
-                soverb=float(s[3])
-                if cell in E949cells:
-                    sys.exit('combiner.readE949 ERROR Duplicate cell#'+str(cell))
-                E949cells[cell] = [defn,b,soverb]
+                if s[0]=='SES':
+                    ses = float(s[1]) # single event sensitivity
+                    dses= float(s[2]) # uncertainty on ses
+                    E949cells['SES'] = [ses,dses]
+                else:
+                    cell = int(s[0])
+                    defn = s[1]
+                    b    = float(s[2])
+                    soverb=float(s[3])
+                    d     =float(s[4])
+                    if cell in E949cells:
+                        sys.exit('combiner.readE949 ERROR Duplicate cell#'+str(cell))
+                    E949cells[cell] = [defn,b,soverb,d]
         f.close()
         print 'combiner.readE949 Read',len(E949cells),'cells from',self.E949data
         return E949cells
+    def loadData(self):
+        '''
+        return dict loaded with all E787/E949 data
+        For each dataset we have 
+        dataset name
+        journal reference
+        NK = stopped kaons
+        Atot = total acceptance
+        Ncand = number of candidates
+        AssumedBr = assumed B(K+ => pi+,nu,nubar) used for s_i/b_i ratio
+        s_i/b_i = signal to background ratio in ith cell (cells containing candidates)
+        '''
+        cands = {}
+        
+        dataset = 'pnn1_E787_95-7'
+        journal = 'PRL88_041803'
+        NK = 3.2e12
+        Atot = 2.1e-3
+        Ncand = 1
+        soverb = [35.]
+        AssumedBr = 7.5e-11
+        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+
+        dataset = 'pnn1_E787_1998'
+        journal = 'PRL88_041803'
+        NK = 2.7e12
+        Atot = 1.96e-3
+        Ncand = 1
+        soverb = [3.6]
+        AssumedBr = 7.5e-11
+        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+
+        dataset = 'pnn1_e949'
+        journal = 'PRD77_052003'
+        NK = 1.77e12
+        Atot = 1.694e-3
+        AssumedBr = self.AssumedBr
+        Ncand = 1
+        b = 5.7e-5
+        s = 3.628e5*AssumedBr
+        soverb = [s/b]
+        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+
+        dataset = 'pnn2_E787_1996'
+        journal = 'PLB537_2002_211'
+        NK = 1.12e12
+        Atot = 0.765e-3
+        Ncand = 1
+        b = 0.734 # +- 0.117
+        AssumedBr = self.AssumedBr
+        s = NK*Atot*AssumedBr*float(Ncand)
+        soverb = [s/b]
+        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+
+        dataset = 'pnn2_E787_1997'
+        journal = 'PRD70_037102_2004'
+        NK = 0.61e12
+        Atot = 0.97e-3
+        Ncand = 0
+        AssumedBr = self.AssumedBr
+        sover = []
+        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+
+        dataset = 'pnn2_E949'
+        journal = 'PRD79_092004_2009'
+        NK = 1.71e12
+        Atot = 1.37e-3 #(+-0.14e-3)
+        Ncand = 3
+        AssumedBr = 1.73e-10
+        soverb = [0.47, 0.42, 0.20]
+        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+        
+        return cands
+    def reportData(self,cands,mode='raw'):
+        '''
+        report contents of all data in cands
+        mode = 'raw' ==> no change to data
+        mode = 'sameBr' ==> give all s/b at self.AssumedBr
+        '''
+        units = {'NK':1e12, 'Atot':1e-3, 'AssumedBr':1e-10, 'SES':1.e-10}
+
+        
+        
+        print '{0:>15} {1:>5}({2:5.0e}) {3:>5}({4:5.0e}) {5:>5}({6:5.0e}) {7:>5}({8:5.0e}) {9:>5} {10:>15} {11:>15}'.format('dataset','NK',units['NK'],'Atot',units['Atot'],'SES',units['SES'],'AssBr',units['AssumedBr'],'Ncand','sig/bkg','journal')
+        #           0      1    2           3       4            5      6            7      8                 9        10        11
+        for dataset in sorted(cands):
+            cand = cands[dataset]
+            NK = cand['NK']/units['NK']
+            Atot = cand['Atot']/units['Atot']
+            SES = 1./cand['NK']/cand['Atot']/units['SES']
+            AssBr = cand['AssumedBr']/units['AssumedBr']
+            Ncand = cand['Ncand']
+            soverb= cand['soverb']
+            journal = cand['journal']
+            wsb = ''
+            for x in soverb:
+                wsb += '{0:>5.2f}'.format(x)
+            print '{0:>15} {1:>12.2f} {2:>12.2f} {3:>12.2f} {4:>12.2f} {5:>5} {6:>15} {7:>15}'.format(dataset,NK,Atot,SES,AssBr,Ncand,wsb,journal)
+            
+        return
+    def readJoeDat(self,name):
+        '''
+        return dict of contents of ecl<name>.dat in Joe's directory
+        '''
+        debug = 0
+
+        eclname = name if (name[:3]=='ecl') else 'ecl' + name + '.dat'
+        if eclname in self.bogus_eclnames: return None
+
+        fn = self.JoeDir + eclname
+        f = open(fn,'r')
+        print 'combiner.readJoeDat Opened',fn
+        contents = {}
+        for line in f:
+            s = line[:-1].split(':')
+            key = s[0].strip()
+            value = float(s[1])
+            if key not in contents : contents[key] = []
+            contents[key].append(value)
+        f.close()
+        L = {}
+        sameL = None
+        wrongL = False
+        for key in sorted(contents):
+            L[key] = len(contents[key])
+            if sameL is None: sameL = L[key]
+            if sameL != L[key] : wrongL = True
+        if wrongL or debug>0:
+            if wrongL: print 'combiner.readJoeDat name',name,'ERROR? found keys with different number of entries'
+            for key in sorted(L):
+                print 'combiner.readJoeDat name',name,'key',key,'has',L[key],'entries'
+        return contents
+    def plotJoeDat(self,name,contents,xname,yname):
+        '''
+        given dict of contents of ecl<name>.dat plot values of yname vs xname
+        '''
+        
+        eclname = name if (name[:3]=='ecl') else 'ecl' + name + '.dat'
+        
+        if xname not in contents:
+            sys.exit('combiner.plotJoeDat name ' + eclname + ' ERROR invalid xname ' + xname)
+        if yname not in contents:
+            sys.exit('combiner.plotJoeDat name ' + eclname + ' ERROR invalid yname ' + yname)
+        X = contents[xname]
+        Y = contents[yname]
+        yma = max(Y)
+        i = Y.index(yma)
+        xma = X[i]
+        words = name + ':' + yname + ' max at ' + str(yma) + ' at ' + xname + ' of ' + str(xma)
+        self.drawIt(X,Y,xname,yname,words)
+        return
+    def plotJoeDatLoop(self,name,contents,xname):
+        '''
+        given dict of contents of ecl<name>.dat plot all value of all keys vs values of key=xname
+        '''
+        for yname in sorted(contents):
+            if yname!=xname:
+                self.plotJoeDat(name,contents,xname,yname)
+        return
+    def showAllJoeDat(self,xname='signal scaling',yname='Xobs'):
+        '''
+        plot Xobs vs signal scaling for all ecl*.dat files
+        '''
+        filelist = glob.glob(self.JoeDir + 'ecl*.dat')
+        for fn in filelist:
+            name = os.path.basename(fn)
+            contents = self.readJoeDat(name)
+            if contents is not None : self.plotJoeDat(name,contents,xname,yname)
+        return
     def drawIt(self,x,y,xtitle,ytitle,title,figDir=None,ylog=False,xlims=None,ylims=None):
         '''
         draw graph defined by x,y
@@ -173,4 +380,14 @@ class combiner():
 if __name__ == '__main__' :
    
     cb = combiner()
-    cb.reproE949()
+    cands = cb.loadData()
+    cb.reportData(cands)
+    if 0: 
+        cb.reproE949()
+    if 0: 
+        cb.showAllJoeDat()
+    if 0:
+        name = '98inside'
+        contents = cb.readJoeDat(name)
+        xname = 'signal scaling'
+        cb.plotJoeDatLoop(name,contents,xname)
