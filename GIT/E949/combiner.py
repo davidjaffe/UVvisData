@@ -26,8 +26,15 @@ class combiner():
         
 
         self.AssumedBr = self.AssumedBR = 1.73e-10 # PRD79, 092004 (2009) Table VIII
-        #self.AssumedBR /= 0.70 # TEST TEST TEST
-        #print 'combiner.__init__ TEST TEST TEST TEST AssumedBR rescaled *****************'
+
+        print 'combiner.__init__ self.AssumedBr',self.AssumedBr,' *****************'
+
+        rmi,rma,steps = 0.,10.,10001
+        #steps = 11
+        dr = (rma-rmi)/float(steps-1)
+        self.ratioRange = [rmi+float(i)*dr for i in range(steps)]
+
+        
         self.E949data = 'DATA/E949_data_PRD79_092004.txt'
         # acceptance factors for tight cuts from Table IX of PRD79, 092004
         self.E949AccFac = {'KINT':0.812, 'TDT':0.812, 'DCT':0.911, 'PVT':0.522}
@@ -151,6 +158,73 @@ class combiner():
         like = likeA+likeB
         if debug>0 : print 'combiner.likeE949 ratio,likeA,likeB,like',ratio,likeA,likeB,like
         return like
+    def main(self):
+        '''
+        cleverly named main routine for loading E787/E949 data and computing -2*loglikelihood
+        '''
+        debug = 0
+        drawEach = True
+        cands = self.loadData()
+        self.reportData(cands,mode='raw')
+        cands = self.setAssBr(cands)
+        self.reportData(cands,mode='same_assumed_Br')
+        cands = self.fillM2LL(cands)
+        
+        globalM2LL = None
+        x = numpy.array(self.ratioRange)
+        M2LL = {}
+        xtitle = 'Br(K+ => pi+,nu,nubar)/'+str(self.AssumedBr)
+        ytitle = '-2*loglikelihood'
+        for dataset in sorted(cands):
+            cand = cands[dataset]
+            m2ll = numpy.array(cand['m2ll'])
+            M2LL[dataset] = m2ll-min(m2ll)
+            ratmin = ', min at '+str(x[numpy.argmin(m2ll)])
+            if debug>1 : print 'combiner.main dataset,len(x),len(m2ll)',dataset,len(x),len(m2ll)
+            if debug>2 : print 'combiner.main dataset',dataset,[str(a)+'/{0:.2f}'.format(b) for a,b in zip(x,m2ll)]
+            if drawEach : self.drawIt(x,m2ll,xtitle,ytitle,dataset+ratmin)
+            if globalM2LL is None:
+                globalM2LL = numpy.array(m2ll)
+            else:
+                globalM2LL += numpy.array(m2ll)
+        M2LL['all'] = globalM2LL-min(globalM2LL)
+        ratmin = ', min at '+str(x[numpy.argmin(globalM2LL)])
+        title = 'All E787/E949 data'+ratmin
+        if drawEach: self.drawIt(x,globalM2LL,xtitle,ytitle,title)
+        title = '-2*loglikelihood'
+        self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title)
+        self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title,ylims=[0.,10.])
+        self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title,ylims=[0.,10.],xlims=[0.,2.])
+        return
+    def m2loglike(self,cand,ratio):
+        '''
+        calculate -2 * log likelihood from NK,Atot,[s/b], given ratio = BR/self.AssumedBr
+        '''
+        NK = cand['NK']
+        Atot=cand['Atot']
+        soverb = cand['soverb']
+        like = ratio*self.AssumedBr*NK*Atot
+        for x in soverb:
+            like -= math.log(1. + ratio*x)
+        like *= 2.
+        return like
+    def fillM2LL(self,cands):
+        '''
+        loop over datasets and add array of -2*loglike(ratio) for ratio in self.ratioRange to dict cands
+        Note that input dict cands is modified by this module.
+        '''
+        debug = 0
+        for dataset in sorted(cands):
+            cand = cands[dataset]
+            if debug>0: print 'combiner.fillM2LL dataset,soverb',dataset,cand['soverb']
+            if 'm2ll' in cand:
+                sys.exit('combiner.fillM2LL ERROR key `m2ll` already exists for dataset '+dataset+', perhaps due to multiple calls to this routine?')
+            m2ll = []
+            for ratio in self.ratioRange:
+                x = self.m2loglike(cand,ratio)
+                m2ll.append(x)
+            cands[dataset]['m2ll'] = m2ll
+        return cands
     def readE949(self,debug=0):
         '''
         read cell, b, s/b, d for E949/E787 data
@@ -205,7 +279,7 @@ class combiner():
         AssumedBr = 7.5e-11
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
-        dataset = 'pnn1_E787_1998'
+        dataset = 'pnn1_E787_98'
         journal = 'PRL88_041803'
         NK = 2.7e12
         Atot = 1.96e-3
@@ -225,7 +299,7 @@ class combiner():
         soverb = [s/b]
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
-        dataset = 'pnn2_E787_1996'
+        dataset = 'pnn2_E787_96'
         journal = 'PLB537_2002_211'
         NK = 1.12e12
         Atot = 0.765e-3
@@ -236,17 +310,17 @@ class combiner():
         soverb = [s/b]
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
-        dataset = 'pnn2_E787_1997'
-        journal = 'PRD70_037102_2004'
+        dataset = 'pnn2_E787_97'
+        journal = 'PRD70_037102'
         NK = 0.61e12
         Atot = 0.97e-3
         Ncand = 0
         AssumedBr = self.AssumedBr
-        sover = []
+        soverb = []
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn2_E949'
-        journal = 'PRD79_092004_2009'
+        journal = 'PRD79_092004'
         NK = 1.71e12
         Atot = 1.37e-3 #(+-0.14e-3)
         Ncand = 3
@@ -255,7 +329,20 @@ class combiner():
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
         
         return cands
-    def reportData(self,cands,mode='raw'):
+    def setAssBr(self,cands):
+        '''
+        return cands with s/b using a common assumed branching fractions self.AssumedBr
+        '''
+        for dataset in cands:
+            cand = cands[dataset]
+            factor = self.AssumedBr/cand['AssumedBr']
+            soverb = cand['soverb']
+            newsb = [factor*x for x in soverb]
+            cand['soverb'] = newsb
+            cand['AssumedBr'] = self.AssumedBr
+        print 'combiner.setAssBr set assumed Br to',self.AssumedBr,'for s/b'
+        return cands
+    def reportData(self,cands,mode=None):
         '''
         report contents of all data in cands
         mode = 'raw' ==> no change to data
@@ -264,8 +351,8 @@ class combiner():
         units = {'NK':1e12, 'Atot':1e-3, 'AssumedBr':1e-10, 'SES':1.e-10}
 
         
-        
-        print '{0:>15} {1:>5}({2:5.0e}) {3:>5}({4:5.0e}) {5:>5}({6:5.0e}) {7:>5}({8:5.0e}) {9:>5} {10:>15} {11:>15}'.format('dataset','NK',units['NK'],'Atot',units['Atot'],'SES',units['SES'],'AssBr',units['AssumedBr'],'Ncand','sig/bkg','journal')
+        print 'combiner.reportData mode is',mode,'. `AssBr` means Assumed Branching fraction of K+ => pi,nu,nubar'
+        print '{0:<15} {1:>5}({2:5.0e}) {3:>5}({4:5.0e}) {5:>5}({6:5.0e}) {7:>5}({8:5.0e}) {9:>5} {10:>15} {11:>15}'.format('dataset','NK',units['NK'],'Atot',units['Atot'],'SES',units['SES'],'AssBr',units['AssumedBr'],'Ncand','sig/bkg','journal')
         #           0      1    2           3       4            5      6            7      8                 9        10        11
         for dataset in sorted(cands):
             cand = cands[dataset]
@@ -279,7 +366,7 @@ class combiner():
             wsb = ''
             for x in soverb:
                 wsb += '{0:>5.2f}'.format(x)
-            print '{0:>15} {1:>12.2f} {2:>12.2f} {3:>12.2f} {4:>12.2f} {5:>5} {6:>15} {7:>15}'.format(dataset,NK,Atot,SES,AssBr,Ncand,wsb,journal)
+            print '{0:<15} {1:>12.2f} {2:>12.2f} {3:>12.2f} {4:>12.2f} {5:>5} {6:>15} {7:>15}'.format(dataset,NK,Atot,SES,AssBr,Ncand,wsb,journal)
             
         return
     def readJoeDat(self,name):
@@ -377,11 +464,50 @@ class combiner():
         else:
             plt.show()
         return    
+    def drawMany(self,x,y,xtitle,ytitle,title,figDir=None,ylog=False,xlims=None,ylims=None):
+        '''
+        draw many graphs with same abscissa and different ordinate values on same plot defined by x,y
+        y = dict
+        ytitle = keys of dict
+
+        '''
+        from matplotlib.ticker import (MultipleLocator, FormatStrFormatter,  AutoMinorLocator)
+
+
+        fig,ax = plt.subplots()
+        plt.grid()
+        plt.title(title)
+        ax.xaxis.set_major_locator(MultipleLocator(1))
+        ax.xaxis.set_minor_locator(MultipleLocator(.2))
+        figpdf = 'FIG_'+title.replace(' ','_') + '.pdf'
+
+        ls = ['-','--','-.',':','-','--',':']
+        c  = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'b', 'g', 'r', 'c', 'm', 'y', 'k']
+        
+        X = numpy.array(x)
+        for i,key in enumerate(ytitle):
+            Y = numpy.array(y[key])
+            ax.plot(X,Y,linestyle=ls[i],color=c[i],label=key)
+
+        plt.xlabel(xtitle)
+#        plt.ylabel(ytitle)
+        if ylog : ax.yscale('log')
+        if xlims is not None: plt.xlim(xlims)
+        if ylims is not None: plt.ylim(ylims)
+
+            
+        ax.legend(loc='best')
+        if figDir is not None:
+            figpdf = figDir + figpdf
+            plt.savefig(figpdf)
+            print 'abslen_model.drawIt wrote',figpdf
+        else:
+            plt.show()
+        return    
 if __name__ == '__main__' :
    
     cb = combiner()
-    cands = cb.loadData()
-    cb.reportData(cands)
+    cb.main()
     if 0: 
         cb.reproE949()
     if 0: 
