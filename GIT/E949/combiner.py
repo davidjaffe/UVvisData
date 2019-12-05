@@ -232,8 +232,9 @@ class combiner():
         return ascii suitable for use as a filename
         list of characters to be replaced is taken from https://stackoverflow.com/questions/4814040/allowed-characters-in-filename
         '''
-        r = {'_': [' ', '\\', '/', ':', '"', '<', '>', '|'], 'x': ['*']}
+        r = {'_': [' ', ',',  '\\', '/', ':', '"', '<', '>', '|'], 'x': ['*']}
         filename = title
+        filename = ' '.join(filename.split()) # substitutes single whitespace for multiple whitespace
         for new in r:
             for old in r[new]:
                 if old in filename : filename = filename.replace(old,new)
