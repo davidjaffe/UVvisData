@@ -9,6 +9,7 @@ import sys,os
 
 import datetime
 import numpy
+import random
 #import copy
 
 import re
@@ -25,25 +26,42 @@ class combiner():
         self.drawToFile = drawToFile
         print 'combiner.__init__ debug',self.debug,'drawEach',self.drawEach,'drawToFile',self.drawToFile
 
+        self.systOn = False
+        self.systAcc = 0.10
+        self.systN   = 10000
+        if self.systOn : print 'combiner.__init__ SYSTEMATIC VARIATIONS APPLIED. systAcc,systN',self.systAcc,self.systN
+        
         self.AssumedBr = self.AssumedBR = 1.73e-10 # PRD79, 092004 (2009) Table VIII
 
         print 'combiner.__init__ self.AssumedBr',self.AssumedBr,' *****************'
 
-        rmi,rma,steps = 0.,10.,10001
-        if self.debug>1 : steps = 11
-        dr = (rma-rmi)/float(steps-1)
-        self.ratioRange = [rmi+float(i)*dr for i in range(steps)]
+
+        r = numpy.arange(0.,0.8,0.1)
+        r = numpy.append( r, numpy.arange(0.8,1.2,0.005) )
+        r = numpy.append( r, numpy.arange(1.2,2.0,0.1)   )
+        r = numpy.append( r, numpy.arange(2.0,10.,1.0)   )
+        self.ratioRange = r
 
         self.figDir = 'FIGURES/'
         
         print 'combiner.__init__ Did something'
         return
+    def reportSyst(self):
+        '''
+        return string with report on systematics parameters
+        '''
+        s = 'NO SYSTEMATIC VARIATIONS. Flag is False'
+        if self.systOn: s = 'SYSTEMATIC VARIATION systAcc {0:.2f} systN {1}'.format(self.systAcc,self.systN)
+        return s
     def main(self):
         '''
         cleverly named main routine for loading E787/E949 data and computing -2*loglikelihood
         '''
         debug = self.debug
         drawEach = self.drawEach
+        x = numpy.array(self.ratioRange)
+        xtitle = 'Br(K+ => pi+,nu,nubar)/'+str(self.AssumedBr)
+        ytitle = '-2*loglikelihood'
 
         # load data, report it, correct it to have same assumed branching fraction, report that,
         # then calculate m2ll = -2*loglike for each dataset
@@ -53,12 +71,26 @@ class combiner():
         self.reportData(cands,mode='same_assumed_Br')
         cands = self.fillM2LL(cands)
 
+        
+        # combined candidates and likelihood
+        self.systOn = True
+        if self.systOn : print 'combiner.main Systematics calculation enabled for combined likelihood.',self.reportSyst()
+        allcands = self.collate(cands)
+        allcands = self.fillM2LL(allcands)
+        m2ll = numpy.array(allcands['all']['m2ll'])
+        m2ll = m2ll-min(m2ll)
+        print 'combiner.main allcands minimized at',x[numpy.argmin(m2ll)]
+        title = '-2*loglikelihood with systematics'
+        self.drawIt(x,m2ll,xtitle,ytitle,title,mark='-')
+        self.drawIt(x,m2ll,xtitle,ytitle,title+' restrict ranges',mark='-',xlims=[0.5,1.5],ylims=[0.,0.1])
+
+        self.systOn = False
+
+
         # plot and combine likelihoods for all datasets
         globalM2LL = None
-        x = numpy.array(self.ratioRange)
         M2LL = {}
-        xtitle = 'Br(K+ => pi+,nu,nubar)/'+str(self.AssumedBr)
-        ytitle = '-2*loglikelihood'
+        M2LL['all_with_syst'] = m2ll
         for dataset in sorted(cands):
             cand = cands[dataset]
             m2ll = numpy.array(cand['m2ll'])
@@ -66,7 +98,6 @@ class combiner():
             ratmin = ', min at '+str(x[numpy.argmin(m2ll)])
             print 'combiner.main dataset',dataset,ratmin
             if debug>1 : print 'combiner.main dataset,len(x),len(m2ll)',dataset,len(x),len(m2ll)
-            if debug>2 : print 'combiner.main dataset',dataset,[str(a)+'/{0:.2f}'.format(b) for a,b in zip(x,m2ll)]
             if drawEach : self.drawIt(x,m2ll,xtitle,ytitle,dataset+ratmin,mark='-')
             if globalM2LL is None:
                 globalM2LL = numpy.array(m2ll)
@@ -84,17 +115,33 @@ class combiner():
         self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title,loc=loc)
         self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' restricted y range',ylims=[0.,10.],loc=loc)
         self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' restricted x and y ranges',ylims=[0.,10.],xlims=[0.,2.],loc=loc)
+        self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' fanatical x and y ranges',ylims=[0.,0.2],xlims=[0.8,1.2],loc=loc)
         return
-    def m2loglike(self,cand,ratio):
+    def m2loglike(self,cand,RATIO):
         '''
         calculate -2 * log likelihood from NK,Atot,[s/b], given ratio = BR/self.AssumedBr
+        optionally include averaging over systematic variation of global acceptance 
         '''
-        NK = cand['NK']
-        Atot=cand['Atot']
+        if type(cand['NK']) is list:
+            NKlist = cand['NK']
+            Atotlist = cand['Atot']
+        else:
+            NKlist = [cand['NK']]
+            Atotlist = [cand['Atot']]
         soverb = cand['soverb']
-        like = ratio*self.AssumedBr*NK*Atot
-        for x in soverb:
-            like -= math.log(1. + ratio*x)
+
+        v = [1.]
+        if self.systOn:
+            v = numpy.random.normal(1.,self.systAcc,self.systN)
+
+        like = 0.
+        for f in v:
+            ratio = f*RATIO
+            for NK,Atot in zip(NKlist,Atotlist):
+                like += ratio*self.AssumedBr*NK*Atot
+            for x in soverb:
+                like -= math.log(1. + ratio*x)
+        like = like/float(len(v))
         like *= 2.
         return like
     def fillM2LL(self,cands):
@@ -114,6 +161,27 @@ class combiner():
                 m2ll.append(x)
             cands[dataset]['m2ll'] = m2ll
         return cands
+    def collate(self,cands):
+        '''
+        create a single dict with candidates from all datasets
+        AssumedBr must be the same for all datasets
+        '''
+        allcands = {}
+        allcands['all'] = {'NK':[], 'Atot':[], 'soverb':[], 'AssumedBr':None}
+        AssBr = None
+        for dataset in sorted(cands):
+            cand = cands[dataset]
+            NK = cand['NK']
+            Atot = cand['Atot']
+            soverb = cand['soverb']
+            if AssBr is None: AssBr = cand['AssumedBr']
+            if AssBr!=cand['AssumedBr']:
+                print 'combiner.collate ERROR dataset,AssumedBr',dataset,cand['AssumedBr'],'is not equal to',AssBr,'found for first dataset'
+            allcands['all']['NK'].append( NK )
+            allcands['all']['Atot'].append( Atot )
+            allcands['all']['soverb'].extend( soverb )
+            allcands['all']['AssumedBr'] = AssBr
+        return allcands
     def loadData(self):
         '''
         return dict loaded with all E787/E949 data
@@ -276,12 +344,19 @@ class combiner():
         fig,ax = plt.subplots()
         plt.grid()
         plt.title(title)
-        ax.xaxis.set_major_locator(MultipleLocator(1))
-        ax.xaxis.set_minor_locator(MultipleLocator(.2))
+        major = 1.
+        if xlims is not None:
+            if xlims[1]-xlims[0]<2: major = (xlims[1]-xlims[0])/10
+        ax.xaxis.set_major_locator(MultipleLocator(major))
+        minor = major/5.
+        ax.xaxis.set_minor_locator(MultipleLocator(minor))
+        print 'combiner.drawMany major,minor',major,minor,'xlims',xlims
 
 
         ls = ['-','--','-.',':','-','--',':']
-        c  = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'b', 'g', 'r', 'c', 'm', 'y', 'k']
+        ls.extend(ls)
+        c  = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+        c.extend(c)
         
         X = numpy.array(x)
         for i,key in enumerate(ytitle):
