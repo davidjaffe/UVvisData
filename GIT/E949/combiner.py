@@ -19,12 +19,14 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter,  AutoMinorLocator)
 
 class combiner():
-    def __init__(self,debug=0,drawEach=True,drawToFile=False):
+    def __init__(self,debug=0,drawEach=True,drawToFile=False,turnOnSyst=False,studyVar=False):
 
-        self.debug = debug
-        self.drawEach = drawEach
+        self.debug      = debug
+        self.drawEach   = drawEach
         self.drawToFile = drawToFile
-        print 'combiner.__init__ debug',self.debug,'drawEach',self.drawEach,'drawToFile',self.drawToFile
+        self.turnOnSyst = turnOnSyst
+        self.studyVar   = studyVar
+        print 'combiner.__init__ debug',self.debug,'drawEach',self.drawEach,'drawToFile',self.drawToFile,'turnOnSyst',self.turnOnSyst,'studyVar',self.studyVar
 
         self.systOn = False
         self.systAcc = 0.10
@@ -35,7 +37,7 @@ class combiner():
 
         print 'combiner.__init__ self.AssumedBr',self.AssumedBr,' *****************'
 
-
+        # define the binning to scan for the ratio wrt the assumed BR
         r = numpy.arange(0.,0.8,0.1)
         r = numpy.append( r, numpy.arange(0.8,1.2,0.005) )
         r = numpy.append( r, numpy.arange(1.2,2.0,0.1)   )
@@ -53,6 +55,52 @@ class combiner():
         s = 'NO SYSTEMATIC VARIATIONS. Flag is False'
         if self.systOn: s = 'SYSTEMATIC VARIATION systAcc {0:.2f} systN {1}'.format(self.systAcc,self.systN)
         return s
+    def studyVariations(self,cands):
+        '''
+        make a deepcopy of the input cands and monkey around
+        to understand dependency of the BR that minimizes -2*loglike on various parameters
+        '''
+        import copy
+
+        x = numpy.array(self.ratioRange)
+        x = numpy.append(x, numpy.arange(0.9,1.1,.0001) )
+        x = numpy.sort(x)
+        x = numpy.unique(x)
+        ytitle = 'Br(K+ => pi+,nu,nubar)/'+str(self.AssumedBr)
+
+
+    
+        local_cands = self.collate(cands)
+
+
+        vary = {'NK'    :numpy.arange( 1.00, 1.05, 0.001),
+                'soverb':numpy.arange( 0.89, 0.93, 0.001) }
+
+        for key in vary:
+            br = []
+            
+            for v in vary[key]:
+                title = 'Variation is ' + key + ' times ' + str(v)
+                allc = copy.deepcopy(local_cands)
+                CAND = allc['all']
+                if type(CAND[key]) is list:
+                    l = [v*z for z in CAND[key]]
+                    CAND[key] = l
+                else:
+                    CAND[key] = v*CAND[key]
+                allc = self.fillM2LL(allc,x)
+                if self.debug>1: print 'combiner.studyVariations allc.keys()',allc.keys()
+                if self.debug>1: print 'combiner.studyVariations allc[all].keys()',allc['all'].keys()
+                m2ll = numpy.array(allc['all']['m2ll'])
+                m2ll = m2ll-min(m2ll)
+                if self.debug>1: print 'combiner.studyVariations',title,'len(x),len(m2ll)',len(x),len(m2ll)
+                xatmin = x[numpy.argmin(m2ll)]
+                print 'combiner.studyVariations',title,'minimized at',xatmin
+                br.append( xatmin )
+                #self.drawIt(x,m2ll,xtitle,ytitle,title,mark='-')
+                del allc
+            self.drawIt(vary[key],br,key+' scale factor',ytitle,'Variation of '+key,mark='o-')
+        return
     def main(self):
         '''
         cleverly named main routine for loading E787/E949 data and computing -2*loglikelihood
@@ -64,33 +112,36 @@ class combiner():
         ytitle = '-2*loglikelihood'
 
         # load data, report it, correct it to have same assumed branching fraction, report that,
+        # then, if requested, study fitted Br for variations in input parameters
         # then calculate m2ll = -2*loglike for each dataset
         cands = self.loadData()
         self.reportData(cands,mode='raw')
         cands = self.setAssBr(cands)
         self.reportData(cands,mode='same_assumed_Br')
+        if self.studyVar : self.studyVariations(cands)
         cands = self.fillM2LL(cands)
 
         
+        M2LL = {}
         # combined candidates and likelihood
-        self.systOn = True
-        if self.systOn : print 'combiner.main Systematics calculation enabled for combined likelihood.',self.reportSyst()
-        allcands = self.collate(cands)
-        allcands = self.fillM2LL(allcands)
-        m2ll = numpy.array(allcands['all']['m2ll'])
-        m2ll = m2ll-min(m2ll)
-        print 'combiner.main allcands minimized at',x[numpy.argmin(m2ll)]
-        title = '-2*loglikelihood with systematics'
-        self.drawIt(x,m2ll,xtitle,ytitle,title,mark='-')
-        self.drawIt(x,m2ll,xtitle,ytitle,title+' restrict ranges',mark='-',xlims=[0.5,1.5],ylims=[0.,0.1])
+        if self.turnOnSyst:
+            self.systOn = True
+            if self.systOn : print 'combiner.main Systematics calculation enabled for combined likelihood.',self.reportSyst()
+            allcands = self.collate(cands)
+            allcands = self.fillM2LL(allcands)
+            m2ll = numpy.array(allcands['all']['m2ll'])
+            m2ll = m2ll-min(m2ll)
+            print 'combiner.main allcands minimized at',x[numpy.argmin(m2ll)]
+            title = '-2*loglikelihood with systematics'
+            self.drawIt(x,m2ll,xtitle,ytitle,title,mark='-')
+            self.drawIt(x,m2ll,xtitle,ytitle,title+' restrict ranges',mark='-',xlims=[0.5,1.5],ylims=[0.,0.1])
+            M2LL['all_with_syst'] = m2ll
 
-        self.systOn = False
+            self.systOn = False
 
 
         # plot and combine likelihoods for all datasets
         globalM2LL = None
-        M2LL = {}
-        M2LL['all_with_syst'] = m2ll
         for dataset in sorted(cands):
             cand = cands[dataset]
             m2ll = numpy.array(cand['m2ll'])
@@ -144,19 +195,22 @@ class combiner():
         like = like/float(len(v))
         like *= 2.
         return like
-    def fillM2LL(self,cands):
+    def fillM2LL(self,cands,ratRange=None):
         '''
-        loop over datasets and add array of -2*loglike(ratio) for ratio in self.ratioRange to dict cands
+        loop over datasets and add array of -2*loglike(ratio) for ratio in ratRange to dict cands
         Note that input dict cands is modified by this module.
+        ratRange defaults to self.ratioRange if no input is provided
         '''
         debug = self.debug
+        ratioRange = ratRange
+        if ratRange is None : ratioRange = self.ratioRange
         for dataset in sorted(cands):
             cand = cands[dataset]
             if debug>0: print 'combiner.fillM2LL dataset,soverb',dataset,cand['soverb']
             if 'm2ll' in cand:
                 sys.exit('combiner.fillM2LL ERROR key `m2ll` already exists for dataset '+dataset+', perhaps due to multiple calls to this routine?')
             m2ll = []
-            for ratio in self.ratioRange:
+            for ratio in ratioRange:
                 x = self.m2loglike(cand,ratio)
                 m2ll.append(x)
             cands[dataset]['m2ll'] = m2ll
@@ -165,11 +219,14 @@ class combiner():
         '''
         create a single dict with candidates from all datasets
         AssumedBr must be the same for all datasets
+        Cannot perform collation if a dataset in cands contains -2*loglike array.
         '''
         allcands = {}
         allcands['all'] = {'NK':[], 'Atot':[], 'soverb':[], 'AssumedBr':None}
         AssBr = None
         for dataset in sorted(cands):
+            if 'm2ll' in cands[dataset]:
+                sys.exit('combiner.collate ERROR key `m2ll` in input dict cands for dataset '+dataset)
             cand = cands[dataset]
             NK = cand['NK']
             Atot = cand['Atot']
@@ -177,6 +234,7 @@ class combiner():
             if AssBr is None: AssBr = cand['AssumedBr']
             if AssBr!=cand['AssumedBr']:
                 print 'combiner.collate ERROR dataset,AssumedBr',dataset,cand['AssumedBr'],'is not equal to',AssBr,'found for first dataset'
+                sys.exit('combiner.collate ERROR inconsistent assumed Br')
             allcands['all']['NK'].append( NK )
             allcands['all']['Atot'].append( Atot )
             allcands['all']['soverb'].extend( soverb )
@@ -385,13 +443,19 @@ if __name__ == '__main__' :
     drawEach = False # draw loglikelihood for each dataset?
     debug    = 0 # >0 gives output
     drawToFile = False # plots go to file instead of to terminal (use savefig() instead of show())
+    turnOnSyst = False # include systematics in BR determination
+    studyVar   = False # variation of inputs for alternate BR determinations
     if len(sys.argv)>1:
         if sys.argv[1].lower()=='draweach': drawEach=True
-        if sys.argv[1].lower()=='help' : sys.exit( 'usage: python combiner drawEach debug drawToFile' )
+        if sys.argv[1].lower()=='help' : sys.exit( 'usage: python combiner.py drawEach debug drawToFile turnOnSyst studyVar' )
     if len(sys.argv)>2:
         debug = int(sys.argv[2])
     if len(sys.argv)>3:
         if sys.argv[3].lower()=='drawtofile' : drawToFile = True
+    if len(sys.argv)>4:
+        if sys.argv[4].lower()=='turnonsyst' : turnOnSyst = True
+    if len(sys.argv)>5:
+        if sys.argv[5].lower()=='studyvar'   : studyVar   = True
         
-    cb = combiner(debug=debug,drawEach=drawEach,drawToFile=drawToFile)
+    cb = combiner(debug=debug,drawEach=drawEach,drawToFile=drawToFile,turnOnSyst=turnOnSyst,studyVar=studyVar)
     cb.main()
