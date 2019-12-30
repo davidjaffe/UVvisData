@@ -37,11 +37,16 @@ class combiner():
 
         print 'combiner.__init__ self.AssumedBr',self.AssumedBr,' *****************'
 
+        self.Groups = None
+        self.dataSets = None
+
         # define the binning to scan for the ratio wrt the assumed BR
-        r = numpy.arange(0.,0.8,0.1)
+        r = numpy.arange(0.,0.1,0.05)
+        r = numpy.append( r, numpy.arange(0.1,0.8,0.05)  )
         r = numpy.append( r, numpy.arange(0.8,1.2,0.005) )
-        r = numpy.append( r, numpy.arange(1.2,2.0,0.1)   )
-        r = numpy.append( r, numpy.arange(2.0,10.,1.0)   )
+        r = numpy.append( r, numpy.arange(1.2,2.5,0.1)   )
+        r = numpy.append( r, numpy.arange(2.5,10.,0.5)   )
+        r = numpy.unique( numpy.sort(r) )
         self.ratioRange = r
 
         self.figDir = 'FIGURES/'
@@ -118,8 +123,25 @@ class combiner():
         self.reportData(cands,mode='raw')
         cands = self.setAssBr(cands)
         self.reportData(cands,mode='same_assumed_Br')
+        self.reportGroups()
         if self.studyVar : self.studyVariations(cands)
+            
+        # group candidates and calculate minimum of chi2
+        groupCands = {}
+        for group in sorted(self.Groups.keys()):
+            groupCands[group] = self.collate(cands,keyw=group)[group]
+            if debug>0: print 'combiner.main group',group,'groupCands[group].keys()',groupCands[group].keys(),'groupCands[group]',groupCands[group]
+        if debug>0: print 'combine.main groupCands.keys()',groupCands.keys()
+        groupCands = self.fillM2LL(groupCands)
+        for group in sorted(self.Groups.keys()):
+            m2ll = numpy.array(groupCands[group]['m2ll'])
+            m2ll = m2ll-min(m2ll)
+            xatmin = x[numpy.argmin(m2ll)]
+            print 'combine.main {0} minimized at BF {1:.2e}'.format(group,xatmin*self.AssumedBR)
+
+            
         cands = self.fillM2LL(cands)
+
 
         
         M2LL = {}
@@ -146,7 +168,9 @@ class combiner():
             cand = cands[dataset]
             m2ll = numpy.array(cand['m2ll'])
             M2LL[dataset] = m2ll-min(m2ll)
-            ratmin = ', min at '+str(x[numpy.argmin(m2ll)])
+            xatmin = x[numpy.argmin(m2ll)]
+            BFatmin = ' BF={0:.2e}'.format(xatmin*self.AssumedBR)
+            ratmin = ', min at '+str(xatmin)+BFatmin
             print 'combiner.main dataset',dataset,ratmin
             if debug>1 : print 'combiner.main dataset,len(x),len(m2ll)',dataset,len(x),len(m2ll)
             if drawEach : self.drawIt(x,m2ll,xtitle,ytitle,dataset+ratmin,mark='-')
@@ -165,7 +189,7 @@ class combiner():
         loc = 'upper right'
         self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title,loc=loc)
         self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' restricted y range',ylims=[0.,10.],loc=loc)
-        self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' restricted x and y ranges',ylims=[0.,10.],xlims=[0.,2.],loc=loc)
+        self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' restricted x and y ranges',ylims=[0.,4.],xlims=[0.,2.],loc=loc)
         self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' fanatical x and y ranges',ylims=[0.,0.2],xlims=[0.8,1.2],loc=loc)
         return
     def m2loglike(self,cand,RATIO):
@@ -204,9 +228,10 @@ class combiner():
         debug = self.debug
         ratioRange = ratRange
         if ratRange is None : ratioRange = self.ratioRange
+        if debug>0 : print 'combiner.fillM2LL cands',cands
         for dataset in sorted(cands):
             cand = cands[dataset]
-            if debug>0: print 'combiner.fillM2LL dataset,soverb',dataset,cand['soverb']
+            if debug>0: print 'combiner.fillM2LL dataset,cand',dataset,cand
             if 'm2ll' in cand:
                 sys.exit('combiner.fillM2LL ERROR key `m2ll` already exists for dataset '+dataset+', perhaps due to multiple calls to this routine?')
             m2ll = []
@@ -215,16 +240,28 @@ class combiner():
                 m2ll.append(x)
             cands[dataset]['m2ll'] = m2ll
         return cands
-    def collate(self,cands):
+    def collate(self,cands,keyw='all'):
         '''
-        create a single dict with candidates from all datasets
-        AssumedBr must be the same for all datasets
+        create a dict with candidates from datasets specified by keyw
+        AssumedBr must be the same for all combined datasets
         Cannot perform collation if a dataset in cands contains -2*loglike array.
+        combination defined by keyw must already be defined
+
         '''
         allcands = {}
-        allcands['all'] = {'NK':[], 'Atot':[], 'soverb':[], 'AssumedBr':None}
+        allcands[keyw] = {'NK':[], 'Atot':[], 'soverb':[], 'AssumedBr':None}
+        groups = self.Groups
         AssBr = None
-        for dataset in sorted(cands):
+
+        if keyw=='all':
+            setList = sorted(cands.keys())
+        elif keyw in groups:
+            setList = groups[keyw]
+        else:
+            sys.exit('combiner.collate ERROR Invalid keyw '+keyw)
+
+        
+        for dataset in setList: 
             if 'm2ll' in cands[dataset]:
                 sys.exit('combiner.collate ERROR key `m2ll` in input dict cands for dataset '+dataset)
             cand = cands[dataset]
@@ -235,10 +272,10 @@ class combiner():
             if AssBr!=cand['AssumedBr']:
                 print 'combiner.collate ERROR dataset,AssumedBr',dataset,cand['AssumedBr'],'is not equal to',AssBr,'found for first dataset'
                 sys.exit('combiner.collate ERROR inconsistent assumed Br')
-            allcands['all']['NK'].append( NK )
-            allcands['all']['Atot'].append( Atot )
-            allcands['all']['soverb'].extend( soverb )
-            allcands['all']['AssumedBr'] = AssBr
+            allcands[keyw]['NK'].append( NK )
+            allcands[keyw]['Atot'].append( Atot )
+            allcands[keyw]['soverb'].extend( soverb )
+            allcands[keyw]['AssumedBr'] = AssBr
         return allcands
     def loadData(self):
         '''
@@ -253,17 +290,23 @@ class combiner():
         s_i/b_i = signal to background ratio in ith cell (cells containing candidates)
         '''
         cands = {}
+
+        self.dataSets = []
         
         dataset = 'pnn1_E787_95-7'
+        self.dataSets.append( dataset )
         journal = 'PRL88_041803'
         NK = 3.2e12
         Atot = 2.1e-3
         Ncand = 1
+        #print '\n combiner.loadData TEMPORARY CHANGE S/B FOR PNN1 EVENT 95A ********************'
         soverb = [35.]
+        #print 'combiner.loadData TEMPORARY CHANGE S/B FOR PNN1 EVENT 95A\n'
         AssumedBr = 7.5e-11
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn1_E787_98'
+        self.dataSets.append( dataset )
         journal = 'PRL88_041803'
         NK = 2.7e12
         Atot = 1.96e-3
@@ -273,6 +316,7 @@ class combiner():
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn1_E949'
+        self.dataSets.append( dataset )
         journal = 'PRD77_052003'
         NK = 1.77e12
         Atot = 1.694e-3
@@ -284,6 +328,7 @@ class combiner():
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn2_E787_96'
+        self.dataSets.append( dataset )
         journal = 'PLB537_2002_211'
         NK = 1.12e12
         Atot = 0.765e-3
@@ -295,6 +340,7 @@ class combiner():
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn2_E787_97'
+        self.dataSets.append( dataset )
         journal = 'PRD70_037102'
         NK = 0.61e12
         Atot = 0.97e-3
@@ -304,6 +350,7 @@ class combiner():
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn2_E949'
+        self.dataSets.append( dataset )
         journal = 'PRD79_092004'
         NK = 1.71e12
         Atot = 1.37e-3 #(+-0.14e-3)
@@ -311,8 +358,25 @@ class combiner():
         AssumedBr = 1.73e-10
         soverb = [0.47, 0.42, 0.20]
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
-        
+        groups = {'pnn1_pub': ['pnn1_E787_95-7','pnn1_E787_98','pnn1_E949'],
+                    'All E787': ['pnn1_E787_95-7','pnn1_E787_98','pnn2_E787_96','pnn2_E787_97'],
+                    'All E949': ['pnn1_E949', 'pnn2_E949'],
+                    'All pnn1': ['pnn1_E787_95-7','pnn1_E787_98','pnn1_E949'],
+                    'All pnn2': ['pnn2_E787_96','pnn2_E787_97','pnn2_E949'],
+                    'all'     : self.dataSets
+                      }
+        self.Groups = groups        
+
         return cands
+    def reportGroups(self):
+        '''
+        report content of self.Groups
+        '''
+        print '{0:>15} | {1}'.format('Group name','data sets')
+        for group in sorted(self.Groups.keys()):
+            print '{0:>15} |'.format(group),'%s' % ' '.join(map(str,self.Groups[group]))
+        return
+            
     def setAssBr(self,cands):
         '''
         return cands with s/b using a common assumed branching fractions self.AssumedBr
