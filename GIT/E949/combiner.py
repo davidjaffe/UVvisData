@@ -123,7 +123,6 @@ class combiner():
         self.reportData(cands,mode='raw')
         cands = self.setAssBr(cands)
         self.reportData(cands,mode='same_assumed_Br')
-        self.reportGroups()
         if self.studyVar : self.studyVariations(cands)
             
         # group candidates and calculate minimum of chi2
@@ -133,12 +132,15 @@ class combiner():
             if debug>0: print 'combiner.main group',group,'groupCands[group].keys()',groupCands[group].keys(),'groupCands[group]',groupCands[group]
         if debug>0: print 'combine.main groupCands.keys()',groupCands.keys()
         groupCands = self.fillM2LL(groupCands)
+        Results = {}
         for group in sorted(self.Groups.keys()):
             m2ll = numpy.array(groupCands[group]['m2ll'])
             m2ll = m2ll-min(m2ll)
             xatmin = x[numpy.argmin(m2ll)]
+            Results[group] = xatmin*self.AssumedBR
             print 'combine.main {0} minimized at BF {1:.2e}'.format(group,xatmin*self.AssumedBR)
 
+        self.reportGroups(Results)
             
         cands = self.fillM2LL(cands)
 
@@ -319,7 +321,7 @@ class combiner():
         self.dataSets.append( dataset )
         journal = 'PRD77_052003'
         NK = 1.77e12
-        Atot = 1.694e-3
+        Atot = 2.22e-3
         AssumedBr = self.AssumedBr
         Ncand = 1
         b = 5.7e-5
@@ -363,18 +365,32 @@ class combiner():
                     'All E949': ['pnn1_E949', 'pnn2_E949'],
                     'All pnn1': ['pnn1_E787_95-7','pnn1_E787_98','pnn1_E949'],
                     'All pnn2': ['pnn2_E787_96','pnn2_E787_97','pnn2_E949'],
-                    'all'     : self.dataSets
+                    'all'     : self.dataSets,
+                    'E949 pnn1': ['pnn1_E949'],
+                    'E949 pnn2': ['pnn2_E949']
                       }
-        self.Groups = groups        
+        self.Groups = groups
+        # Joss's thesis Table 89 for fitted BR in 1.e-10 units
+        self.Joss  = {'pnn1_pub': 1.47, 
+                    'All E787'  : 1.49, 
+                    'All E949'  : 2.80, 
+                    'All pnn1'  : 1.46,
+                    'All pnn2'  : 5.11, 
+                    'all'       : 1.73, 
+                    'E949 pnn1' : 0.96,
+                    'E949 pnn2' : 7.89
+                      }
 
         return cands
-    def reportGroups(self):
+    def reportGroups(self,Results):
         '''
-        report content of self.Groups
+        report content of self.Groups with fitted BR and Joss's fitted BR
         '''
-        print '{0:>15} | {1}'.format('Group name','data sets')
+        print '{0:^12} {1:^12} {2:<15} | {3}'.format('BF(1e-10)','Joss(1e-10)','Group name','data sets')
         for group in sorted(self.Groups.keys()):
-            print '{0:>15} |'.format(group),'%s' % ' '.join(map(str,self.Groups[group]))
+            mine = Results[group]/1.e-10
+            Joss = self.Joss[group]
+            print '{0:>12.2f} {1:<12.2f} {2:<15} |'.format(mine,Joss,group),'%s' % ' '.join(map(str,self.Groups[group]))
         return
             
     def setAssBr(self,cands):
