@@ -148,14 +148,19 @@ class combiner():
         if debug>0: print 'combine.main groupCands.keys()',groupCands.keys()
         groupCands = self.fillM2LL(groupCands)
         Results = {}
+        gLL = {}
         for group in sorted(self.Groups.keys()):
             m2ll = numpy.array(groupCands[group]['m2ll'])
-            m2ll = m2ll-min(m2ll)
+            gLL[group] = m2ll = m2ll-min(m2ll)
             xatmin = x[numpy.argmin(m2ll)]
             Results[group] = xatmin*self.AssumedBR
             if debug>0: print 'combine.main {0} minimized at BF {1:.2e}'.format(group,xatmin*self.AssumedBR)
 
         self.reportGroups(Results)
+        title = 'Groups'
+        loc = 'best'
+        self.drawMany(x,gLL,xtitle,gLL.keys(),title,loc=loc)
+        self.drawMany(x,gLL,xtitle,gLL.keys(),title+' restricted x and y ranges',ylims=[0.,4.],xlims=[0.,2.],loc=loc)
             
         cands = self.fillM2LL(cands)
 
@@ -178,36 +183,37 @@ class combiner():
 
             self.systOn = False
 
-
-        # plot and combine likelihoods for all datasets
-        globalM2LL = None
-        for dataset in sorted(cands):
-            cand = cands[dataset]
-            m2ll = numpy.array(cand['m2ll'])
-            M2LL[dataset] = m2ll-min(m2ll)
-            xatmin = x[numpy.argmin(m2ll)]
-            BFatmin = ' BF={0:.2e}'.format(xatmin*self.AssumedBR)
-            ratmin = ', min at '+str(xatmin)+BFatmin
-            if debug>0: print 'combiner.main dataset',dataset,ratmin
-            if debug>1 : print 'combiner.main dataset,len(x),len(m2ll)',dataset,len(x),len(m2ll)
-            if drawEach : self.drawIt(x,m2ll,xtitle,ytitle,dataset+ratmin,mark='-')
-            if globalM2LL is None:
-                globalM2LL = numpy.array(m2ll)
-            else:
-                globalM2LL += numpy.array(m2ll)
-                
-        M2LL['all'] = globalM2LL-min(globalM2LL)
-        ratmin = ', min at '+str(x[numpy.argmin(globalM2LL)])
-        title = 'All E787/E949 data'+ratmin
-        if debug>0: print 'combiner.main',title
-        if drawEach: self.drawIt(x,globalM2LL,xtitle,ytitle,title,mark='-')
+        if 0: # this stuff has been mostly replaced
             
-        title = '-2*loglikelihood'
-        loc = 'upper right'
-        self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title,loc=loc)
-        self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' restricted y range',ylims=[0.,10.],loc=loc)
-        self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' restricted x and y ranges',ylims=[0.,4.],xlims=[0.,2.],loc=loc)
-        self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' fanatical x and y ranges',ylims=[0.,0.2],xlims=[0.8,1.2],loc=loc)
+            # plot and combine likelihoods for all datasets
+            globalM2LL = None
+            for dataset in sorted(cands):
+                cand = cands[dataset]
+                m2ll = numpy.array(cand['m2ll'])
+                M2LL[dataset] = m2ll-min(m2ll)
+                xatmin = x[numpy.argmin(m2ll)]
+                BFatmin = ' BF={0:.2e}'.format(xatmin*self.AssumedBR)
+                ratmin = ', min at '+str(xatmin)+BFatmin
+                if debug>0: print 'combiner.main dataset',dataset,ratmin
+                if debug>1 : print 'combiner.main dataset,len(x),len(m2ll)',dataset,len(x),len(m2ll)
+                if drawEach : self.drawIt(x,m2ll,xtitle,ytitle,dataset+ratmin,mark='-')
+                if globalM2LL is None:
+                    globalM2LL = numpy.array(m2ll)
+                else:
+                    globalM2LL += numpy.array(m2ll)
+
+            M2LL['all'] = globalM2LL-min(globalM2LL)
+            ratmin = ', min at '+str(x[numpy.argmin(globalM2LL)])
+            title = 'All E787/E949 data'+ratmin
+            if debug>0: print 'combiner.main',title
+            if drawEach: self.drawIt(x,globalM2LL,xtitle,ytitle,title,mark='-')
+
+            title = '-2*loglikelihood'
+            loc = 'upper right'
+            self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title,loc=loc)
+            self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' restricted y range',ylims=[0.,10.],loc=loc)
+            self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' restricted x and y ranges',ylims=[0.,4.],xlims=[0.,2.],loc=loc)
+            self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' fanatical x and y ranges',ylims=[0.,0.2],xlims=[0.8,1.2],loc=loc)
         return
     def m2loglike(self,cand,RATIO):
         '''
@@ -317,7 +323,7 @@ class combiner():
         Atot = 2.1e-3
         Ncand = 1
         #print '\n combiner.loadData TEMPORARY CHANGE S/B FOR PNN1 EVENT 95A ********************'
-        soverb = [35.]
+        soverb = [35.] ## Changing to 25.7 has no significant effect on combined BFs
         #print 'combiner.loadData TEMPORARY CHANGE S/B FOR PNN1 EVENT 95A\n'
         AssumedBr = 7.5e-11
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
@@ -510,7 +516,7 @@ class combiner():
 
 
         ls = ['-','--','-.',':','-','--',':']
-        ls.extend(ls)
+        ls.extend(ls[::-1])
         c  = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
         c.extend(c)
         
