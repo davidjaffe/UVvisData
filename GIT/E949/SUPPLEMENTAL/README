@@ -1,0 +1,18 @@
+*** E949 Results presented in arXiv:0903.0030
+*** In each file:
+*** column 1:  K+ --> pi+ nu nubar branching ratio (br) times 10e10
+*** column 2:  Signal confidence level (cls) as defined by method of
+            T.Junk. (NIM A434, 435 (1999)). 
+	    All uncertainties have been included via a weighted sum method.
+
+cls_SM.dat  - br vs cls interpreted with a SM spectral shape using results from both kinematic regions.
+cls_SM_I.dat - idem     using results in pnn1 region only.
+cls_SM_II.dat - idem    using results in pnn2 region only
+
+cls_scalar.dat - interpreted using a scalar spectral shape
+cls_scalar_I.dat
+cls_scalar_II.dat
+
+cls_tensor.dat - interpreted using a tensor spectral shape
+cls_tensor_I.dat
+cls_tensor_II.dat
