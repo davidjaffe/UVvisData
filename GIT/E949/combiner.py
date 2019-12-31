@@ -46,6 +46,11 @@ class combiner():
         r = numpy.append( r, numpy.arange(0.8,1.2,0.005) )
         r = numpy.append( r, numpy.arange(1.2,2.5,0.1)   )
         r = numpy.append( r, numpy.arange(2.5,10.,0.5)   )
+        # smaller steps near minima of fits to subsets of data
+        dx,step = 0.2,0.001
+        for x0 in [1.50, 2.70, 4.95, 7.80, 1.70]:
+            r = numpy.append( r, numpy.arange(x0-dx,x0+dx,step) )
+
         r = numpy.unique( numpy.sort(r) )
         self.ratioRange = r
 
@@ -78,12 +83,13 @@ class combiner():
         local_cands = self.collate(cands)
 
 
-        vary = {'NK'    :numpy.arange( 1.00, 1.05, 0.001),
-                'soverb':numpy.arange( 0.89, 0.93, 0.001) }
+        vary = {'NK'    :numpy.arange( 0.90, 1.10, 0.01),
+                'soverb':numpy.arange( 0.80, 1.20, 0.02) }
 
         for key in vary:
             br = []
-            
+
+
             for v in vary[key]:
                 title = 'Variation is ' + key + ' times ' + str(v)
                 allc = copy.deepcopy(local_cands)
@@ -100,11 +106,20 @@ class combiner():
                 m2ll = m2ll-min(m2ll)
                 if self.debug>1: print 'combiner.studyVariations',title,'len(x),len(m2ll)',len(x),len(m2ll)
                 xatmin = x[numpy.argmin(m2ll)]
-                print 'combiner.studyVariations',title,'minimized at',xatmin
+                if self.debug>0: print 'combiner.studyVariations',title,'minimized at',xatmin
                 br.append( xatmin )
                 #self.drawIt(x,m2ll,xtitle,ytitle,title,mark='-')
                 del allc
+            i = numpy.argmin(abs(numpy.array(br)-1.0))
+            i1= max(i-1,0)
+            i2= min(i+1,len(br)-1)
+            slope = (br[i2]-br[i1])/(vary[key][i2]-vary[key][i1])
+            y1,y2= br[i1],br[i2]
+            x1,x2= vary[key][i1],vary[key][i2]
+            best = ((x2-x1) - (x2*y1-y2*x1))/(y2-y1)
+            print 'combiner.studyVariations {0}, slope of scale factor {1:.3f}, best scale factor {2:.3f}'.format(key,1./slope,best)
             self.drawIt(vary[key],br,key+' scale factor',ytitle,'Variation of '+key,mark='o-')
+            
         return
     def main(self):
         '''
@@ -125,7 +140,7 @@ class combiner():
         self.reportData(cands,mode='same_assumed_Br')
         if self.studyVar : self.studyVariations(cands)
             
-        # group candidates and calculate minimum of chi2
+        # group candidates, calculate minimum of chi2, report results by group
         groupCands = {}
         for group in sorted(self.Groups.keys()):
             groupCands[group] = self.collate(cands,keyw=group)[group]
@@ -138,7 +153,7 @@ class combiner():
             m2ll = m2ll-min(m2ll)
             xatmin = x[numpy.argmin(m2ll)]
             Results[group] = xatmin*self.AssumedBR
-            print 'combine.main {0} minimized at BF {1:.2e}'.format(group,xatmin*self.AssumedBR)
+            if debug>0: print 'combine.main {0} minimized at BF {1:.2e}'.format(group,xatmin*self.AssumedBR)
 
         self.reportGroups(Results)
             
@@ -155,7 +170,7 @@ class combiner():
             allcands = self.fillM2LL(allcands)
             m2ll = numpy.array(allcands['all']['m2ll'])
             m2ll = m2ll-min(m2ll)
-            print 'combiner.main allcands minimized at',x[numpy.argmin(m2ll)]
+            if debug>0: print 'combiner.main allcands minimized at',x[numpy.argmin(m2ll)]
             title = '-2*loglikelihood with systematics'
             self.drawIt(x,m2ll,xtitle,ytitle,title,mark='-')
             self.drawIt(x,m2ll,xtitle,ytitle,title+' restrict ranges',mark='-',xlims=[0.5,1.5],ylims=[0.,0.1])
@@ -173,7 +188,7 @@ class combiner():
             xatmin = x[numpy.argmin(m2ll)]
             BFatmin = ' BF={0:.2e}'.format(xatmin*self.AssumedBR)
             ratmin = ', min at '+str(xatmin)+BFatmin
-            print 'combiner.main dataset',dataset,ratmin
+            if debug>0: print 'combiner.main dataset',dataset,ratmin
             if debug>1 : print 'combiner.main dataset,len(x),len(m2ll)',dataset,len(x),len(m2ll)
             if drawEach : self.drawIt(x,m2ll,xtitle,ytitle,dataset+ratmin,mark='-')
             if globalM2LL is None:
@@ -184,7 +199,7 @@ class combiner():
         M2LL['all'] = globalM2LL-min(globalM2LL)
         ratmin = ', min at '+str(x[numpy.argmin(globalM2LL)])
         title = 'All E787/E949 data'+ratmin
-        print 'combiner.main',title
+        if debug>0: print 'combiner.main',title
         if drawEach: self.drawIt(x,globalM2LL,xtitle,ytitle,title,mark='-')
             
         title = '-2*loglikelihood'
@@ -370,7 +385,8 @@ class combiner():
                     'E949 pnn2': ['pnn2_E949']
                       }
         self.Groups = groups
-        # Joss's thesis Table 89 for fitted BR in 1.e-10 units
+        # E949 Technote K074.v1 Table 89 for fitted BR in 1.e-10 units
+        # labelled 'Joss' in this file for reasons that cannot be revealed
         self.Joss  = {'pnn1_pub': 1.47, 
                     'All E787'  : 1.49, 
                     'All E949'  : 2.80, 
@@ -386,11 +402,13 @@ class combiner():
         '''
         report content of self.Groups with fitted BR and Joss's fitted BR
         '''
-        print '{0:^12} {1:^12} {2:<15} | {3}'.format('BF(1e-10)','Joss(1e-10)','Group name','data sets')
+        if self.Groups is None: sys.exit('combiner.reportGroups ERROR self.Groups not initialized')
+        print '{0:^12} {1:^12} {2:^6} {3:<15} | {4}'.format('BF(1e-10)','Joss(1e-10)','BF/J','Group name','data sets')
         for group in sorted(self.Groups.keys()):
             mine = Results[group]/1.e-10
             Joss = self.Joss[group]
-            print '{0:>12.2f} {1:<12.2f} {2:<15} |'.format(mine,Joss,group),'%s' % ' '.join(map(str,self.Groups[group]))
+            r    = mine/Joss
+            print '{0:>12.2f} {1:<12.2f} {2:^6.2f} {3:<15} |'.format(mine,Joss,r,group),'%s' % ' '.join(map(str,self.Groups[group]))
         return
             
     def setAssBr(self,cands):
@@ -488,7 +506,7 @@ class combiner():
         ax.xaxis.set_major_locator(MultipleLocator(major))
         minor = major/5.
         ax.xaxis.set_minor_locator(MultipleLocator(minor))
-        print 'combiner.drawMany major,minor',major,minor,'xlims',xlims
+        if self.debug>1: print 'combiner.drawMany major,minor',major,minor,'xlims',xlims
 
 
         ls = ['-','--','-.',':','-','--',':']
