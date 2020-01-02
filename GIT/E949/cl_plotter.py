@@ -26,6 +26,8 @@ class cl_plotter():
         self.supplDir = 'SUPPLEMENTAL/'
         self.filelist = glob.glob(self.supplDir + '*SM*.dat')
 
+        self.fCLs = None
+
         self.figDir = 'FIGURES/'
         
         print 'cl_plotter.__init__ Done'
@@ -44,19 +46,50 @@ class cl_plotter():
             BF2 = br[numpy.argmin(abs(CLs-0.16))]
             BF1 = br[numpy.argmin(abs(CLs-0.84))]
             title = name + ', 68%CL interval ({0:.2f},{1:.2f})e-10'.format(BF1,BF2)
-            self.drawIt(br,CLs,'br','CLs',title,mark='.',xlims=[0.,1.])
-            self.drawIt(br,CLs,'br','CLs',title,mark='.',xlims=[1.1,1.2])
+            if debug>0:
+                self.drawIt(br,CLs,'br','CLs',title,mark='.',xlims=[0.,1.])
+                self.drawIt(br,CLs,'br','CLs',title,mark='.',xlims=[1.1,1.2])
 
-        self.drawMany(X,Y,sorted(X.keys()),'Br(1e-10)','CLs','',xlims=[0.,6.])
+        self.drawMany(X,Y,sorted(X.keys()),'Br(1e-10)','CLs','CLs curves from E949 archive',xlims=[0.,6.])
         #self.combine(X,Y)
+        self.makePDF(X,Y,kind='slinear')
         return
+    def makePDF(self,X,Y,kind='slinear'):
+        '''
+        create so-called PDF from X=br,Y=CLs
+        '''
+        f = self.funcCLs(X,Y,kind=kind)
+        fkey = 'cls_SM'
+        xlo,xhi,steps = X[fkey][0],X[fkey][-1],min(100,len(X[fkey]))
+        dx = (xhi-xlo)/float(steps)
+        x = numpy.arange(xlo,xhi,dx)
+        for h in [dx/2.,dx/4.,dx/8.,dx/16.]:
+            PDF = []
+            fun1 = []
+            for u in x:
+                x1,x2 = min(xhi,u+h),max(xlo,u-h)
+                if debug>1: print 'cl_plotter.makePDF xlo,xhi,x1,x2',xlo,xhi,x1,x2
+                f1,f2 = 1.-self.fCLs[fkey](x1),1.-self.fCLs[fkey](x2)
+                fun1.append(f1)
+                PDF.append( (f2-f1)/(x2-x1) )
+            title = '{0} interpolation kind={3} steps={1} h={2:.2e}'.format(fkey,steps,h,kind)
+            self.drawIt(x,PDF,'br','PDF',title,mark='o-')
+#            self.drawIt(x,fun1,'br','1-funCLs',title,mark='.')
+        return
+    def funcCLs(self,X,Y,kind='slinear'):
+        '''
+        return functions defined by X,Y using kind interpolation
+        '''
+        fCLs = {}
+        for key in X: fCLs[key] = interp1d(X[key],Y[key],kind)
+        self.fCLs = fCLs
+        return fCLs
     def combine(self, X,Y):
         '''
         compare combination of SM_I and SM_II with SM
+        THIS IS NOT THE PROPER WAY TO COMBINE CLs CURVES.
         '''
-        f = {}
-        for key in X:
-            f[key] = interp1d(X[key],Y[key])
+        f = self.funcCLs(X,Y)
         Ynew = []
         Xnew = []
         keySM = 'cls_SM'
@@ -101,6 +134,18 @@ class cl_plotter():
         br = numpy.array(br)
         CLs= numpy.array(CLs)
         return br,CLs
+    def titleAsFilename(self,title):
+        '''
+        return ascii suitable for use as a filename
+        list of characters to be replaced is taken from https://stackoverflow.com/questions/4814040/allowed-characters-in-filename
+        '''
+        r = {'_': [' ', ',',  '\\', '/', ':', '"', '<', '>', '|'], 'x': ['*']}
+        filename = title
+        filename = ' '.join(filename.split()) # substitutes single whitespace for multiple whitespace
+        for new in r:
+            for old in r[new]:
+                if old in filename : filename = filename.replace(old,new)
+        return filename    
     def drawIt(self,x,y,xtitle,ytitle,title,ylog=False,xlims=None,ylims=None,mark='o-'):
         '''
         draw graph defined by x,y
@@ -178,7 +223,7 @@ if __name__ == '__main__' :
     debug    = 0 # >0 gives output
     drawToFile = False # plots go to file instead of to terminal (use savefig() instead of show())
     if len(sys.argv)>1:
-        if sys.argv[1].lower()=='help' : sys.exit( 'usage: python combiner.py drawEach debug drawToFile turnOnSyst studyVar' )
+        if sys.argv[1].lower()=='help' : sys.exit( 'usage: python cl_plotter.py debug drawToFile' )
         debug = int(sys.argv[1])
     if len(sys.argv)>2:
         if sys.argv[2].lower()=='drawtofile' : drawToFile = True
