@@ -30,7 +30,9 @@ class combiner():
 
         self.systOn = False
         self.systAcc = 0.10
-        self.systN   = 10000
+        self.systN   = 100*5
+        self.XforSysts = None
+        self.vforSysts = None
         if self.systOn : print 'combiner.__init__ SYSTEMATIC VARIATIONS APPLIED. systAcc,systN',self.systAcc,self.systN
         
         self.AssumedBr = self.AssumedBR = 1.73e-10 # PRD79, 092004 (2009) Table VIII
@@ -48,7 +50,8 @@ class combiner():
         r = numpy.append( r, numpy.arange(2.5,10.,0.5)   )
         # smaller steps near minima of fits to subsets of data
         dx,step = 0.2,0.001
-        for x0 in [1.50, 2.70, 4.95, 7.80, 1.70]:
+        abr = self.AssumedBr/1.e-10
+        for x0 in [1.50/abr, 2.70/abr, 4.95/abr, 7.80/abr, 1.70/abr]:
             r = numpy.append( r, numpy.arange(x0-dx,x0+dx,step) )
 
         r = numpy.unique( numpy.sort(r) )
@@ -161,8 +164,9 @@ class combiner():
         loc = 'best'
         self.drawMany(x,gLL,xtitle,gLL.keys(),title,loc=loc)
         self.drawMany(x,gLL,xtitle,gLL.keys(),title+' restricted x and y ranges',ylims=[0.,4.],xlims=[0.,2.],loc=loc)
+        self.drawMany(x,gLL,xtitle,gLL.keys(),title+' fanatical x and y ranges',ylims=[0.,0.2],xlims=[0.8,1.2],loc=loc)
             
-        cands = self.fillM2LL(cands)
+        #cands = self.fillM2LL(cands)
 
 
         
@@ -175,8 +179,11 @@ class combiner():
             allcands = self.fillM2LL(allcands)
             m2ll = numpy.array(allcands['all']['m2ll'])
             m2ll = m2ll-min(m2ll)
-            if debug>0: print 'combiner.main allcands minimized at',x[numpy.argmin(m2ll)]
-            title = '-2*loglikelihood with systematics'
+            xatmin = x[numpy.argmin(m2ll)]
+            Bratmin = xatmin*self.AssumedBr
+            if debug>0: print 'combiner.main allcands minimized at',xatmin
+            title = '-2*loglikelihood with systematics minimized at {0:.3f} BF={1:.3e} systN={2}'.format(xatmin,Bratmin,self.systN)
+            print 'combiner.main',title
             self.drawIt(x,m2ll,xtitle,ytitle,title,mark='-')
             self.drawIt(x,m2ll,xtitle,ytitle,title+' restrict ranges',mark='-',xlims=[0.5,1.5],ylims=[0.,0.1])
             M2LL['all_with_syst'] = m2ll
@@ -216,6 +223,45 @@ class combiner():
             self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' fanatical x and y ranges',ylims=[0.,0.2],xlims=[0.8,1.2],loc=loc)
         return
     def m2loglike(self,cand,RATIO):
+        '''
+        calculate -2 * log likelihood from NK,Atot,[s/b], given ratio = BR/self.AssumedBr
+        optionally include averaging over systematic variation of global acceptance 
+        '''
+        if type(cand['NK']) is list:
+            NKlist = cand['NK']
+            Atotlist = cand['Atot']
+        else:
+            NKlist = [cand['NK']]
+            Atotlist = [cand['Atot']]
+        soverb = cand['soverb']
+
+        v,X = [1.],[1.]
+        if self.systOn:
+            if self.XforSysts is None:
+                slo,shi=-5.,5.
+                ds = (shi-slo)/float(self.systN)
+                X = numpy.arange(slo,shi,ds)*self.systAcc + 1.
+                import scipy.stats
+                v = scipy.stats.norm.pdf(X,1.,self.systAcc)
+                self.XforSysts = X
+                self.vforSysts = v
+            else:
+                X = self.XforSysts
+                v = self.vforSysts
+
+        like = 0.
+        totwt= 0.
+        for f,wt in zip(X,v):
+            ratio = f*RATIO
+            totwt += wt
+            for NK,Atot in zip(NKlist,Atotlist):
+                like += ratio*self.AssumedBr*NK*Atot
+            for x in soverb:
+                like -= math.log(1. + ratio*x)
+        like = like/totwt
+        like *= 2.
+        return like
+    def OLD_m2loglike(self,cand,RATIO):
         '''
         calculate -2 * log likelihood from NK,Atot,[s/b], given ratio = BR/self.AssumedBr
         optionally include averaging over systematic variation of global acceptance 
@@ -409,7 +455,7 @@ class combiner():
         report content of self.Groups with fitted BR and Joss's fitted BR
         '''
         if self.Groups is None: sys.exit('combiner.reportGroups ERROR self.Groups not initialized')
-        print '{0:^12} {1:^12} {2:^6} {3:<15} | {4}'.format('BF(1e-10)','Joss(1e-10)','BF/J','Group name','data sets')
+        print '{0:^12} {1:^12} {2:^6} {3:<15} | {4}'.format('BF(1e-10)','K074(1e-10)','BF/K','Group name','data sets')
         for group in sorted(self.Groups.keys()):
             mine = Results[group]/1.e-10
             Joss = self.Joss[group]
@@ -508,7 +554,7 @@ class combiner():
         plt.title(title)
         major = 1.
         if xlims is not None:
-            if xlims[1]-xlims[0]<2: major = (xlims[1]-xlims[0])/10
+            if xlims[1]-xlims[0]<=2: major = (xlims[1]-xlims[0])/10
         ax.xaxis.set_major_locator(MultipleLocator(major))
         minor = major/5.
         ax.xaxis.set_minor_locator(MultipleLocator(minor))
