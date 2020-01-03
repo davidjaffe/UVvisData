@@ -51,7 +51,7 @@ class combiner():
         # smaller steps near minima of fits to subsets of data
         dx,step = 0.2,0.001
         abr = self.AssumedBr/1.e-10
-        for x0 in [1.50/abr, 2.70/abr, 4.95/abr, 7.80/abr, 1.70/abr]:
+        for x0 in [0.96/abr, 1.50/abr, 2.70/abr, 4.95/abr, 7.80/abr, 1.70/abr]:
             r = numpy.append( r, numpy.arange(x0-dx,x0+dx,step) )
 
         r = numpy.unique( numpy.sort(r) )
@@ -68,7 +68,7 @@ class combiner():
         s = 'NO SYSTEMATIC VARIATIONS. Flag is False'
         if self.systOn: s = 'SYSTEMATIC VARIATION systAcc {0:.2f} systN {1}'.format(self.systAcc,self.systN)
         return s
-    def studyVariations(self,cands):
+    def studyVariations(self,cands,keyw='all', centralValue=1.):
         '''
         make a deepcopy of the input cands and monkey around
         to understand dependency of the BR that minimizes -2*loglike on various parameters
@@ -76,14 +76,16 @@ class combiner():
         import copy
 
         x = numpy.array(self.ratioRange)
-        x = numpy.append(x, numpy.arange(0.9,1.1,.0001) )
+        x = numpy.append(x, numpy.arange(0.9,1.1,.0001)*centralValue )
         x = numpy.sort(x)
         x = numpy.unique(x)
-        ytitle = 'Br(K+ => pi+,nu,nubar)/'+str(self.AssumedBr)
+        ytitle = 'Br(K+ => pi+,nu,nubar)/'+str(self.AssumedBr)+ ' centralValue is {0:.2f}'.format(centralValue)
 
-
+        if self.debug>0 : print 'combiner.studyVariations keyw',keyw,', cands.keys()',cands.keys()
+        
     
-        local_cands = self.collate(cands)
+        local_cands = self.collate(cands,keyw=keyw)
+        if self.debug>0 : print 'combiner.studyVariations local_cands.keys()',local_cands.keys()
 
 
         vary = {'NK'    :numpy.arange( 0.90, 1.10, 0.01),
@@ -96,32 +98,35 @@ class combiner():
             for v in vary[key]:
                 title = 'Variation is ' + key + ' times ' + str(v)
                 allc = copy.deepcopy(local_cands)
-                CAND = allc['all']
+                CAND = allc[keyw]
                 if type(CAND[key]) is list:
                     l = [v*z for z in CAND[key]]
                     CAND[key] = l
                 else:
                     CAND[key] = v*CAND[key]
                 allc = self.fillM2LL(allc,x)
-                if self.debug>1: print 'combiner.studyVariations allc.keys()',allc.keys()
-                if self.debug>1: print 'combiner.studyVariations allc[all].keys()',allc['all'].keys()
-                m2ll = numpy.array(allc['all']['m2ll'])
+                if self.debug>2: print 'combiner.studyVariations allc.keys()',allc.keys()
+                if self.debug>2: print 'combiner.studyVariations allc[all].keys()',allc['all'].keys()
+                m2ll = numpy.array(allc[keyw]['m2ll'])
                 m2ll = m2ll-min(m2ll)
-                if self.debug>1: print 'combiner.studyVariations',title,'len(x),len(m2ll)',len(x),len(m2ll)
+                if self.debug>2: print 'combiner.studyVariations',title,'len(x),len(m2ll)',len(x),len(m2ll)
                 xatmin = x[numpy.argmin(m2ll)]
-                if self.debug>0: print 'combiner.studyVariations',title,'minimized at',xatmin
+                if self.debug>1: print 'combiner.studyVariations',title,'minimized at',xatmin
                 br.append( xatmin )
                 #self.drawIt(x,m2ll,xtitle,ytitle,title,mark='-')
                 del allc
-            i = numpy.argmin(abs(numpy.array(br)-1.0))
+            i = numpy.argmin(abs(numpy.array(br)-centralValue))
             i1= max(i-1,0)
             i2= min(i+1,len(br)-1)
             slope = (br[i2]-br[i1])/(vary[key][i2]-vary[key][i1])
             y1,y2= br[i1],br[i2]
             x1,x2= vary[key][i1],vary[key][i2]
-            best = ((x2-x1) - (x2*y1-y2*x1))/(y2-y1)
-            print 'combiner.studyVariations {0}, slope of scale factor {1:.3f}, best scale factor {2:.3f}'.format(key,1./slope,best)
-            self.drawIt(vary[key],br,key+' scale factor',ytitle,'Variation of '+key,mark='o-')
+            slope= (y2-y1)/(x2-x1)
+            b    = (x2*y1 - y2*x1)/(x2-x1)
+            best = (centralValue - b)/slope 
+            print 'combiner.studyVariations {0} for {3} with centralValue {4:.2f}, slope of scale factor {1:.3f}, best scale factor {2:.3f}'.format(key,1./slope,best,keyw,centralValue)
+            title = 'Variation of {0} for {2}. Best scale factor is {1:.3f} for centralValue {3:.2f}'.format(key,best,keyw,centralValue)
+            self.drawIt(vary[key],br,key+' scale factor',ytitle,title,mark='o-')
             
         return
     def main(self):
@@ -141,7 +146,10 @@ class combiner():
         self.reportData(cands,mode='raw')
         cands = self.setAssBr(cands)
         self.reportData(cands,mode='same_assumed_Br')
-        if self.studyVar : self.studyVariations(cands)
+        if self.studyVar :
+            self.studyVariations(cands,keyw='all')
+            self.studyVariations(cands,keyw='All pnn2',centralValue=5.11/1.73)
+            self.studyVariations(cands,keyw='E949 pnn2',centralValue=7.89/1.73)
             
         # group candidates, calculate minimum of chi2, report results by group
         groupCands = {}
@@ -158,6 +166,13 @@ class combiner():
             xatmin = x[numpy.argmin(m2ll)]
             Results[group] = xatmin*self.AssumedBR
             if debug>0: print 'combine.main {0} minimized at BF {1:.2e}'.format(group,xatmin*self.AssumedBR)
+            if drawEach :
+                xtitle = 'Br(K->pi+nunubar)/{0:.2e}'.format(self.AssumedBR)
+                ytitle = '-2*loglike'
+                title  = '{0} minimized at {1:.2f} at BF {2:.2e}'.format(group,xatmin,xatmin*self.AssumedBR)
+                xlims  = [ max(0.,xatmin-0.5),min(10.,xatmin+0.5)]
+                ylims = [0.,0.5] 
+                self.drawIt(x,m2ll,xtitle,ytitle,title,mark='o-',xlims=xlims,ylims=ylims)
 
         self.reportGroups(Results)
         title = 'Groups'
@@ -364,36 +379,34 @@ class combiner():
         
         dataset = 'pnn1_E787_95-7'
         self.dataSets.append( dataset )
-        journal = 'PRL88_041803'
+        journal = 'PRL88_041803_and_PRL101_191802'
         NK = 3.2e12
         Atot = 2.1e-3
         Ncand = 1
-        #print '\n combiner.loadData TEMPORARY CHANGE S/B FOR PNN1 EVENT 95A ********************'
-        soverb = [35.] ## Changing to 25.7 has no significant effect on combined BFs
-        #print 'combiner.loadData TEMPORARY CHANGE S/B FOR PNN1 EVENT 95A\n'
-        AssumedBr = 7.5e-11
+        soverb = [59.] ## PRL101
+        AssumedBr = 1.73e-10 ## PRL101
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn1_E787_98'
         self.dataSets.append( dataset )
-        journal = 'PRL88_041803'
+        journal = 'PRL88_041803_and_PRL101_191802'
         NK = 2.7e12
         Atot = 1.96e-3
         Ncand = 1
-        soverb = [3.6]
-        AssumedBr = 7.5e-11
+        soverb = [8.2]  ## PRL 101
+        AssumedBr = 1.73e-10 ## PRL101
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn1_E949'
         self.dataSets.append( dataset )
-        journal = 'PRD77_052003'
+        journal = 'PRD77_052003_and_PRL101_191802'
         NK = 1.77e12
         Atot = 2.22e-3
         AssumedBr = self.AssumedBr
         Ncand = 1
         b = 5.7e-5
         s = 3.628e5*AssumedBr
-        soverb = [s/b]
+        soverb = [1.1] ## PRL101 (same as PRD77)
         cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn2_E787_96'
@@ -486,7 +499,7 @@ class combiner():
 
         
         print 'combiner.reportData mode is',mode,'. `AssBr` means Assumed Branching fraction of K+ => pi,nu,nubar for sig/bkg column'
-        print '{0:<15} {1:>5}({2:5.0e}) {3:>5}({4:5.0e}) {5:>5}({6:5.0e}) {7:>5}({8:5.0e}) {9:>5} {10:>15} {11:>15}'.format('dataset','NK',units['NK'],'Atot',units['Atot'],'SES',units['SES'],'AssBr',units['AssumedBr'],'Ncand','sig/bkg','journal')
+        print '{0:<15} {1:>5}({2:5.0e}) {3:>5}({4:5.0e}) {5:>5}({6:5.0e}) {7:>5}({8:5.0e}) {9:>5} {10:>15} {11:<45}'.format('dataset','NK',units['NK'],'Atot',units['Atot'],'SES',units['SES'],'AssBr',units['AssumedBr'],'Ncand','sig/bkg','journal')
         #           0      1    2           3       4            5      6            7      8                 9        10        11
         for dataset in sorted(cands):
             cand = cands[dataset]
@@ -500,7 +513,7 @@ class combiner():
             wsb = ''
             for x in soverb:
                 wsb += '{0:>5.2f}'.format(x)
-            print '{0:<15} {1:>12.2f} {2:>12.2f} {3:>12.2f} {4:>12.2f} {5:>5} {6:>15} {7:>15}'.format(dataset,NK,Atot,SES,AssBr,Ncand,wsb,journal)
+            print '{0:<15} {1:>12.2f} {2:>12.2f} {3:>12.2f} {4:>12.2f} {5:>5} {6:>15} {7:<45}'.format(dataset,NK,Atot,SES,AssBr,Ncand,wsb,journal)
             
         return
     def titleAsFilename(self,title):
