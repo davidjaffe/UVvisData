@@ -61,6 +61,40 @@ class combiner():
         
         print 'combiner.__init__ Did something'
         return
+    def eclReader(self,dataset):
+        '''
+        translation of Joe/home/sher/test/ecl98inside.f
+        if dataset is 'pnn1_E787_98' return list with [b_i,b_e] where b_i is bkgd in cell 
+           containing 98C signal candidate, b_e = total bkg - b_i
+        otherwise error exit
+        '''
+        if dataset=='pnn1_E787_98':
+            boxbg98 = 0.0657
+            isignal = 64 # cell with signal event (starting from 1)
+            filename = 'DATA/bgtotal.inside.dat'
+            f = open(filename,'r')
+            n = None
+            nRead = 0
+            s,b = [],[]
+            for line in f:
+                words = line.split()
+                if n is None:
+                    n = int(words[0])
+                else:
+                    b.append( float(words[2]) )
+                    s.append( float(words[3]) )
+                    nRead += 1
+            f.close()
+            print 'combiner.eclReader',dataset,filename,
+            if self.debug>0: 'n',n,'nRead',nRead,'raw b[:4]',b[:4],
+            b = numpy.array(b) * boxbg98
+            b_in_signal_cell = b[isignal-1]
+            b_elsewhere = boxbg98 - b_in_signal_cell
+            print 'total bkg {0:.4f} bkg in signal cell {1:.4f} bkg elsewhere {2:.4f}'.format(boxbg98,b_in_signal_cell,b_elsewhere)
+            return [b_in_signal_cell, b_elsewhere]
+        else:
+            sys.exit('combiner.eclReader ERROR Unknown dataset '+dataset)
+        return
     def reportSyst(self):
         '''
         return string with report on systematics parameters
@@ -333,7 +367,7 @@ class combiner():
 
         '''
         allcands = {}
-        allcands[keyw] = {'NK':[], 'Atot':[], 'soverb':[], 'AssumedBr':None}
+        allcands[keyw] = {'NK':[], 'Atot':[], 'soverb':[], 'AssumedBr':None, 'Btot':[], 'sigi':[], 'bkgi':[], 'candi':[]}
         groups = self.Groups
         AssBr = None
 
@@ -351,14 +385,22 @@ class combiner():
             cand = cands[dataset]
             NK = cand['NK']
             Atot = cand['Atot']
+            Btot = cand['Btot']
             soverb = cand['soverb']
+            sigi   = cand['sigi']
+            bkgi   = cand['bkgi']
+            candi  = cand['candi']
             if AssBr is None: AssBr = cand['AssumedBr']
             if AssBr!=cand['AssumedBr']:
                 print 'combiner.collate ERROR dataset,AssumedBr',dataset,cand['AssumedBr'],'is not equal to',AssBr,'found for first dataset'
                 sys.exit('combiner.collate ERROR inconsistent assumed Br')
             allcands[keyw]['NK'].append( NK )
             allcands[keyw]['Atot'].append( Atot )
+            allcands[keyw]['Btot'].append( Btot )
             allcands[keyw]['soverb'].extend( soverb )
+            allcands[keyw]['sigi'].extend( sigi )
+            allcands[keyw]['bkgi'].extend( bkgi )
+            allcands[keyw]['candi'].extend( candi )
             allcands[keyw]['AssumedBr'] = AssBr
         return allcands
     def loadData(self):
@@ -371,7 +413,10 @@ class combiner():
         Atot = total acceptance
         Ncand = number of candidates
         AssumedBr = assumed B(K+ => pi+,nu,nubar) used for s_i/b_i ratio
-        s_i/b_i = signal to background ratio in ith cell (cells containing candidates)
+        soverb = s_i/b_i = signal to background ratio in ith cell (cells containing candidates)
+        Btot = total background
+        Ctot = total number of cells for CLs
+        bkgi = bkgd in ith cell, final cell contains no candidates if Ctot>Ncand
         '''
         cands = {}
 
@@ -382,64 +427,91 @@ class combiner():
         journal = 'PRL88_041803_and_PRL101_191802'
         NK = 3.2e12
         Atot = 2.1e-3
+        Btot = 0.08 ## +- 0.03
+        Ctot = 2
         Ncand = 1
         soverb = [59.] ## PRL101
+        b = 0.00646 ## tight golden region, Bergbusch thesis Table 4.21
+        bkgi   = [b, Btot-b] ## 
         AssumedBr = 1.73e-10 ## PRL101
-        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+        sigi,candi = self.fillSig(Atot,Ctot,Ncand,NK,AssumedBr,soverb,bkgi)
+        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Btot':Btot, 'Ctot':Ctot, 'bkgi':bkgi, 'sigi':sigi, 'candi':candi, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn1_E787_98'
         self.dataSets.append( dataset )
         journal = 'PRL88_041803_and_PRL101_191802'
         NK = 2.7e12
         Atot = 1.96e-3
+        Btot = 0.066 ## +0.044-0.025
+        Ctot = 2 
         Ncand = 1
         soverb = [8.2]  ## PRL 101
+        bkgi   = self.eclReader(dataset)
         AssumedBr = 1.73e-10 ## PRL101
-        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+        sigi,candi = self.fillSig(Atot,Ctot,Ncand,NK,AssumedBr,soverb,bkgi)
+        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Btot':Btot, 'Ctot':Ctot, 'bkgi':bkgi, 'sigi':sigi, 'candi':candi, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn1_E949'
         self.dataSets.append( dataset )
         journal = 'PRD77_052003_and_PRL101_191802'
         NK = 1.77e12
-        Atot = 2.22e-3
+        Atot = 2.22e-3  ## +- 0.07 +- 0.15 e-3
+        Btot = 0.30 ## +-0.03 for so-called extended signal region
+        Ctot = 2
         AssumedBr = self.AssumedBr
         Ncand = 1
         b = 5.7e-5
         s = 3.628e5*AssumedBr
+        bkgi = [b, Btot-b]
         soverb = [1.1] ## PRL101 (same as PRD77)
-        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+        sigi,candi = self.fillSig(Atot,Ctot,Ncand,NK,AssumedBr,soverb,bkgi)
+        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Btot':Btot, 'Ctot':Ctot, 'bkgi':bkgi, 'sigi':sigi, 'candi':candi, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn2_E787_96'
         self.dataSets.append( dataset )
         journal = 'PLB537_2002_211'
         NK = 1.12e12
         Atot = 0.765e-3
+        Btot = 0.734 ## +-0.117
+        Ctot = 1 ## only one cell defined
         Ncand = 1
-        b = 0.734 # +- 0.117
+        b = Btot
+        bkgi = [b]        
         AssumedBr = self.AssumedBr
         s = NK*Atot*AssumedBr*float(Ncand)
         soverb = [s/b]
-        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+        sigi,candi = self.fillSig(Atot,Ctot,Ncand,NK,AssumedBr,soverb,bkgi)
+        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Btot':Btot, 'Ctot':Ctot, 'bkgi':bkgi, 'sigi':sigi, 'candi':candi, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn2_E787_97'
         self.dataSets.append( dataset )
         journal = 'PRD70_037102'
         NK = 0.61e12
         Atot = 0.97e-3
+        Btot = 0.49 ## +-0.16
+        Ctot = 1 ## only one cell defined
+        bkgi = [Btot] 
         Ncand = 0
         AssumedBr = self.AssumedBr
         soverb = []
-        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+        sigi,candi = self.fillSig(Atot,Ctot,Ncand,NK,AssumedBr,soverb,bkgi)
+        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Btot':Btot, 'Ctot':Ctot, 'bkgi':bkgi, 'sigi':sigi, 'candi':candi, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
 
         dataset = 'pnn2_E949'
         self.dataSets.append( dataset )
         journal = 'PRD79_092004'
         NK = 1.71e12
         Atot = 1.37e-3 #(+-0.14e-3)
+        Btot = 0.93 ## +- 0.17 +0.32-0.24
+        Ctot = 4
         Ncand = 3
         AssumedBr = 1.73e-10
         soverb = [0.47, 0.42, 0.20]
-        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+        bkgi   = [0.243, 0.027, 0.379]
+        bkgi.append(Btot - sum(bkgi))
+        sigi,candi = self.fillSig(Atot,Ctot,Ncand,NK,AssumedBr,soverb,bkgi)
+        cands[dataset] = {'NK':NK, 'Atot':Atot, 'Btot':Btot, 'Ctot':Ctot, 'bkgi':bkgi, 'sigi':sigi, 'candi':candi, 'Ncand':Ncand, 'soverb':soverb, 'AssumedBr':AssumedBr, 'journal':journal}
+
         groups = {'pnn1_pub': ['pnn1_E787_95-7','pnn1_E787_98','pnn1_E949'],
                     'All E787': ['pnn1_E787_95-7','pnn1_E787_98','pnn2_E787_96','pnn2_E787_97'],
                     'All E949': ['pnn1_E949', 'pnn2_E949'],
@@ -463,6 +535,39 @@ class combiner():
                       }
 
         return cands
+    def fillSig(self,Atot,Ctot,Ncand,NK,AssumedBr,soverb,bkgi):
+        ''' 
+        return lists sigi, candi given Atot,Ctot,Ncand,NK,AssumedBr,soverb,bkgi
+        where sigi = signal in ith cell given AssumedBr
+        and candi  = number of candidates in ith cell
+        ordering in sigi,candi, should match bkgi
+        Atot = total acceptance
+        Ctot = total number of cells
+        Ncand= total number of candidates
+        NK   = number of stopped kaons
+        AssumedBr = BF assumed for soverb
+        soverb = list of signal_i/bkg_i for i = 1,Ncand
+        bkgi   = background in ith cell
+        '''
+        candi, sigi = None, None
+        if Ncand==0 :
+            candi = [0 for x in range(Ctot)]
+            s = NK*AssumedBr*Atot
+            sigi = [s]
+        else:
+            candi = [1 for x in soverb]
+            candi.extend( [0 for x in range(Ctot-len(soverb))] )
+            sigi = []
+            Ae   = Atot
+            for i,sb in enumerate(soverb):
+                b = bkgi[i]
+                s = b*sb
+                sigi.append(s)
+                Aj= s/NK/AssumedBr   ## acceptance of this cell
+                Ae -= Aj             ## remaining acceptance (Ae = Acceptance elsewhere)
+            s = NK*AssumedBr*Ae
+            if s>1.e-10 : sigi.append(s)  ## avoid adding remaining acceptance that is consistent with zero within precision
+        return sigi,candi
     def reportGroups(self,Results):
         '''
         report content of self.Groups with fitted BR and Joss's fitted BR
@@ -498,8 +603,8 @@ class combiner():
         units = {'NK':1e12, 'Atot':1e-3, 'AssumedBr':1e-10, 'SES':1.e-10}
 
         
-        print 'combiner.reportData mode is',mode,'. `AssBr` means Assumed Branching fraction of K+ => pi,nu,nubar for sig/bkg column'
-        print '{0:<15} {1:>5}({2:5.0e}) {3:>5}({4:5.0e}) {5:>5}({6:5.0e}) {7:>5}({8:5.0e}) {9:>5} {10:>15} {11:<45}'.format('dataset','NK',units['NK'],'Atot',units['Atot'],'SES',units['SES'],'AssBr',units['AssumedBr'],'Ncand','sig/bkg','journal')
+        print 'combiner.reportData mode is',mode,'. `AssBr` means Assumed Branching fraction of K+ => pi,nu,nubar for sig/bkg column. Btot=total bkgd, Ctot=total cells for CLs'
+        print '{0:<15} {1:>5}({2:5.0e}) {3:>5}({4:5.0e}) {5:>5}({6:5.0e}) {7:>5}({8:5.0e}) {9:>5} {10:>15} {11:>5} {12:>5} {13:^22} {14:^22} {15:5} {16:<45}'.format('dataset','NK',units['NK'],'Atot',units['Atot'],'SES',units['SES'],'AssBr',units['AssumedBr'],'Ncand','sig/bkg','Btot','Ctot','background/cell','signal/cell','Candi','journal')
         #           0      1    2           3       4            5      6            7      8                 9        10        11
         for dataset in sorted(cands):
             cand = cands[dataset]
@@ -510,10 +615,18 @@ class combiner():
             Ncand = cand['Ncand']
             soverb= cand['soverb']
             journal = cand['journal']
-            wsb = ''
-            for x in soverb:
-                wsb += '{0:>5.2f}'.format(x)
-            print '{0:<15} {1:>12.2f} {2:>12.2f} {3:>12.2f} {4:>12.2f} {5:>5} {6:>15} {7:<45}'.format(dataset,NK,Atot,SES,AssBr,Ncand,wsb,journal)
+            Btot = cand['Btot']
+            Ctot = cand['Ctot']
+            bpercell = cand['bkgi']
+            sigi  = cand['sigi']
+            candi = cand['candi']
+            wsb,wbc,ws,wc = '','','',''
+            for x in soverb: wsb += '{0:>5.2f}'.format(x)
+            for x in bpercell: wbc += '{0:>.2g} '.format(x)
+            for x in sigi: ws += '{0:>.2g} '.format(x)
+            for x in candi: wc += '{0:1}'.format(x)
+            
+            print '{0:<15} {1:>12.2f} {2:>12.2f} {3:>12.2f} {4:>12.2f} {5:>5} {6:>15} {7:>5.2f} {8:>5} {9:>22} {10:>22} {11:5} {12:<45}'.format(dataset,NK,Atot,SES,AssBr,Ncand,wsb,Btot,Ctot,wbc,ws,wc,journal)
             
         return
     def titleAsFilename(self,title):
