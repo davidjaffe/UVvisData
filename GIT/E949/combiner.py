@@ -17,6 +17,7 @@ import re
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter,  AutoMinorLocator)
+from scipy.stats import poisson
 
 class combiner():
     def __init__(self,debug=0,drawEach=True,drawToFile=False,turnOnSyst=False,studyVar=False):
@@ -42,6 +43,10 @@ class combiner():
         self.Groups = None
         self.dataSets = None
 
+        self.factorial = {}
+        for i in range(20):
+            self.factorial[i] = math.factorial(i)
+        
         # define the binning to scan for the ratio wrt the assumed BR
         r = numpy.arange(0.,0.1,0.05)
         r = numpy.append( r, numpy.arange(0.1,0.8,0.05)  )
@@ -310,6 +315,19 @@ class combiner():
         like = like/totwt
         like *= 2.
         return like
+    def testFcn(self,cand,RATIO):
+        S = RATIO * cand['sigi']
+        return self.testX(S,cand['bkgi'],cand['candi'])
+    def testX(self,S,B,D):
+        '''
+        return X = prod_i X_i where X_i = pois(d_i,s_i+b_i)/pois(d_i,b_i) for pois(k,mu) = exp(-mu)*mu^k/k!
+        '''
+        X = 1.
+        for s,b,d in zip(S,B,D):
+            num = poisson.pmf(d,s+b)
+            den = poisson.pmf(d,b)
+            X *= num/den
+        return X
     def OLD_m2loglike(self,cand,RATIO):
         '''
         calculate -2 * log likelihood from NK,Atot,[s/b], given ratio = BR/self.AssumedBr
@@ -337,6 +355,21 @@ class combiner():
         like = like/float(len(v))
         like *= 2.
         return like
+    def fillX(self,cands,ratRange=None):
+        '''
+        loop over datasets return array of test function X for ratio in ratRange to dict cands
+        '''
+        ratioRange = ratRange
+        if rateRange is None : ratioRange = self.ratioRange
+        X = []
+        for ratio in ratioRange:
+            x = 1.
+            for dataset in sorted(cands):
+                cand = cands[dataset]
+                x *= self.testFcn(cand,ratio)
+            X.append( x )
+        X = numpy.array(X)
+        return X
     def fillM2LL(self,cands,ratRange=None):
         '''
         loop over datasets and add array of -2*loglike(ratio) for ratio in ratRange to dict cands
@@ -402,6 +435,8 @@ class combiner():
             allcands[keyw]['bkgi'].extend( bkgi )
             allcands[keyw]['candi'].extend( candi )
             allcands[keyw]['AssumedBr'] = AssBr
+        # change lists to numpy arrays for later use
+        for k in ['sigi','bkgi','candi']: allcands[keyw][k] = numpy.array( allcands[keyw][k] )
         return allcands
     def loadData(self):
         '''
