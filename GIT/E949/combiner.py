@@ -62,6 +62,12 @@ class combiner():
         r = numpy.unique( numpy.sort(r) )
         self.ratioRange = r
 
+        # define binning for CLs scans
+        r = numpy.arange(0.,10.,0.5)
+        r = numpy.arange(0.,3.,0.01)
+        self.ratioRangeCLs = numpy.unique( numpy.sort(r) )
+        print 'combiner.__init__ # bins in self.ratioRange',len(self.ratioRange),'self.ratioRangeCLs',len(self.ratioRangeCLs)
+
         self.figDir = 'FIGURES/'
         
         print 'combiner.__init__ Did something'
@@ -175,6 +181,7 @@ class combiner():
         debug = self.debug
         drawEach = self.drawEach
         x = numpy.array(self.ratioRange)
+        xCLs = self.ratioRangeCLs
         xtitle = 'Br(K+ => pi+,nu,nubar)/'+str(self.AssumedBr)
         ytitle = '-2*loglikelihood'
 
@@ -190,18 +197,21 @@ class combiner():
             self.studyVariations(cands,keyw='All pnn2',centralValue=5.11/1.73)
             self.studyVariations(cands,keyw='E949 pnn2',centralValue=7.89/1.73)
             
-        # group candidates, calculate minimum of chi2, report results by group
+        # group candidates, calculate minimum of chi2, test function X, report results by group
         groupCands = {}
         for group in sorted(self.Groups.keys()):
             groupCands[group] = self.collate(cands,keyw=group)[group]
             if debug>0: print 'combiner.main group',group,'groupCands[group].keys()',groupCands[group].keys(),'groupCands[group]',groupCands[group]
         if debug>0: print 'combine.main groupCands.keys()',groupCands.keys()
         groupCands = self.fillM2LL(groupCands)
+        groupCands = self.fillX(groupCands,ratRange=xCLs)
         Results = {}
         gLL = {}
+        gX  = {}
         for group in sorted(self.Groups.keys()):
             m2ll = numpy.array(groupCands[group]['m2ll'])
             gLL[group] = m2ll = m2ll-min(m2ll)
+            gX[group] = groupCands[group]['X']
             xatmin = x[numpy.argmin(m2ll)]
             Results[group] = xatmin*self.AssumedBR
             if debug>0: print 'combine.main {0} minimized at BF {1:.2e}'.format(group,xatmin*self.AssumedBR)
@@ -214,18 +224,18 @@ class combiner():
                 self.drawIt(x,m2ll,xtitle,ytitle,title,mark='o-',xlims=xlims,ylims=ylims)
 
         self.reportGroups(Results)
+        self.getCLs(groupCands,group='all')
         title = 'Groups'
         loc = 'best'
+        self.drawMany(xCLs,gX,xtitle,gX.keys(),title,loc=loc)
+
+        
         self.drawMany(x,gLL,xtitle,gLL.keys(),title,loc=loc)
         self.drawMany(x,gLL,xtitle,gLL.keys(),title+' restricted x and y ranges',ylims=[0.,4.],xlims=[0.,2.],loc=loc)
         self.drawMany(x,gLL,xtitle,gLL.keys(),title+' fanatical x and y ranges',ylims=[0.,0.2],xlims=[0.8,1.2],loc=loc)
-            
-        #cands = self.fillM2LL(cands)
-
-
         
         M2LL = {}
-        # combined candidates and likelihood
+        # systematics study : combined candidates and likelihood
         if self.turnOnSyst:
             self.systOn = True
             if self.systOn : print 'combiner.main Systematics calculation enabled for combined likelihood.',self.reportSyst()
@@ -244,37 +254,6 @@ class combiner():
 
             self.systOn = False
 
-        if 0: # this stuff has been mostly replaced
-            
-            # plot and combine likelihoods for all datasets
-            globalM2LL = None
-            for dataset in sorted(cands):
-                cand = cands[dataset]
-                m2ll = numpy.array(cand['m2ll'])
-                M2LL[dataset] = m2ll-min(m2ll)
-                xatmin = x[numpy.argmin(m2ll)]
-                BFatmin = ' BF={0:.2e}'.format(xatmin*self.AssumedBR)
-                ratmin = ', min at '+str(xatmin)+BFatmin
-                if debug>0: print 'combiner.main dataset',dataset,ratmin
-                if debug>1 : print 'combiner.main dataset,len(x),len(m2ll)',dataset,len(x),len(m2ll)
-                if drawEach : self.drawIt(x,m2ll,xtitle,ytitle,dataset+ratmin,mark='-')
-                if globalM2LL is None:
-                    globalM2LL = numpy.array(m2ll)
-                else:
-                    globalM2LL += numpy.array(m2ll)
-
-            M2LL['all'] = globalM2LL-min(globalM2LL)
-            ratmin = ', min at '+str(x[numpy.argmin(globalM2LL)])
-            title = 'All E787/E949 data'+ratmin
-            if debug>0: print 'combiner.main',title
-            if drawEach: self.drawIt(x,globalM2LL,xtitle,ytitle,title,mark='-')
-
-            title = '-2*loglikelihood'
-            loc = 'upper right'
-            self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title,loc=loc)
-            self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' restricted y range',ylims=[0.,10.],loc=loc)
-            self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' restricted x and y ranges',ylims=[0.,4.],xlims=[0.,2.],loc=loc)
-            self.drawMany(x,M2LL,xtitle,sorted(M2LL.keys()),title+' fanatical x and y ranges',ylims=[0.,0.2],xlims=[0.8,1.2],loc=loc)
         return
     def m2loglike(self,cand,RATIO):
         '''
@@ -324,10 +303,57 @@ class combiner():
         '''
         X = 1.
         for s,b,d in zip(S,B,D):
-            num = poisson.pmf(d,s+b)
-            den = poisson.pmf(d,b)
+            num,den = self.poisProbs(s,b,d)
             X *= num/den
         return X
+    def poisProbs(self,s,b,d):
+        '''
+        return poisson probability for s+b and b only
+        '''
+        sbProb = poisson.pmf(d,s+b)
+        bProb  = poisson.pmf(d,b)
+        return sbProb,bProb
+    def getCLs(self,groupCands,group='all'):
+        '''
+        perform calculations needed for CLs estimates
+        '''
+        groupList = sorted(groupCands.keys())
+        if group is not None : groupList = [group]
+        maxc = 5 # maximum number of candidates to consider per cell
+        crange = range(maxc+1)
+        for gkey in groupList:
+            Cand = groupCands[gkey]
+            bkgi = Cand['bkgi']
+            sigi = Cand['sigi']
+            candi= Cand['candi']
+            Xobs = self.testX(sigi,bkgi,candi)
+            bProbs,sbProbs,Xstats = [],[],[]
+            for i,cell in enumerate(candi):
+                b = bkgi[i]
+                s = sigi[i]
+                for d in crange:
+                    sbP,bP = self.poisProbs(s,b,d)
+                    sbProbs.append(sbP)
+                    bProbs.append(bP)
+                    Xstats.append( sbP/bP )
+            bProbs = self.reshape( bProbs, len(candi),len(crange))
+            sbProbs= self.reshape(sbProbs, len(candi),len(crange))
+            Xstats = self.reshape( Xstats, len(candi),len(crange))
+            ## here is little test to check if calculation of Xstats gives test statistic X=Xobs
+            ## when Xstats is indexed with cell# and # of observed candidates
+            Xcheck = 1.
+            for i,d in enumerate(candi):
+                X = Xstats[i,d]
+                Xcheck *= X
+            print 'combiner.getCLs group',group,'Xobs',Xobs,'Xcheck',Xcheck
+        return
+    def reshape(self,A,n1,n2):
+        '''
+        return container A after conversion numpy array and reshaping as (n1,n2)
+        '''
+        if type(A) is list : A = numpy.array( A )
+        A.shape = (n1,n2)
+        return A
     def OLD_m2loglike(self,cand,RATIO):
         '''
         calculate -2 * log likelihood from NK,Atot,[s/b], given ratio = BR/self.AssumedBr
@@ -357,19 +383,22 @@ class combiner():
         return like
     def fillX(self,cands,ratRange=None):
         '''
-        loop over datasets return array of test function X for ratio in ratRange to dict cands
+        loop over datasets add array of test function X for ratio in ratRange to dict cands
+        Note input dict cands is modified by this routine
         '''
         ratioRange = ratRange
-        if rateRange is None : ratioRange = self.ratioRange
-        X = []
-        for ratio in ratioRange:
-            x = 1.
-            for dataset in sorted(cands):
-                cand = cands[dataset]
-                x *= self.testFcn(cand,ratio)
-            X.append( x )
-        X = numpy.array(X)
-        return X
+        if ratioRange is None : ratioRange = self.ratioRange
+        for dataset in sorted(cands):
+            if self.debug>0 : print 'combiner.fillX Process dataset',dataset
+            cand = cands[dataset]
+            if 'X' in cand: sys.exit('combiner.fillX ERROR key `X` already exists for dataset '+dataset+', due to multi-calls to this routine?')
+            X = []
+            for ratio in ratioRange:
+                x = self.testFcn(cand,ratio)
+                X.append( x )
+            X = numpy.array( X )
+            cands[dataset]['X'] = X
+        return cands
     def fillM2LL(self,cands,ratRange=None):
         '''
         loop over datasets and add array of -2*loglike(ratio) for ratio in ratRange to dict cands
