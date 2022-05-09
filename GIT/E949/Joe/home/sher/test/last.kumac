@@ -1,8 +1,0 @@
-*** Begin of history file: Fri Jan 16 14:13:41 2004
-exec ecl#awk
-exec ecl#plot
-exec ecl#awk
-exec ecl#read
-exec ecl#plot
-quit
-*** End   of history file: Fri Jan 16 14:16:32 2004
